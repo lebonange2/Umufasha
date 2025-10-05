@@ -1,0 +1,160 @@
+/* Textual CSS for Brainstorming Assistant */
+
+Screen {
+    background: $surface;
+}
+
+Header {
+    dock: top;
+    height: 3;
+    background: $primary;
+    color: $text;
+    content-align: center middle;
+}
+
+Footer {
+    dock: bottom;
+    height: 3;
+    background: $panel;
+    color: $text;
+}
+
+#main-container {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#left-panel {
+    width: 60%;
+    border-right: solid $primary;
+}
+
+#right-panel {
+    width: 40%;
+}
+
+.panel-title {
+    background: $primary-darken-1;
+    color: $text;
+    text-style: bold;
+    padding: 0 1;
+    height: 1;
+}
+
+#transcript-panel {
+    height: 1fr;
+    border: solid $primary;
+    margin: 1;
+}
+
+#assistant-panel {
+    height: 1fr;
+    border: solid $accent;
+    margin: 1;
+}
+
+#organizer-panel {
+    height: 1fr;
+    border: solid $success;
+    margin: 1;
+}
+
+.transcript-entry {
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+.user-entry {
+    color: $text;
+}
+
+.assistant-entry {
+    color: $accent;
+}
+
+.idea-item {
+    padding: 0 1;
+}
+
+.idea-promoted {
+    color: $warning;
+    text-style: bold;
+}
+
+.idea-normal {
+    color: $text;
+}
+
+.action-item {
+    padding: 0 1;
+}
+
+.action-pending {
+    color: $text;
+}
+
+.action-completed {
+    color: $success;
+    text-style: dim;
+}
+
+#control-bar {
+    dock: bottom;
+    height: 3;
+    background: $panel;
+    padding: 0 2;
+    align: center middle;
+}
+
+#record-button {
+    min-width: 25;
+    margin: 0 1;
+}
+
+.spacer {
+    width: 1fr;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: $panel;
+    color: $text;
+}
+
+#recording-indicator {
+    color: $error;
+    text-style: bold;
+}
+
+#audio-level {
+    width: 20;
+    height: 1;
+}
+
+.command-input {
+    border: solid $primary;
+    height: 3;
+}
+
+.modal-dialog {
+    align: center middle;
+    width: 60;
+    height: auto;
+    background: $surface;
+    border: thick $primary;
+}
+
+.error-message {
+    color: $error;
+    text-style: bold;
+}
+
+.success-message {
+    color: $success;
+    text-style: bold;
+}
+
+.info-message {
+    color: $accent;
+}

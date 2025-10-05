@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 Brainstorming Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">🧠 Brainstorming Assistant</h1>
+            <div class="header-actions">
+                <!-- Mode Switcher -->
+                <div class="mode-switcher" style="margin-right: 1rem;">
+                    <button class="btn btn-sm mode-btn active" id="brainstormModeBtn" onclick="switchMode('brainstorm')">
+                        <i class="fas fa-lightbulb"></i> Brainstorm
+                    </button>
+                    <button class="btn btn-sm mode-btn" id="documentModeBtn" onclick="switchMode('document')">
+                        <i class="fas fa-file-alt"></i> Document
+                    </button>
+                </div>
+                <span class="project-name" id="projectName">Loading...</span>
+                <button class="btn btn-secondary" onclick="showExportModal()">
+                    <i class="fas fa-download"></i> Export
+                </button>
+                <button class="btn btn-secondary" onclick="showSettingsModal()">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Brainstorm Mode -->
+            <div id="brainstormView" class="mode-view active">
+            <div class="grid">
+                <!-- Left Column: Recording & Transcript -->
+                <div class="col-left">
+                    <!-- Recording Card -->
+                    <div class="card recording-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-microphone"></i> Voice Recording
+                        </h2>
+                        <!-- Microphone Permission Status -->
+                        <div class="mic-permission-status" id="micPermissionStatus" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; display: none;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fas fa-info-circle"></i>
+                                <span id="micPermissionText">Checking microphone permission...</span>
+                            </div>
+                            <button class="btn btn-sm" id="enableMicBtn" onclick="requestMicrophoneAccess()" style="margin-top: 0.5rem; display: none;">
+                                Enable Microphone
+                            </button>
+                        </div>
+                        <div class="recording-controls">
+                            <button class="btn-record" id="recordBtn" onclick="toggleRecording()" disabled>
+                                <i class="fas fa-microphone"></i>
+                                <span>Start Recording</span>
+                            </button>
+                            <div class="audio-visualizer" id="audioVisualizer">
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                                <div class="audio-bar"></div>
+                            </div>
+                        </div>
+                        <div class="recording-status" id="recordingStatus">
+                            <i class="fas fa-info-circle"></i> Click the button to start recording
+                        </div>
+                    </div>
+
+                    <!-- Transcript Card -->
+                    <div class="card transcript-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-comments"></i> Conversation
+                        </h2>
+                        <div class="transcript-list" id="transcriptList">
+                            <div class="empty-state">
+                                <i class="fas fa-comment-dots"></i>
+                                <p>Your conversation will appear here</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Middle Column: Ideas & Assistant -->
+                <div class="col-middle">
+                    <!-- Ideas Card -->
+                    <div class="card ideas-card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-lightbulb"></i> Ideas
+                                <span class="badge" id="ideasCount">0</span>
+                            </h2>
+                            <div class="card-actions">
+                                <button class="btn btn-sm" onclick="filterIdeas('all')">All</button>
+                                <button class="btn btn-sm" onclick="filterIdeas('key')">Key</button>
+                                <button class="btn btn-sm" onclick="filterIdeas('recent')">Recent</button>
+                            </div>
+                        </div>
+                        <div class="ideas-list" id="ideasList">
+                            <div class="empty-state">
+                                <i class="fas fa-lightbulb"></i>
+                                <p>Start recording to capture ideas</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assistant Response Card -->
+                    <div class="card assistant-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-robot"></i> AI Assistant
+                        </h2>
+                        <div class="assistant-response" id="assistantResponse">
+                            <div class="empty-state">
+                                <i class="fas fa-robot"></i>
+                                <p>AI suggestions will appear here</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Clusters & Actions -->
+                <div class="col-right">
+                    <!-- Clusters Card -->
+                    <div class="card clusters-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-folder-tree"></i> Clusters
+                            <span class="badge" id="clustersCount">0</span>
+                        </h2>
+                        <div class="clusters-list" id="clustersList">
+                            <div class="empty-state">
+                                <i class="fas fa-folder-tree"></i>
+                                <p>Clusters will be generated automatically</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions Card -->
+                    <div class="card actions-card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-tasks"></i> Action Items
+                                <span class="badge" id="actionsCount">0</span>
+                            </h2>
+                            <button class="btn btn-sm" onclick="showAddActionModal()">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                        </div>
+                        <div class="actions-list" id="actionsList">
+                            <div class="empty-state">
+                                <i class="fas fa-tasks"></i>
+                                <p>Action items will appear here</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Card -->
+                    <div class="card stats-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-chart-bar"></i> Statistics
+                        </h2>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-value" id="statIdeas">0</div>
+                                <div class="stat-label">Ideas</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="statClusters">0</div>
+                                <div class="stat-label">Clusters</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="statActions">0</div>
+                                <div class="stat-label">Actions</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="statKeyIdeas">0</div>
+                                <div class="stat-label">Key Ideas</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+            <!-- End Brainstorm Mode -->
+
+            <!-- Document Mode -->
+            <div id="documentView" class="mode-view" style="display: none;">
+                <div class="document-container">
+                    <!-- Document Sidebar -->
+                    <div class="document-sidebar">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title">
+                                    <i class="fas fa-folder-open"></i> Documents
+                                </h2>
+                                <button class="btn btn-sm" onclick="createNewDocument()">
+                                    <i class="fas fa-plus"></i> New
+                                </button>
+                            </div>
+                            <div class="document-list" id="documentList">
+                                <div class="empty-state">
+                                    <i class="fas fa-file-alt"></i>
+                                    <p>No documents yet</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Document Editor -->
+                    <div class="document-editor">
+                        <div class="card" style="height: 100%;">
+                            <div class="card-header">
+                                <input type="text" id="documentTitle" class="document-title-input" placeholder="Untitled Document" />
+                                <div class="card-actions">
+                                    <button class="btn btn-sm" onclick="saveDocument()" id="saveDocBtn">
+                                        <i class="fas fa-save"></i> Save
+                                    </button>
+                                    <button class="btn btn-sm" onclick="showDocumentExportModal()" id="exportDocBtn">
+                                        <i class="fas fa-download"></i> Export
+                                    </button>
+                                    <button class="btn btn-sm" onclick="deleteDocument()" id="deleteDocBtn">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Recording Controls for Document Mode -->
+                            <div class="recording-controls-doc" style="padding: 1rem; border-bottom: 1px solid #e0e0e0;">
+                                <button class="btn-record" id="recordBtnDoc" onclick="toggleDocumentRecording()">
+                                    <i class="fas fa-microphone"></i>
+                                    <span>Start Recording</span>
+                                </button>
+                                <div class="recording-status" id="recordingStatusDoc">
+                                    <i class="fas fa-info-circle"></i> Click to record research notes
+                                </div>
+                            </div>
+
+                            <div class="document-content">
+                                <textarea id="documentEditor" class="document-textarea" placeholder="Start recording to add content, or type here..."></textarea>
+                            </div>
+                            
+                            <div class="document-stats">
+                                <span><i class="fas fa-font"></i> <span id="wordCount">0</span> words</span>
+                                <span><i class="fas fa-clock"></i> Last saved: <span id="lastSaved">Never</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- End Document Mode -->
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div class="modal" id="exportModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Export Session</h3>
+                <button class="modal-close" onclick="closeModal('exportModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <button class="btn btn-block" onclick="exportSession('md')">
+                    <i class="fas fa-file-markdown"></i> Markdown (.md)
+                </button>
+                <button class="btn btn-block" onclick="exportSession('docx')">
+                    <i class="fas fa-file-word"></i> Word Document (.docx)
+                </button>
+                <button class="btn btn-block" onclick="exportSession('csv')">
+                    <i class="fas fa-file-csv"></i> CSV (.csv)
+                </button>
+                <button class="btn btn-block" onclick="exportSession('json')">
+                    <i class="fas fa-file-code"></i> JSON (.json)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Export Modal -->
+    <div class="modal" id="documentExportModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Export Document</h3>
+                <button class="modal-close" onclick="closeModal('documentExportModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">
+                    Export to <code>documents/exports/</code>
+                </p>
+                <button class="btn btn-block" onclick="exportDocument('md')">
+                    <i class="fas fa-file-markdown"></i> Markdown (.md)
+                </button>
+                <button class="btn btn-block" onclick="exportDocument('txt')">
+                    <i class="fas fa-file-alt"></i> Plain Text (.txt)
+                </button>
+                <button class="btn btn-block" onclick="exportDocument('docx')">
+                    <i class="fas fa-file-word"></i> Word Document (.docx)
+                </button>
+                <button class="btn btn-block" onclick="exportDocument('pdf')">
+                    <i class="fas fa-file-pdf"></i> PDF Document (.pdf)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
