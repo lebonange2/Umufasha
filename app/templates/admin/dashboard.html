@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Personal Assistant Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+    <div>
+        <a href="/api/users" class="btn btn-primary">
+            <i class="bi bi-plus"></i> Add User
+        </a>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0">Total Users</h6>
+                    <div class="stat-number">{{ stats.users }}</div>
+                </div>
+                <i class="bi bi-people display-4 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0">Total Events</h6>
+                    <div class="stat-number">{{ stats.events }}</div>
+                </div>
+                <i class="bi bi-calendar-event display-4 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0">Notifications</h6>
+                    <div class="stat-number">{{ stats.notifications }}</div>
+                </div>
+                <i class="bi bi-bell display-4 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Notifications -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bell"></i> Recent Notifications</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_notifications %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Channel</th>
+                                <th>Status</th>
+                                <th>Plan Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for notification in recent_notifications %}
+                            <tr>
+                                <td>
+                                    <span class="badge bg-{% if notification.channel == 'email' %}primary{% else %}success{% endif %}">
+                                        {{ notification.channel }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if notification.status == 'planned' %}warning{% elif notification.status == 'sent' %}info{% elif notification.status == 'delivered' %}success{% else %}danger{% endif %}">
+                                        {{ notification.status }}
+                                    </span>
+                                </td>
+                                <td>{{ notification.plan_time.strftime('%m/%d %H:%M') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No recent notifications.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Audit Logs -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-journal-text"></i> Recent Activity</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_audit %}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Action</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in recent_audit %}
+                            <tr>
+                                <td>
+                                    <span class="badge bg-secondary">{{ log.action }}</span>
+                                </td>
+                                <td>{{ log.created_at.strftime('%m/%d %H:%M') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No recent activity.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <a href="/admin/users" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-people"></i> Manage Users
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="/admin/events" class="btn btn-outline-success w-100">
+                            <i class="bi bi-calendar-event"></i> View Events
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="/admin/notifications" class="btn btn-outline-warning w-100">
+                            <i class="bi bi-bell"></i> Notifications
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <a href="/admin/logs" class="btn btn-outline-info w-100">
+                            <i class="bi bi-journal-text"></i> Audit Logs
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

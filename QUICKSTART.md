@@ -1,216 +1,284 @@
-# 🚀 Quick Start Guide
+# 🚀 Unified Assistant - Quick Start Guide
 
-Get up and running with the Voice-Driven Brainstorming Assistant in 5 minutes!
+Get your AI-Powered Unified Assistant (Voice Brainstorming + Personal Assistant) up and running in minutes!
 
-## Step 1: Install Dependencies
-
-```bash
-# Create virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install requirements
-pip install -r requirements.txt
-```
-
-## Step 2: Configure
+## ⚡ One-Command Setup
 
 ```bash
-# Copy example environment file
-cp .env.example .env
-
-# Edit .env with your preferred editor
-nano .env  # or vim, code, etc.
+# Clone and setup everything
+git clone <your-repo-url>
+cd ASSISTANT
+./setup.sh
 ```
 
-**Minimum configuration** (for local-only setup):
+That's it! The setup script will:
+- ✅ Install all dependencies
+- ✅ Create virtual environment
+- ✅ Generate secure encryption keys
+- ✅ Initialize database
+- ✅ Run internal tests
+- ✅ Create helper scripts
+- ✅ Set up both brainstorming and personal assistant modes
+
+## 🎯 Quick Start
+
+### 1. Start the Unified Application
 ```bash
-STT_BACKEND=whisper_local
-LLM_BACKEND=openai
-OPENAI_API_KEY=your_key_here
+./start_unified.sh
 ```
 
-**For fully offline** (no API key needed):
+**Or start Personal Assistant only:**
 ```bash
-STT_BACKEND=vosk
-LLM_BACKEND=http
-LLM_HTTP_URL=http://localhost:8000/v1/chat/completions
+./start.sh
 ```
 
-## Step 3: Test Audio
+### 2. Access the Dashboard
+Open your browser and go to:
+- **🏠 Unified Dashboard**: http://localhost:8000
+- **🧠 Brainstorming Mode**: http://localhost:8000/brainstorm
+- **📅 Personal Assistant**: http://localhost:8000/personal
+- **⚙️ Admin Panel**: http://localhost:8000/admin
+- **📚 API Documentation**: http://localhost:8000/docs
+- **🔧 Health Check**: http://localhost:8000/health
 
+**Login Credentials:**
+- Username: `admin`
+- Password: `admin123`
+
+### 3. Try Both Modes
+
+#### 🧠 Voice-Driven Brainstorming
+1. Go to **Brainstorming Mode**: http://localhost:8000/brainstorm
+2. Click **Start Recording** to speak your ideas
+3. Watch as AI organizes and clusters your thoughts
+4. Tag, promote, or delete ideas as needed
+5. Export your session when done
+
+#### 📅 Personal Assistant
+1. Go to **Admin Panel**: http://localhost:8000/admin
+2. Create a user in **Users** section
+3. Add events in **Events** section
+4. Test mock functionality:
+   ```bash
+   # Test mock call
+   curl -X POST -H "Authorization: Bearer admin:admin123" \
+        http://localhost:8000/testing/mock/test-call/USER_ID
+   
+   # Test mock email
+   curl -X POST -H "Authorization: Bearer admin:admin123" \
+        http://localhost:8000/testing/mock/test-email/USER_ID
+   ```
+
+### 4. Automatic Port Management
+The startup scripts automatically:
+- ✅ Kill any existing processes on port 8000
+- ✅ Stop any running uvicorn processes
+- ✅ Start fresh without conflicts
+- ✅ Initialize database if needed
+
+## 🧪 Testing Without External APIs
+
+The application runs in **Mock Mode** by default, which means:
+- ✅ **No Twilio API needed** - Mock calls simulate real phone calls
+- ✅ **No SendGrid API needed** - Mock emails simulate real email sending
+- ✅ **No OpenAI API needed** - Mock LLM responses for testing
+- ✅ **No Google Calendar needed** - Mock calendar events for testing
+
+### Mock Features Available:
+- 📞 **Mock Phone Calls**: Simulate calls with DTMF responses
+- 📧 **Mock Emails**: Generate HTML emails with RSVP links
+- 🤖 **Mock LLM**: Policy decisions without real API calls
+- 📅 **Mock Calendar**: Test calendar integration
+
+## 🔧 Helper Scripts
+
+The setup creates several helper scripts:
+
+### `start_unified.sh` - Start Unified Application
 ```bash
-# Check microphone
-python3 -c "import sounddevice as sd; print(sd.query_devices())"
+./start_unified.sh
 ```
+Starts the unified application with both brainstorming and personal assistant modes.
 
-You should see your microphone listed. Note the device index if you need to specify it.
-
-## Step 4: Run!
-
+### `start.sh` - Start Personal Assistant Only
 ```bash
-# Start with default project
-python3 app.py
-
-# Or specify a project name
-python3 app.py --project my-brainstorm
+./start.sh
 ```
+Starts only the personal assistant mode.
 
-## Step 5: Use It!
-
-### Basic Workflow
-
-1. **Press `Space`** to start recording (push-to-talk)
-2. **Speak your idea** into the microphone
-3. **Release `Space`** to stop recording
-4. **Wait** for transcription and AI response
-5. **Repeat!**
-
-### Try These Commands
-
-Press `:` to open command mode, then try:
-
-```
-:todo Review the ideas tomorrow
-:summarize
-:export md
-:help
-```
-
-## Common Issues
-
-### "No microphone detected"
-- Check microphone is plugged in
-- Grant microphone permissions to terminal
-- Try: `python -c "import sounddevice as sd; sd.default.device = 0"`
-
-### "STT backend not available"
-- **Whisper**: First run downloads model (~150MB), be patient
-- **Vosk**: Download model from https://alphacephei.com/vosk/models
-
-### "LLM backend not available"
-- Check your `OPENAI_API_KEY` is correct
-- Verify you have API credits
-- Try: `curl https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"`
-
-## Next Steps
-
-- Read the full [README.md](README.md) for detailed documentation
-- Explore [config.yaml](config.yaml) for customization options
-- Check out example workflows below
-
-## Example Workflows
-
-### Product Brainstorming
+### `stop.sh` - Stop the Application
 ```bash
-python3 app.py --project product-ideas
-
-# Speak: "I want to build a mobile app for tracking habits"
-# AI will expand on this with variations and action items
-# Use :cluster to organize related ideas
-# Use :export docx to create a presentation
+./stop.sh
 ```
+Stops all running instances.
 
-### Writing Session
+### `test.sh` - Run Tests
 ```bash
-python3 app.py --project novel-outline
-
-# Speak your plot ideas
-# Use :tag <id> character,plot to categorize
-# Use :summarize to get chapter outlines
-# Use :todo to track writing tasks
+./test.sh
 ```
+Runs internal tests and API health checks.
 
-### Meeting Notes
+### `demo.sh` - Interactive Demo
 ```bash
-python3 app.py --project team-meeting
-
-# Record discussion points
-# AI extracts action items automatically
-# Use :export md for shareable notes
+./demo.sh
 ```
+Shows an interactive demo of all features.
 
-## Tips & Tricks
-
-### Keyboard Shortcuts
-- `Space` - Quick record (push-to-talk)
-- `R` then `Enter` - Longer recording with auto-stop
-- `:save` - Force save immediately
-- `Ctrl+S` - Same as :save
-- `Q` - Quit (auto-saves first)
-
-### Voice Tips
-- Speak clearly and at normal pace
-- Pause briefly between ideas
-- If VAD is enabled, silence auto-stops recording
-- Check audio level meter in status bar
-
-### Organization Tips
-- Tag ideas as you go: `:tag <id> important,urgent`
-- Promote key ideas: `:promote <id>`
-- Run `:cluster` every 10-15 ideas
-- Use `:summarize recent` for quick recaps
-
-### Export Tips
-- `:export md` - Beautiful Markdown with emojis
-- `:export docx` - For Word/Google Docs
-- `:export csv` - For spreadsheet analysis
-- Files saved to `brainstorm/<project>/`
-
-## Advanced Configuration
-
-### Use Local LLM (No API Key)
-
-1. Install Ollama or LM Studio
-2. Start local server on port 8000
-3. Configure:
+### `reset_db.sh` - Reset Database
 ```bash
-LLM_BACKEND=http
-LLM_HTTP_URL=http://localhost:8000/v1/chat/completions
-LLM_HTTP_MODEL=llama2
+./reset_db.sh
+```
+Resets the database to a clean state.
+
+## 📊 What You Can Test
+
+### 1. User Management
+- Create, edit, delete users
+- Set notification preferences
+- Configure quiet hours and channels
+
+### 2. Mock Notifications
+- **Mock Calls**: Test phone call flows
+- **Mock Emails**: Test email generation
+- **RSVP Links**: Test email action buttons
+
+### 3. Admin Interface
+- Dashboard with system overview
+- User management
+- Event management
+- Notification history
+- Audit logs
+
+### 4. API Endpoints
+- RESTful API for all operations
+- Webhook endpoints for external services
+- Testing endpoints for mock functionality
+
+## 🌐 API Endpoints
+
+### Core API
+- `GET /api/users/` - List users
+- `POST /api/users/` - Create user
+- `GET /api/events/` - List events
+- `GET /api/notifications/` - List notifications
+
+### Testing API
+- `GET /testing/status` - Check mock mode status
+- `POST /testing/mock/test-call/{user_id}` - Test mock call
+- `POST /testing/mock/test-email/{user_id}` - Test mock email
+- `GET /testing/mock/calls` - View mock calls
+- `GET /testing/mock/emails` - View mock emails
+
+### Webhooks
+- `POST /twilio/voice/answer` - Twilio call webhook
+- `POST /twilio/voice/gather` - Twilio DTMF webhook
+- `GET /rsvp/{token}` - Email RSVP handler
+
+## 🔐 Security Features
+
+- **Encrypted OAuth Tokens**: Secure storage of calendar credentials
+- **HMAC RSVP Tokens**: Secure email action links
+- **Admin Authentication**: Password-based admin access
+- **Webhook Validation**: Signed webhook verification
+
+## 📁 Project Structure
+
+```
+ASSISTANT/
+├── app/                    # Main application code
+│   ├── main.py            # FastAPI application
+│   ├── models.py          # Database models
+│   ├── schemas.py         # Pydantic schemas
+│   ├── routes/            # API routes
+│   ├── llm/               # LLM integration
+│   ├── calendar/          # Calendar integration
+│   ├── telephony/         # Phone call handling
+│   ├── email/             # Email handling
+│   └── templates/         # Admin UI templates
+├── scripts/               # Utility scripts
+├── tests/                 # Test files
+├── prompts/               # LLM prompts
+├── .env                   # Environment configuration
+├── setup.sh              # Setup script
+├── start.sh              # Start script
+├── stop.sh               # Stop script
+└── test.sh               # Test script
 ```
 
-### Optimize for Speed
+## 🚀 Production Deployment
 
-```yaml
-# In config.yaml
-stt:
-  backend: vosk  # Faster than Whisper
-  
-audio:
-  vad_enabled: true  # Auto-stop on silence
-  
-llm:
-  temperature: 0.5  # Faster, more focused responses
-  max_tokens: 500   # Shorter responses
+When ready for production:
+
+1. **Add Real API Keys** to `.env`:
+   ```bash
+   # Real API keys
+   OPENAI_API_KEY=your_real_openai_key
+   TWILIO_ACCOUNT_SID=your_real_twilio_sid
+   TWILIO_AUTH_TOKEN=your_real_twilio_token
+   SENDGRID_API_KEY=your_real_sendgrid_key
+   
+   # Disable mock mode
+   MOCK_MODE=false
+   MOCK_TWILIO=false
+   MOCK_SENDGRID=false
+   ```
+
+2. **Use PostgreSQL** instead of SQLite:
+   ```bash
+   DATABASE_URL=postgresql://user:pass@localhost/assistant
+   ```
+
+3. **Set up HTTPS** and proper domain configuration
+
+4. **Configure OAuth** for Google Calendar integration
+
+## 🆘 Troubleshooting
+
+### Application Won't Start
+```bash
+# Check if port 8000 is in use
+lsof -i :8000
+
+# Kill existing processes
+./stop.sh
+
+# Start fresh
+./start.sh
 ```
 
-### Optimize for Quality
-
-```yaml
-stt:
-  backend: whisper_local
-  whisper_model: medium  # Better accuracy
-  
-llm:
-  model: gpt-4-turbo-preview  # Best reasoning
-  temperature: 0.7
-  max_tokens: 1000
+### Database Issues
+```bash
+# Reinitialize database
+rm assistant.db
+python3 scripts/init_db.py
 ```
 
-## Getting Help
+### Permission Issues
+```bash
+# Make scripts executable
+chmod +x *.sh
+```
 
-- Press `?` in the app for help overlay
-- Type `:help` for command reference
-- Check logs: `brainstorm/<project>/brainstorm.log`
-- Run with debug: `python app.py --debug`
+### Dependencies Issues
+```bash
+# Reinstall dependencies
+source venv/bin/activate
+pip install -r requirements-app.txt
+```
 
-## What's Next?
+## 📚 Additional Resources
 
-Now that you're set up, try:
-1. Record 5-10 ideas on any topic
-2. Run `:cluster` to see AI organization
-3. Run `:summarize` to get an overview
-4. Export with `:export md` to see the output
+- **Testing Guide**: `TESTING_GUIDE.md` - Detailed testing instructions
+- **API Documentation**: http://localhost:8000/docs - Interactive API docs
+- **Admin Interface**: http://localhost:8000/admin - Web management interface
 
-Happy brainstorming! 🧠✨
+## 🎉 You're Ready!
+
+Your Personal Assistant is now ready for development and testing. The mock mode allows you to:
+
+- ✅ Test all features without external APIs
+- ✅ Develop and iterate quickly
+- ✅ Validate the complete workflow
+- ✅ Prepare for production deployment
+
+Start with `./start.sh` and begin building your intelligent personal assistant! 🚀

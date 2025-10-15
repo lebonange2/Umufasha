@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - Personal Assistant Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-bell"></i> Notifications</h1>
+    <div>
+        <button class="btn btn-primary" onclick="planAllNotifications()">
+            <i class="bi bi-plus"></i> Plan All Notifications
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if notifications %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>Channel</th>
+                        <th>Plan Time</th>
+                        <th>Status</th>
+                        <th>Attempts</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for notification in notifications %}
+                    <tr>
+                        <td>
+                            <strong>{{ notification.event.title if notification.event else 'Unknown Event' }}</strong>
+                            <br><small class="text-muted">
+                                User: {{ notification.user.name if notification.user else 'Unknown' }}
+                            </small>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if notification.channel == 'email' %}primary{% else %}success{% endif %}">
+                                <i class="bi bi-{% if notification.channel == 'email' %}envelope{% else %}telephone{% endif %}"></i>
+                                {{ notification.channel }}
+                            </span>
+                        </td>
+                        <td>
+                            {{ notification.plan_time.strftime('%m/%d %I:%M %p') }}
+                            <br><small class="text-muted">
+                                {% set time_until = (notification.plan_time - now).total_seconds() / 3600 %}
+                                {% if time_until > 0 %}
+                                    In {{ "%.1f"|format(time_until) }}h
+                                {% else %}
+                                    {{ "%.1f"|format(-time_until) }}h ago
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if notification.status == 'planned' %}warning{% elif notification.status == 'sent' %}info{% elif notification.status == 'delivered' %}success{% else %}danger{% endif %}">
+                                {{ notification.status }}
+                            </span>
+                        </td>
+                        <td>
+                            {{ notification.attempts }}
+                            {% if notification.attempts > 0 %}
+                                <br><small class="text-muted">
+                                    Last: {{ notification.sent_time.strftime('%m/%d %H:%M') if notification.sent_time else 'Never' }}
+                                </small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                {% if notification.status == 'planned' %}
+                                <button class="btn btn-outline-success" onclick="sendNow('{{ notification.id }}')">
+                                    <i class="bi bi-send"></i>
+                                </button>
+                                <button class="btn btn-outline-warning" onclick="cancelNotification('{{ notification.id }}')">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-info" onclick="viewDetails('{{ notification.id }}')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-bell display-1 text-muted"></i>
+            <h4 class="text-muted mt-3">No notifications found</h4>
+            <p class="text-muted">Plan notifications for events to see them here.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function planAllNotifications() {
+    if (confirm('Plan notifications for all users and events? This may take a few minutes.')) {
+        // TODO: Implement notification planning for all users
+        alert('Planning notifications for all users...');
+    }
+}
+
+function sendNow(notificationId) {
+    if (confirm('Send this notification now?')) {
+        // TODO: Implement immediate notification sending
+        alert('Sending notification: ' + notificationId);
+    }
+}
+
+function cancelNotification(notificationId) {
+    if (confirm('Cancel this notification?')) {
+        fetch(`/api/notifications/${notificationId}/cancel`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer admin:admin123'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                alert('Notification cancelled: ' + data.message);
+                location.reload();
+            } else {
+                alert('Error: ' + data.detail);
+            }
+        })
+        .catch(error => {
+            alert('Error cancelling notification: ' + error);
+        });
+    }
+}
+
+function viewDetails(notificationId) {
+    // TODO: Implement notification details modal
+    alert('View notification details: ' + notificationId);
+}
+</script>
+{% endblock %}

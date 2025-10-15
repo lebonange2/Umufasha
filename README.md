@@ -1,363 +1,254 @@
-# 🧠 Voice-Driven Brainstorming Assistant
+# 🤖 LLM-Powered Personal Assistant
 
-A production-ready terminal application for voice-driven brainstorming with AI assistance. Speak your ideas, get intelligent feedback, and organize your thoughts seamlessly.
+An intelligent personal assistant that calls or emails you about appointments, powered by LLM decision-making and integrated with your calendars.
 
-## Features
+## ✨ Features
 
-### 🎤 Voice Input
-- **Push-to-talk** or continuous recording with Voice Activity Detection (VAD)
-- **Multiple STT backends**: Local Whisper, Vosk, or OpenAI Whisper API
-- Real-time audio level visualization
-- Cross-platform microphone support
+- 📅 **Calendar Integration**: Sync with Google Calendar (OAuth)
+- 🤖 **LLM-Powered Policy**: Smart decisions on when/how to notify you
+- 📞 **Phone Calls**: Twilio-powered voice calls with TTS and DTMF
+- 📧 **Email Notifications**: Rich HTML emails with ICS attachments
+- 🔄 **Two-Way Updates**: Confirm/reschedule/cancel via calls or email
+- 🛡️ **Security**: Encrypted tokens, HMAC signatures, audit trails
+- 🎛️ **Admin Interface**: Web-based management dashboard
+- 🧪 **Mock Mode**: Test everything without external APIs
 
-### 🤖 AI Assistant
-- **Intelligent brainstorming** with idea expansion and refinement
-- **Automatic tagging** and categorization
-- **Clustering** related ideas into themes
-- **Action item generation** with priorities
-- **Summaries** of sessions or specific clusters
-- **Duplicate detection** using semantic similarity
+## 🚀 Quick Start
 
-### 📝 Organization
-- **Structured knowledge base** with ideas, clusters, and actions
-- **Tagging system** for easy categorization
-- **Promote key ideas** for quick reference
-- **Search** with semantic similarity
-- **Transcript** of all conversations
-
-### 💾 Storage & Export
-- **Autosave** with configurable intervals
-- **Version snapshots** for history tracking
-- **Multiple export formats**: Markdown, DOCX, CSV, JSON
-- **Local-first** with no cloud dependencies by default
-
-### 🖥️ Dual Interface
-- **Terminal UI** - Rich TUI built with Textual for power users
-- **Web UI** - Modern browser-based interface for ease of use
-- **Split-panel layout**: Transcript, Assistant, Organizer
-- **Command palette** for all operations
-- **Keyboard shortcuts** for efficient workflow
-- **Real-time updates** and status indicators
-
-## Installation
-
-### Requirements
-- Python 3.10+
-- Linux, macOS, or Windows
-- Microphone access
-
-### Setup
-
-1. **Clone or download** the repository
-
-2. **Install dependencies**:
+### One-Command Setup
 ```bash
-pip install -r requirements.txt
+./setup.sh
 ```
 
-3. **Configure environment** (copy and edit):
+### Start the Application
 ```bash
-cp .env.example .env
+./start.sh
 ```
 
-Edit `.env` and add your API keys:
+### Access Admin Interface
+- **URL**: http://localhost:8000/admin
+- **Login**: admin / admin123
+
+## 🧪 Testing Without External APIs
+
+The application runs in **Mock Mode** by default:
+- ✅ No Twilio API needed - Mock calls simulate real phone calls
+- ✅ No SendGrid API needed - Mock emails simulate real email sending  
+- ✅ No OpenAI API needed - Mock LLM responses for testing
+- ✅ No Google Calendar needed - Mock calendar events for testing
+
+## 📚 Documentation
+
+- **[Quick Start Guide](QUICKSTART.md)** - Get up and running in minutes
+- **[Testing Guide](TESTING_GUIDE.md)** - Comprehensive testing instructions
+- **[API Documentation](http://localhost:8000/docs)** - Interactive API docs
+
+## 🔧 Helper Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `./setup.sh` | Complete setup and installation |
+| `./start.sh` | Start the application |
+| `./stop.sh` | Stop the application |
+| `./test.sh` | Run tests and health checks |
+| `./demo.sh` | Interactive demo of all features |
+| `./reset_db.sh` | Reset database to clean state |
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Admin UI      │    │   FastAPI       │    │   Database      │
+│   (Jinja2)      │◄──►│   Backend       │◄──►│   (SQLite)      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │
+                                ▼
+                       ┌─────────────────┐
+                       │   Mock Services │
+                       │   • Twilio      │
+                       │   • SendGrid    │
+                       │   • LLM         │
+                       └─────────────────┘
+```
+
+## 🎯 Core Workflows
+
+### 1. Calendar Sync
+- OAuth integration with Google Calendar
+- Delta sync for efficient updates
+- Event normalization and storage
+
+### 2. Notification Planning
+- LLM analyzes events and user preferences
+- Decides notification channel (call/email/both)
+- Determines optimal timing and content
+
+### 3. Notification Delivery
+- **Calls**: Twilio TTS with DTMF menu (1=Confirm, 2=Reschedule, 3=Cancel)
+- **Emails**: HTML emails with ICS attachments and RSVP links
+
+### 4. User Response Handling
+- DTMF input processing for calls
+- RSVP link handling for emails
+- Calendar updates and organizer notifications
+
+## 🔐 Security Features
+
+- **OAuth Token Encryption**: AES-GCM encryption for calendar credentials
+- **HMAC RSVP Tokens**: Secure email action links with expiration
+- **Webhook Validation**: Signed webhook verification for Twilio
+- **Admin Authentication**: Password-based admin access
+- **Audit Logging**: Complete trail of all system actions
+
+## 📊 API Endpoints
+
+### Core API
+- `GET /api/users/` - List users
+- `POST /api/users/` - Create user
+- `GET /api/events/` - List events
+- `GET /api/notifications/` - List notifications
+
+### Testing API
+- `GET /testing/status` - Check mock mode status
+- `POST /testing/mock/test-call/{user_id}` - Test mock call
+- `POST /testing/mock/test-email/{user_id}` - Test mock email
+
+### Webhooks
+- `POST /twilio/voice/answer` - Twilio call webhook
+- `POST /twilio/voice/gather` - Twilio DTMF webhook
+- `GET /rsvp/{token}` - Email RSVP handler
+
+## 🛠️ Technology Stack
+
+- **Backend**: Python 3.11 + FastAPI
+- **Database**: SQLite (dev) / PostgreSQL (prod)
+- **Scheduler**: APScheduler
+- **Telephony**: Twilio Programmable Voice
+- **Email**: SendGrid
+- **Calendar**: Google Calendar API
+- **LLM**: OpenAI GPT-4 (pluggable)
+- **Frontend**: Jinja2 templates
+- **Security**: Cryptography, HMAC, OAuth 2.0
+
+## 🧪 Testing
+
+### Internal Tests
 ```bash
-OPENAI_API_KEY=your_key_here
-STT_BACKEND=whisper_local
-LLM_BACKEND=openai
+./test.sh
 ```
 
-4. **Download models** (for offline STT):
+### Mock Functionality
+- **Mock Twilio**: Simulates phone calls with realistic TwiML
+- **Mock SendGrid**: Generates HTML emails with ICS attachments
+- **Mock LLM**: Provides policy decisions without API calls
+- **Mock Calendar**: Test calendar integration
 
-For Whisper (recommended):
+### Test Coverage
+- ✅ Database operations (CRUD)
+- ✅ RSVP token generation/validation
+- ✅ Mock service simulation
+- ✅ Webhook handling
+- ✅ Security features
+- ✅ Admin interface
+
+## 🚀 Production Deployment
+
+### 1. Add Real API Keys
 ```bash
-# Models download automatically on first run
-# Or pre-download: python -c "from faster_whisper import WhisperModel; WhisperModel('base')"
+# Edit .env file
+OPENAI_API_KEY=your_real_openai_key
+TWILIO_ACCOUNT_SID=your_real_twilio_sid
+TWILIO_AUTH_TOKEN=your_real_twilio_token
+SENDGRID_API_KEY=your_real_sendgrid_key
+
+# Disable mock mode
+MOCK_MODE=false
+MOCK_TWILIO=false
+MOCK_SENDGRID=false
 ```
 
-For Vosk:
+### 2. Use PostgreSQL
 ```bash
-# Download from https://alphacephei.com/vosk/models
-wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
-unzip vosk-model-small-en-us-0.15.zip -d models/
+DATABASE_URL=postgresql://user:pass@localhost/assistant
 ```
 
-## Usage
+### 3. Set up HTTPS and proper domain configuration
 
-### Terminal Interface
+### 4. Configure OAuth for Google Calendar integration
 
-Start a brainstorming session in the terminal:
+## 📁 Project Structure
+
+```
+ASSISTANT/
+├── app/                    # Main application code
+│   ├── main.py            # FastAPI application
+│   ├── models.py          # Database models
+│   ├── schemas.py         # Pydantic schemas
+│   ├── routes/            # API routes
+│   ├── llm/               # LLM integration
+│   ├── calendar/          # Calendar integration
+│   ├── telephony/         # Phone call handling
+│   ├── email/             # Email handling
+│   └── templates/         # Admin UI templates
+├── scripts/               # Utility scripts
+├── tests/                 # Test files
+├── prompts/               # LLM prompts
+├── setup.sh              # Setup script
+├── start.sh              # Start script
+├── stop.sh               # Stop script
+├── test.sh               # Test script
+├── QUICKSTART.md         # Quick start guide
+├── TESTING_GUIDE.md      # Testing guide
+└── README.md             # This file
+```
+
+## 🆘 Troubleshooting
+
+### Application Won't Start
 ```bash
-python app.py --project my-project
+# Check if port 8000 is in use
+lsof -i :8000
+
+# Kill existing processes
+./stop.sh
+
+# Start fresh
+./start.sh
 ```
 
-### Web Interface
-
-Start the web server and use your browser:
+### Database Issues
 ```bash
-./run_web.sh
-# Then open http://localhost:5000 in your browser
+# Reinitialize database
+rm assistant.db
+python3 scripts/init_db.py
 ```
 
-### Command Line Options
-
+### Permission Issues
 ```bash
-python app.py [OPTIONS]
-
-Options:
-  --project, -p NAME       Project name (default: "default")
-  --config, -c PATH        Custom config file
-  --stt BACKEND           STT backend: whisper_local|vosk|whisper_api
-  --llm BACKEND           LLM backend: openai|http
-  --debug                 Enable debug logging
+# Make scripts executable
+chmod +x *.sh
 ```
 
-### Keyboard Shortcuts
+## 🎉 Getting Started
 
-#### Recording
-- `Space` - Push-to-talk (hold to record)
-- `R` - Start recording
-- `Enter` - Stop recording
+1. **Setup**: `./setup.sh`
+2. **Start**: `./start.sh`
+3. **Access**: http://localhost:8000/admin
+4. **Test**: `./test.sh`
+5. **Stop**: `./stop.sh`
 
-#### Commands
-- `:` - Open command palette
-- `/` - Search ideas
-- `?` - Show help
-- `Q` - Quit
+## 📄 License
 
-#### Other
-- `↑/↓` - Scroll panels
-- `Tab` - Switch focus
-- `Ctrl+S` - Save now
+This project is licensed under the MIT License.
 
-### Commands
+## 🤝 Contributing
 
-Type `:` to open the command palette, then:
-
-#### Idea Management
-- `:tag <id> <tag1,tag2>` - Add tags to an idea
-- `:del <id>` - Delete an idea
-- `:promote <id>` - Mark as key idea
-- `:search <query>` - Search ideas
-
-#### Organization
-- `:cluster` - Generate thematic clusters
-- `:dedupe` - Find duplicate ideas
-- `:summarize [scope]` - Generate summary (session|recent|cluster:id)
-
-#### Actions
-- `:todo <text>` - Add action item
-
-#### System
-- `:save` - Save immediately
-- `:export <format>` - Export (md|docx|csv)
-- `:config` - Show configuration
-- `:help` - Show help
-
-## Configuration
-
-### Environment Variables (`.env`)
-
-```bash
-# OpenAI Configuration
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4-turbo-preview
-
-# LLM Backend (openai|http)
-LLM_BACKEND=openai
-
-# Custom HTTP LLM (for self-hosted)
-LLM_HTTP_URL=http://localhost:8000/v1/chat/completions
-LLM_HTTP_MODEL=local-model
-
-# STT Backend (whisper_local|vosk|whisper_api)
-STT_BACKEND=whisper_local
-WHISPER_MODEL_SIZE=base
-
-# Audio Settings
-SAMPLE_RATE=16000
-VAD=true
-
-# Autosave
-AUTOSAVE_INTERVAL=30
-```
-
-### Config File (`config.yaml`)
-
-See `config.yaml` for detailed settings:
-- Audio parameters (sample rate, VAD settings)
-- STT/LLM configuration
-- Brainstorming behavior (auto-tag, clustering, deduplication)
-- Storage settings (autosave, snapshots)
-- UI preferences
-
-## Architecture
-
-```
-app.py                    # Main entry point
-├── audio/
-│   ├── mic.py           # Microphone recording
-│   └── vad.py           # Voice Activity Detection
-├── stt/
-│   ├── base.py          # STT interface
-│   ├── whisper_local.py # Local Whisper
-│   ├── vosk_local.py    # Vosk
-│   └── whisper_cloud.py # OpenAI Whisper API
-├── llm/
-│   ├── base.py          # LLM interface
-│   ├── openai_client.py # OpenAI client
-│   ├── http_client.py   # Generic HTTP client
-│   └── prompts.py       # Prompt templates
-├── brain/
-│   ├── model.py         # Data models
-│   ├── organizer.py     # Session management
-│   ├── dedupe.py        # Deduplication
-│   └── assistant.py     # AI assistant logic
-├── storage/
-│   ├── files.py         # File storage
-│   ├── autosave.py      # Autosave manager
-│   └── exporters.py     # Export formats
-├── tui/
-│   ├── main_view.py     # Main TUI app
-│   ├── widgets.py       # Custom widgets
-│   └── app.tcss         # Textual CSS
-└── utils/
-    ├── config.py        # Configuration
-    └── logging.py       # Logging utilities
-```
-
-## Output Structure
-
-```
-brainstorm/
-└── <project-name>/
-    ├── ledger.json          # Full session data
-    ├── notes.md             # Primary Markdown document
-    ├── ideas.csv            # Ideas export
-    ├── notes.docx           # DOCX export
-    └── versions/
-        └── snapshot_*.json  # Version history
-```
-
-## STT Backend Comparison
-
-| Backend | Speed | Accuracy | Size | Offline | Cost |
-|---------|-------|----------|------|---------|------|
-| **whisper_local** (base) | Medium | High | ~150MB | ✅ | Free |
-| **whisper_local** (small) | Medium | Higher | ~500MB | ✅ | Free |
-| **vosk** | Fast | Medium | ~40MB | ✅ | Free |
-| **whisper_api** | Fast | Highest | N/A | ❌ | $0.006/min |
-
-## LLM Backend Options
-
-### OpenAI
-```bash
-LLM_BACKEND=openai
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4-turbo-preview
-```
-
-### Self-Hosted (OpenAI-compatible API)
-```bash
-LLM_BACKEND=http
-LLM_HTTP_URL=http://localhost:8000/v1/chat/completions
-LLM_HTTP_MODEL=llama-2-7b
-```
-
-Compatible with:
-- LM Studio
-- Ollama (with OpenAI compatibility layer)
-- vLLM
-- Text Generation WebUI
-- Any OpenAI-compatible endpoint
-
-## Privacy & Security
-
-- **Local-first**: All data stored locally by default
-- **No telemetry**: No usage tracking or analytics
-- **API key safety**: Keys redacted in logs
-- **Clear indicators**: Shows when online services are active
-- **Offline mode**: Full functionality with local STT/LLM
-
-## Troubleshooting
-
-### Audio Issues
-
-**No microphone detected:**
-```bash
-python -c "import sounddevice as sd; print(sd.query_devices())"
-```
-
-**Permission denied:**
-- Linux: Add user to `audio` group
-- macOS: Grant microphone permission in System Preferences
-- Windows: Check Privacy settings
-
-### STT Issues
-
-**Whisper model download fails:**
-```bash
-# Manual download
-python -c "from faster_whisper import WhisperModel; WhisperModel('base', download_root='./models')"
-```
-
-**Vosk model not found:**
-- Download from https://alphacephei.com/vosk/models
-- Extract to `models/` directory
-- Update `VOSK_MODEL_PATH` in `.env`
-
-### LLM Issues
-
-**OpenAI API errors:**
-- Check API key is valid
-- Verify billing is active
-- Check rate limits
-
-**HTTP LLM not responding:**
-- Verify endpoint URL
-- Check if server is running
-- Test with curl: `curl -X POST <url> -H "Content-Type: application/json" -d '{"model":"test","messages":[]}'`
-
-## Development
-
-### Running Tests
-```bash
-pytest tests/
-```
-
-### Debug Mode
-```bash
-python app.py --debug
-```
-
-Logs are written to `brainstorm/<project>/brainstorm.log`
-
-## Roadmap
-
-- [ ] Multi-language support
-- [ ] Voice output (TTS)
-- [ ] Collaborative sessions
-- [ ] Mind map visualization
-- [ ] Mobile companion app
-- [ ] Plugin system
-- [ ] Cloud sync (optional)
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Contributing
-
-Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch
-3. Add tests for new features
-4. Submit a pull request
-
-## Support
-
-For issues, questions, or feature requests, please open an issue on GitHub.
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
 ---
 
-**Built with**: Python, Textual, Whisper, OpenAI, and ❤️
+**Ready to build your intelligent personal assistant?** Start with `./setup.sh` and begin testing! 🚀

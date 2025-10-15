@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Unified Assistant</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        .back-btn {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+        }
+        .back-btn:hover {
+            background: rgba(255,255,255,0.3);
+            color: white;
+        }
+        .mode-indicator {
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="/" class="btn btn-sm back-btn me-3">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                    <h1 class="d-inline-block mb-0">
+                        <i class="fas fa-lightbulb"></i> Voice-Driven Brainstorming
+                    </h1>
+                </div>
+                <div class="d-flex align-items-center">
+                    <div class="mode-indicator me-3">
+                        <i class="fas fa-brain"></i> Brainstorming Mode
+                    </div>
+                    <span class="project-name" id="projectName">Loading...</span>
+                    <button class="btn btn-light btn-sm ms-3" onclick="showExportModal()">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <div class="grid">
+                <!-- Left Column: Recording & Transcript -->
+                <div class="col-left">
+                    <!-- Recording Card -->
+                    <div class="card recording-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-microphone"></i> Voice Recording
+                        </h2>
+                        <!-- Microphone Permission Status -->
+                        <div class="mic-permission-status" id="micPermissionStatus" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; display: none;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span id="micPermissionText">Microphone permission required</span>
+                        </div>
+                        
+                        <!-- Recording Controls -->
+                        <div class="recording-controls">
+                            <button id="recordBtn" class="btn btn-record" onclick="toggleRecording()">
+                                <i class="fas fa-microphone"></i>
+                                <span id="recordBtnText">Start Recording</span>
+                            </button>
+                            <div class="recording-status" id="recordingStatus" style="display: none;">
+                                <div class="pulse-dot"></div>
+                                <span>Recording...</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Audio Visualization -->
+                        <div class="audio-visualization" id="audioVisualization" style="display: none;">
+                            <canvas id="audioCanvas" width="400" height="100"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Transcript Card -->
+                    <div class="card transcript-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-comments"></i> Live Transcript
+                        </h2>
+                        <div class="transcript-content" id="transcriptContent">
+                            <div class="transcript-placeholder">
+                                <i class="fas fa-microphone-slash"></i>
+                                <p>Start recording to see your ideas transcribed here...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Ideas & Actions -->
+                <div class="col-right">
+                    <!-- Ideas Card -->
+                    <div class="card ideas-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-lightbulb"></i> Ideas
+                            <span class="badge bg-primary" id="ideaCount">0</span>
+                        </h2>
+                        <div class="ideas-content" id="ideasContent">
+                            <div class="ideas-placeholder">
+                                <i class="fas fa-lightbulb"></i>
+                                <p>Your ideas will appear here as you speak...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions Card -->
+                    <div class="card actions-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-tasks"></i> Action Items
+                            <span class="badge bg-success" id="actionCount">0</span>
+                        </h2>
+                        <div class="actions-content" id="actionsContent">
+                            <div class="actions-placeholder">
+                                <i class="fas fa-tasks"></i>
+                                <p>Action items will be generated from your ideas...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assistant Responses Card -->
+                    <div class="card assistant-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-robot"></i> AI Assistant
+                        </h2>
+                        <div class="assistant-content" id="assistantContent">
+                            <div class="assistant-placeholder">
+                                <i class="fas fa-robot"></i>
+                                <p>AI responses and suggestions will appear here...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Export Modal -->
+    <div class="modal fade" id="exportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Export Session</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Choose export format:</p>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" onclick="exportSession('md')">
+                            <i class="fas fa-file-alt"></i> Markdown (.md)
+                        </button>
+                        <button class="btn btn-outline-success" onclick="exportSession('txt')">
+                            <i class="fas fa-file-text"></i> Plain Text (.txt)
+                        </button>
+                        <button class="btn btn-outline-info" onclick="exportSession('json')">
+                            <i class="fas fa-file-code"></i> JSON (.json)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Brainstorming functionality is built into this page -->
+    <script>
+        // Global variables
+        let currentSessionId = null;
+        let isRecording = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioContext = null;
+        let analyser = null;
+        let dataArray = null;
+        let animationId = null;
+
+        // Initialize the application
+        async function init() {
+            try {
+                // Create a new session
+                const response = await fetch('/api/brainstorm/session/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        project_name: 'unified-session'
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    currentSessionId = data.session_id;
+                    document.getElementById('projectName').textContent = data.project_name;
+                    await loadSessionData();
+                } else {
+                    console.error('Failed to create session:', data.error);
+                }
+            } catch (error) {
+                console.error('Failed to initialize:', error);
+            }
+        }
+
+        // Load session data
+        async function loadSessionData() {
+            if (!currentSessionId) return;
+            
+            try {
+                const response = await fetch(`/api/brainstorm/session/data?session_id=${currentSessionId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateIdeasDisplay(data.ideas);
+                    updateActionsDisplay(data.actions);
+                    updateTranscriptDisplay(data.transcript);
+                    updateStats(data.stats);
+                }
+            } catch (error) {
+                console.error('Failed to load session data:', error);
+            }
+        }
+
+        // Update ideas display
+        function updateIdeasDisplay(ideas) {
+            const container = document.getElementById('ideasContent');
+            const count = document.getElementById('ideaCount');
+            
+            count.textContent = ideas.length;
+            
+            if (ideas.length === 0) {
+                container.innerHTML = `
+                    <div class="ideas-placeholder">
+                        <i class="fas fa-lightbulb"></i>
+                        <p>Your ideas will appear here as you speak...</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = ideas.map(idea => `
+                <div class="idea-item" data-id="${idea.id}">
+                    <div class="idea-content">
+                        <p>${idea.text}</p>
+                        <div class="idea-meta">
+                            <span class="idea-source">${idea.source}</span>
+                            <span class="idea-time">${new Date(idea.created_at).toLocaleTimeString()}</span>
+                        </div>
+                    </div>
+                    <div class="idea-actions">
+                        <button class="btn btn-sm btn-outline-primary" onclick="tagIdea('${idea.id}')">
+                            <i class="fas fa-tag"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-success" onclick="promoteIdea('${idea.id}')">
+                            <i class="fas fa-star"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteIdea('${idea.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update actions display
+        function updateActionsDisplay(actions) {
+            const container = document.getElementById('actionsContent');
+            const count = document.getElementById('actionCount');
+            
+            const activeActions = actions.filter(a => !a.completed);
+            count.textContent = activeActions.length;
+            
+            if (activeActions.length === 0) {
+                container.innerHTML = `
+                    <div class="actions-placeholder">
+                        <i class="fas fa-tasks"></i>
+                        <p>Action items will be generated from your ideas...</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = activeActions.map(action => `
+                <div class="action-item">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="action-${action.id}">
+                        <label class="form-check-label" for="action-${action.id}">
+                            ${action.text}
+                        </label>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update transcript display
+        function updateTranscriptDisplay(transcript) {
+            const container = document.getElementById('transcriptContent');
+            
+            if (transcript.length === 0) {
+                container.innerHTML = `
+                    <div class="transcript-placeholder">
+                        <i class="fas fa-microphone-slash"></i>
+                        <p>Start recording to see your ideas transcribed here...</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = transcript.map(entry => `
+                <div class="transcript-entry ${entry.speaker}">
+                    <div class="transcript-speaker">${entry.speaker === 'user' ? 'You' : 'Assistant'}</div>
+                    <div class="transcript-text">${entry.text}</div>
+                    <div class="transcript-time">${new Date(entry.timestamp).toLocaleTimeString()}</div>
+                </div>
+            `).join('');
+            
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Update stats
+        function updateStats(stats) {
+            // Update any stats displays if needed
+        }
+
+        // Toggle recording
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        // Start recording
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    await processAudio(audioBlob);
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Update UI
+                document.getElementById('recordBtn').classList.add('recording');
+                document.getElementById('recordBtnText').textContent = 'Stop Recording';
+                document.getElementById('recordingStatus').style.display = 'block';
+                document.getElementById('audioVisualization').style.display = 'block';
+                
+                // Setup audio visualization
+                setupAudioVisualization(stream);
+                
+            } catch (error) {
+                console.error('Failed to start recording:', error);
+                showMicPermissionError();
+            }
+        }
+
+        // Stop recording
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                
+                // Update UI
+                document.getElementById('recordBtn').classList.remove('recording');
+                document.getElementById('recordBtnText').textContent = 'Start Recording';
+                document.getElementById('recordingStatus').style.display = 'none';
+                document.getElementById('audioVisualization').style.display = 'none';
+                
+                // Stop audio visualization
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+            }
+        }
+
+        // Process audio
+        async function processAudio(audioBlob) {
+            try {
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    
+                    const response = await fetch('/api/brainstorm/transcribe', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            session_id: currentSessionId,
+                            audio: base64Audio
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        await loadSessionData(); // Refresh the display
+                    } else {
+                        console.error('Transcription failed:', data.error);
+                    }
+                };
+                reader.readAsDataURL(audioBlob);
+            } catch (error) {
+                console.error('Failed to process audio:', error);
+            }
+        }
+
+        // Setup audio visualization
+        function setupAudioVisualization(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+            
+            const canvas = document.getElementById('audioCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            function draw() {
+                if (!isRecording) return;
+                
+                animationId = requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+                
+                ctx.fillStyle = 'rgb(0, 0, 0)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                const barWidth = (canvas.width / bufferLength) * 2.5;
+                let barHeight;
+                let x = 0;
+                
+                for (let i = 0; i < bufferLength; i++) {
+                    barHeight = dataArray[i] / 2;
+                    
+                    ctx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
+                    ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                    
+                    x += barWidth + 1;
+                }
+            }
+            
+            draw();
+        }
+
+        // Show microphone permission error
+        function showMicPermissionError() {
+            const status = document.getElementById('micPermissionStatus');
+            const text = document.getElementById('micPermissionText');
+            text.textContent = 'Microphone permission denied. Please allow microphone access.';
+            status.style.display = 'block';
+            status.style.background = '#f8d7da';
+            status.style.color = '#721c24';
+        }
+
+        // Export session
+        async function exportSession(format) {
+            if (!currentSessionId) return;
+            
+            try {
+                const response = await fetch(`/api/brainstorm/export/${currentSessionId}/${format}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Create download link
+                    const link = document.createElement('a');
+                    link.href = data.file;
+                    link.download = `brainstorm-session.${format}`;
+                    link.click();
+                } else {
+                    console.error('Export failed:', data.error);
+                }
+            } catch (error) {
+                console.error('Failed to export:', error);
+            }
+        }
+
+        // Show export modal
+        function showExportModal() {
+            const modal = new bootstrap.Modal(document.getElementById('exportModal'));
+            modal.show();
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Unified Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4rem 0;
+            margin-bottom: 3rem;
+        }
+        .mode-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: none;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        .mode-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .mode-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .brainstorm-card {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+        }
+        .personal-card {
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+            color: white;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        .feature-list i {
+            margin-right: 0.5rem;
+            width: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            color: #666;
+            margin-top: 0.5rem;
+        }
+        .quick-actions {
+            margin-top: 2rem;
+        }
+        .action-btn {
+            margin: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            border: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .btn-brainstorm {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+        }
+        .btn-personal {
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+            color: white;
+        }
+        .btn-admin {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-testing {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="display-4 fw-bold mb-3">
+                        <i class="bi bi-robot"></i> Unified Assistant
+                    </h1>
+                    <p class="lead mb-4">
+                        Your complete AI-powered workspace combining voice-driven brainstorming 
+                        and intelligent personal assistance for appointments and tasks.
+                    </p>
+                    <div class="quick-actions">
+                        <a href="/brainstorm" class="btn btn-lg action-btn btn-brainstorm">
+                            <i class="bi bi-lightbulb"></i> Start Brainstorming
+                        </a>
+                        <a href="/personal" class="btn btn-lg action-btn btn-personal">
+                            <i class="bi bi-calendar-check"></i> Personal Assistant
+                        </a>
+                        <a href="/admin" class="btn btn-lg action-btn btn-admin">
+                            <i class="bi bi-gear"></i> Admin Panel
+                        </a>
+                        <a href="/testing" class="btn btn-lg action-btn btn-testing">
+                            <i class="bi bi-bug"></i> Testing
+                        </a>
+                    </div>
+                </div>
+                <div class="col-lg-4 text-center">
+                    <i class="bi bi-cpu" style="font-size: 8rem; opacity: 0.3;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Mode Selection -->
+        <div class="row mb-5">
+            <div class="col-lg-6 mb-4">
+                <div class="card mode-card brainstorm-card h-100">
+                    <div class="card-body text-center p-4">
+                        <div class="mode-icon">
+                            <i class="bi bi-lightbulb"></i>
+                        </div>
+                        <h3 class="card-title mb-3">Voice-Driven Brainstorming</h3>
+                        <p class="card-text mb-4">
+                            Capture ideas through voice, organize thoughts, and collaborate with AI 
+                            to develop concepts and action items.
+                        </p>
+                        <ul class="feature-list text-start">
+                            <li><i class="bi bi-mic"></i> Voice-to-text transcription</li>
+                            <li><i class="bi bi-diagram-3"></i> AI-powered idea organization</li>
+                            <li><i class="bi bi-tags"></i> Smart tagging and clustering</li>
+                            <li><i class="bi bi-list-check"></i> Action item generation</li>
+                            <li><i class="bi bi-download"></i> Export to multiple formats</li>
+                        </ul>
+                        <a href="/brainstorm" class="btn btn-light btn-lg mt-3">
+                            <i class="bi bi-play-circle"></i> Start Brainstorming
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="card mode-card personal-card h-100">
+                    <div class="card-body text-center p-4">
+                        <div class="mode-icon">
+                            <i class="bi bi-calendar-check"></i>
+                        </div>
+                        <h3 class="card-title mb-3">Personal Assistant</h3>
+                        <p class="card-text mb-4">
+                            Intelligent appointment management with phone calls, emails, 
+                            and calendar integration powered by LLM decision-making.
+                        </p>
+                        <ul class="feature-list text-start">
+                            <li><i class="bi bi-calendar3"></i> Calendar synchronization</li>
+                            <li><i class="bi bi-telephone"></i> Smart phone call reminders</li>
+                            <li><i class="bi bi-envelope"></i> Email notifications with RSVP</li>
+                            <li><i class="bi bi-brain"></i> LLM-powered policy decisions</li>
+                            <li><i class="bi bi-shield-check"></i> Secure token management</li>
+                        </ul>
+                        <a href="/personal" class="btn btn-light btn-lg mt-3">
+                            <i class="bi bi-person-check"></i> Manage Appointments
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h2 class="text-center mb-4">
+                    <i class="bi bi-activity"></i> System Status
+                </h2>
+                <div class="stats-grid" id="systemStats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="sttStatus">-</div>
+                        <div class="stat-label">Speech-to-Text</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="llmStatus">-</div>
+                        <div class="stat-label">LLM Backend</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="dbStatus">-</div>
+                        <div class="stat-label">Database</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="schedulerStatus">-</div>
+                        <div class="stat-label">Scheduler</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h2 class="text-center mb-4">
+                    <i class="bi bi-link-45deg"></i> Quick Links
+                </h2>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="bi bi-book text-primary" style="font-size: 2rem;"></i>
+                                <h5 class="card-title mt-2">API Docs</h5>
+                                <p class="card-text">Interactive API documentation</p>
+                                <a href="/docs" class="btn btn-outline-primary">View Docs</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="bi bi-heart-pulse text-success" style="font-size: 2rem;"></i>
+                                <h5 class="card-title mt-2">Health Check</h5>
+                                <p class="card-text">System health status</p>
+                                <a href="/health" class="btn btn-outline-success">Check Health</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="bi bi-bug text-warning" style="font-size: 2rem;"></i>
+                                <h5 class="card-title mt-2">Testing</h5>
+                                <p class="card-text">Mock services and testing</p>
+                                <a href="/testing/status" class="btn btn-outline-warning">Test Mode</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="bi bi-gear text-info" style="font-size: 2rem;"></i>
+                                <h5 class="card-title mt-2">Admin Panel</h5>
+                                <p class="card-text">System administration</p>
+                                <a href="/admin" class="btn btn-outline-info">Admin</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Unified Assistant</h5>
+                    <p class="mb-0">Combining the power of voice-driven brainstorming and intelligent personal assistance.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="mb-0">
+                        <i class="bi bi-code-slash"></i> Built with FastAPI, Flask, and AI
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Load system status
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                document.getElementById('sttStatus').textContent = data.services.stt ? '✓' : '✗';
+                document.getElementById('llmStatus').textContent = data.services.llm ? '✓' : '✗';
+                document.getElementById('dbStatus').textContent = data.services.database ? '✓' : '✗';
+                document.getElementById('schedulerStatus').textContent = data.services.scheduler ? '✓' : '✗';
+                
+                // Update colors based on status
+                const statusElements = ['sttStatus', 'llmStatus', 'dbStatus', 'schedulerStatus'];
+                statusElements.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element.textContent === '✓') {
+                        element.style.color = '#28a745';
+                    } else {
+                        element.style.color = '#dc3545';
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to load system status:', error);
+            }
+        }
+
+        // Load status on page load
+        document.addEventListener('DOMContentLoaded', loadSystemStatus);
+        
+        // Refresh status every 30 seconds
+        setInterval(loadSystemStatus, 30000);
+    </script>
+</body>
+</html>

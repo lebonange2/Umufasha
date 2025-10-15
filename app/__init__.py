@@ -1,0 +1,1 @@
+"""Appointment assistant application package."""

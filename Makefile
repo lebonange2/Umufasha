@@ -1,83 +1,91 @@
-.PHONY: help install test run clean format lint check audio models
+# Makefile for Personal Assistant
 
+.PHONY: help up down build test clean seed-demo logs
+
+# Default target
 help:
-	@echo "🧠 Brainstorming Assistant - Make Commands"
+	@echo "Personal Assistant - Available Commands:"
 	@echo ""
-	@echo "Setup:"
-	@echo "  make install    - Install dependencies"
-	@echo "  make models     - Download STT models"
-	@echo "  make audio      - Check audio devices"
+	@echo "  make up          - Start all services with Docker Compose"
+	@echo "  make down        - Stop all services"
+	@echo "  make build       - Build Docker images"
+	@echo "  make test        - Run tests"
+	@echo "  make clean       - Clean up containers and volumes"
+	@echo "  make seed-demo   - Create demo user and events"
+	@echo "  make logs        - Show logs from all services"
+	@echo "  make dev         - Start development environment with ngrok"
 	@echo ""
-	@echo "Development:"
-	@echo "  make test       - Run tests"
-	@echo "  make format     - Format code with black"
-	@echo "  make lint       - Run linters"
-	@echo "  make check      - Run all checks (format, lint, test)"
-	@echo ""
-	@echo "Running:"
-	@echo "  make run        - Run with default project"
-	@echo "  make run PROJECT=name - Run with specific project"
-	@echo ""
-	@echo "Maintenance:"
-	@echo "  make clean      - Clean temporary files"
 
-install:
-	@echo "Installing dependencies..."
-	pip install -r requirements.txt
-	@echo "✓ Dependencies installed"
-	@echo ""
-	@echo "Next steps:"
-	@echo "  1. Copy .env.example to .env"
-	@echo "  2. Edit .env with your API keys"
-	@echo "  3. Run: make audio (to test microphone)"
-	@echo "  4. Run: make models (to download STT models)"
-	@echo "  5. Run: make run"
+# Start all services
+up:
+	docker compose up -d
 
-models:
-	@echo "Downloading Whisper base model..."
-	python scripts/download_models.py whisper --size base
-	@echo ""
-	@echo "For Vosk models, run:"
-	@echo "  python scripts/download_models.py vosk"
+# Start with ngrok for development
+dev:
+	docker compose --profile dev up -d
 
-audio:
-	@echo "Checking audio devices..."
-	python scripts/check_audio.py
+# Stop all services
+down:
+	docker compose down
 
+# Build Docker images
+build:
+	docker compose build
+
+# Run tests
 test:
-	@echo "Running tests..."
-	pytest tests/ -v --cov=. --cov-report=term-missing
+	docker compose exec web pytest
 
-format:
-	@echo "Formatting code..."
-	black . --exclude venv
-	@echo "✓ Code formatted"
-
-lint:
-	@echo "Running linters..."
-	flake8 . --exclude=venv --max-line-length=100 --extend-ignore=E203,W503
-	@echo "✓ Linting complete"
-
-check: format lint test
-	@echo "✓ All checks passed"
-
-run:
-	@if [ -z "$(PROJECT)" ]; then \
-		python app.py; \
-	else \
-		python app.py --project $(PROJECT); \
-	fi
-
+# Clean up
 clean:
-	@echo "Cleaning temporary files..."
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type f -name "*.log" -delete
-	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".coverage" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name "htmlcov" -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name ".coverage" -delete
-	@echo "✓ Cleaned"
+	docker compose down -v
+	docker system prune -f
 
-.DEFAULT_GOAL := help
+# Create demo data
+seed-demo:
+	docker compose exec web python scripts/seed_demo.py
+
+# Show logs
+logs:
+	docker compose logs -f
+
+# Show logs for specific service
+logs-web:
+	docker compose logs -f web
+
+logs-worker:
+	docker compose logs -f worker
+
+logs-db:
+	docker compose logs -f db
+
+# Database operations
+db-shell:
+	docker compose exec db psql -U assistant -d assistant
+
+db-reset:
+	docker compose exec web python -c "from app.database import engine; from app.models import Base; import asyncio; asyncio.run(engine.run_sync(Base.metadata.drop_all)); asyncio.run(engine.run_sync(Base.metadata.create_all))"
+
+# Development helpers
+install-dev:
+	pip install -r requirements-app.txt
+
+run-local:
+	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+run-worker:
+	python -m app.worker
+
+# Health checks
+health:
+	curl -f http://localhost:8000/health || echo "Service not healthy"
+
+# Quick setup for new developers
+setup: build up
+	@echo "Waiting for services to start..."
+	@sleep 10
+	@echo "Creating demo data..."
+	@make seed-demo
+	@echo ""
+	@echo "Setup complete! Visit http://localhost:8000/admin"
+	@echo "Login: admin / admin123"

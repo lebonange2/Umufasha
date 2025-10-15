@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Events - Personal Assistant Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-calendar-event"></i> Events</h1>
+    <div>
+        <button class="btn btn-primary" onclick="syncCalendars()">
+            <i class="bi bi-arrow-clockwise"></i> Sync Calendars
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if events %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Start Time</th>
+                        <th>Duration</th>
+                        <th>Location</th>
+                        <th>Organizer</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in events %}
+                    <tr>
+                        <td>
+                            <strong>{{ event.title }}</strong>
+                            {% if event.conf_link %}
+                            <br><small class="text-muted">
+                                <i class="bi bi-camera-video"></i> Virtual
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ event.start_ts.strftime('%m/%d/%Y %I:%M %p') }}
+                            <br><small class="text-muted">{{ event.start_ts.strftime('%A') }}</small>
+                        </td>
+                        <td>
+                            {% set duration = (event.end_ts - event.start_ts).total_seconds() / 3600 %}
+                            {{ "%.1f"|format(duration) }}h
+                        </td>
+                        <td>
+                            {% if event.location %}
+                                {{ event.location }}
+                            {% else %}
+                                <span class="text-muted">Not specified</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if event.organizer %}
+                                {{ event.organizer }}
+                            {% else %}
+                                <span class="text-muted">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if event.status == 'confirmed' %}success{% elif event.status == 'tentative' %}warning{% else %}danger{% endif %}">
+                                {{ event.status }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary" onclick="viewEvent('{{ event.id }}')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="btn btn-outline-success" onclick="planNotifications('{{ event.id }}')">
+                                    <i class="bi bi-bell"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-calendar-event display-1 text-muted"></i>
+            <h4 class="text-muted mt-3">No events found</h4>
+            <p class="text-muted">Connect calendars and sync events to see them here.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function syncCalendars() {
+    if (confirm('Sync all user calendars? This may take a few minutes.')) {
+        // TODO: Implement calendar sync
+        alert('Calendar sync started. Check the logs for progress.');
+    }
+}
+
+function viewEvent(eventId) {
+    // TODO: Implement event view modal
+    alert('View event: ' + eventId);
+}
+
+function planNotifications(eventId) {
+    if (confirm('Plan notifications for this event?')) {
+        // TODO: Implement notification planning
+        alert('Planning notifications for event: ' + eventId);
+    }
+}
+</script>
+{% endblock %}
