@@ -1,0 +1,123 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "version": 1,
+  "metadata": {
+    "tools": [
+      {
+        "vendor": "Assistant Team",
+        "name": "SBOM Generator",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "assistant-ai-coding-env",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "jsonschema",
+      "version": ">=4.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/jsonschema@>=4.0.0"
+    },
+    {
+      "type": "library",
+      "name": "structlog",
+      "version": ">=24.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/structlog@>=24.0.0"
+    },
+    {
+      "type": "library",
+      "name": "websockets",
+      "version": ">=12.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:pypi/websockets@>=12.0"
+    },
+    {
+      "type": "library",
+      "name": "@types/node",
+      "version": "^18.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/@types/node@^18.0.0"
+    },
+    {
+      "type": "library",
+      "name": "@types/vscode",
+      "version": "^1.74.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/@types/vscode@^1.74.0"
+    },
+    {
+      "type": "library",
+      "name": "typescript",
+      "version": "^4.9.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:npm/typescript@^4.9.4"
+    },
+    {
+      "type": "library",
+      "name": "ws",
+      "version": "^8.13.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/ws@^8.13.0"
+    }
+  ],
+  "licenseCompliance": {
+    "summary": "All dependencies are open source",
+    "licenses": [
+      "MIT",
+      "Apache-2.0",
+      "BSD-3-Clause"
+    ],
+    "status": "compliant",
+    "notes": "All dependencies are permissively licensed open source packages. No proprietary or closed SDKs used."
+  }
+}
+

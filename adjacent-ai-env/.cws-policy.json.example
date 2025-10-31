@@ -1,0 +1,36 @@
+{
+  "allowedPaths": ["**/*"],
+  "deniedPaths": [
+    ".git/**",
+    "node_modules/**",
+    ".venv/**",
+    "venv/**",
+    "__pycache__/**",
+    "*.pyc",
+    "*.pyo"
+  ],
+  "maxFileSize": 10485760,
+  "maxEditSize": 1048576,
+  "allowedCommands": [
+    "npm",
+    "python3",
+    "python",
+    "make",
+    "pytest",
+    "black",
+    "flake8",
+    "mypy"
+  ],
+  "envAllowlist": [
+    "PATH",
+    "HOME",
+    "PYTHONPATH",
+    "NODE_PATH"
+  ],
+  "confirmationRequired": [
+    "delete",
+    "applyPatch",
+    "task.run"
+  ]
+}
+
