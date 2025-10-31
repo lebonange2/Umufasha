@@ -84,6 +84,13 @@ python3 -m mcp.server --transport stdio
 ### Dashboard
 - **`getDashboardStats`** - Get dashboard statistics
 
+### Coding Environment
+- **`readFile`** - Read file content from workspace
+- **`writeFile`** - Write file content to workspace
+- **`listFiles`** - List directory contents
+- **`searchFiles`** - Search for text in files
+- **`runCommand`** - Run a command in the workspace
+
 ## 📦 Resources
 
 Access application data via MCP resources:

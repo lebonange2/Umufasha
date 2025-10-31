@@ -27,6 +27,7 @@ This application consists of two main components:
    - Start/stop web application
    - Manage users, events, notifications
    - Dashboard statistics
+   - Coding environment (file operations, search, tasks)
    - LLM integration via MCP protocol
 
 ## 🏗️ Architecture
@@ -38,6 +39,12 @@ This application consists of two main components:
 │  │ App Mgmt     │  │ User/Event   │            │
 │  │ Tools        │  │ Management   │            │
 │  └──────────────┘  └──────────────┘            │
+│  ┌──────────────────────────────────────┐      │
+│  │ Coding Environment Tools              │      │
+│  │  • readFile, writeFile, listFiles    │      │
+│  │  • searchFiles                        │      │
+│  │  • runCommand                         │      │
+│  └──────────────────────────────────────┘      │
 └─────────────────────────────────────────────────┘
           │                    │
           ▼                    ▼
@@ -68,7 +75,7 @@ source venv/bin/activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Install MCP server
+# 4. Install MCP server (includes coding environment tools)
 cd mcp
 pip install -e ".[app-management]"
 cd ..
@@ -84,7 +91,7 @@ cp .env.example .env
 
 ### Option 1: Start via MCP Server (Recommended)
 
-The MCP server can start and control the entire application:
+The MCP server can start and control the entire application, and includes coding environment tools:
 
 ```bash
 # Start web application via MCP
@@ -93,6 +100,10 @@ python3 -m mcp.server --transport stdio
 
 # Check status
 echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"webApplicationStatus","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+
+# Read a file using coding environment tool
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"readFile","arguments":{"path":"README.md"}}}' | \
 python3 -m mcp.server --transport stdio
 ```
 
@@ -156,6 +167,13 @@ python3 -m mcp.server --transport websocket --host localhost --port 8080
 #### Dashboard
 - `getDashboardStats` - Get dashboard statistics
 
+#### Coding Environment
+- `readFile` - Read file content from workspace
+- `writeFile` - Write file content to workspace
+- `listFiles` - List directory contents
+- `searchFiles` - Search for text in files
+- `runCommand` - Run a command in the workspace
+
 ### Example: Complete Workflow via MCP
 
 ```bash
@@ -171,8 +189,16 @@ python3 -m mcp.server --transport stdio
 echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"getDashboardStats","arguments":{}}}' | \
 python3 -m mcp.server --transport stdio
 
-# 4. Stop web application
-echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"stopWebApplication","arguments":{}}}' | \
+# 4. Read a file (coding environment tool)
+echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"readFile","arguments":{"path":"README.md"}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 5. Search for text (coding environment tool)
+echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"searchFiles","arguments":{"query":"def "}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 6. Stop web application
+echo '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"stopWebApplication","arguments":{}}}' | \
 python3 -m mcp.server --transport stdio
 ```
 

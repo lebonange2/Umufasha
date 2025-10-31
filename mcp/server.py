@@ -39,6 +39,13 @@ from mcp.capabilities.tools.comprehensive_tools import (
     SYNC_CALENDAR_TOOL,
     CANCEL_NOTIFICATION_TOOL
 )
+from mcp.capabilities.tools.coding_environment import (
+    READ_FILE_TOOL,
+    WRITE_FILE_TOOL,
+    SEARCH_FILES_TOOL,
+    LIST_FILES_TOOL,
+    RUN_COMMAND_TOOL
+)
 from mcp.capabilities.resources.base import Resource
 from mcp.capabilities.resources.assistant_resources import (
     USER_RESOURCE,
@@ -140,7 +147,13 @@ class MCPServer:
             # Calendar Management
             SYNC_CALENDAR_TOOL,
             # Dashboard
-            GET_DASHBOARD_STATS_TOOL
+            GET_DASHBOARD_STATS_TOOL,
+            # Coding Environment
+            READ_FILE_TOOL,
+            WRITE_FILE_TOOL,
+            SEARCH_FILES_TOOL,
+            LIST_FILES_TOOL,
+            RUN_COMMAND_TOOL
         ]:
             self.tools[tool.name] = tool
         
