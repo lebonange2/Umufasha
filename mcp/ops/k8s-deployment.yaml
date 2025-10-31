@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assistant-mcp-server
+  labels:
+    app: assistant-mcp-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: assistant-mcp-server
+  template:
+    metadata:
+      labels:
+        app: assistant-mcp-server
+    spec:
+      serviceAccountName: assistant-mcp
+      containers:
+      - name: mcp-server
+        image: assistant-mcp-server:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: websocket
+          protocol: TCP
+        env:
+        - name: MCP_TRANSPORT
+          value: "websocket"
+        - name: MCP_HOST
+          value: "0.0.0.0"
+        - name: MCP_PORT
+          value: "8080"
+        - name: MCP_PATH
+          value: "/mcp"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: assistant-secrets
+              key: database-url
+        - name: MCP_LOG_LEVEL
+          value: "INFO"
+        - name: MCP_MAX_CONCURRENT
+          value: "32"
+        - name: MCP_DEFAULT_TIMEOUT
+          value: "30.0"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: assistant-mcp-server
+  labels:
+    app: assistant-mcp-server
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: websocket
+  selector:
+    app: assistant-mcp-server
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: assistant-mcp
+  namespace: default
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: assistant-secrets
+type: Opaque
+stringData:
+  database-url: "postgresql://postgres:postgres@postgres:5432/assistant"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: assistant-mcp-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/websocket-services: assistant-mcp-server
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - mcp.assistant.example.com
+    secretName: assistant-mcp-tls
+  rules:
+  - host: mcp.assistant.example.com
+    http:
+      paths:
+      - path: /mcp
+        pathType: Prefix
+        backend:
+          service:
+            name: assistant-mcp-server
+            port:
+              number: 8080
+

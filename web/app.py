@@ -168,11 +168,27 @@ def transcribe_audio():
         return jsonify({'success': False, 'error': 'No audio data'})
     
     try:
+        import io
+        import wave
+        
         # Decode audio
         audio_bytes = base64.b64decode(audio_base64)
-        audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
         
-        logger.info(f"Received audio: {len(audio_array)} samples, duration: {len(audio_array)/16000:.2f}s")
+        # Try to parse as WAV file first
+        try:
+            with io.BytesIO(audio_bytes) as audio_buffer:
+                with wave.open(audio_buffer, 'rb') as wav_file:
+                    # Read audio data from WAV file
+                    frames = wav_file.readframes(wav_file.getnframes())
+                    audio_array = np.frombuffer(frames, dtype=np.int16)
+                    sample_rate = wav_file.getframerate()
+                    
+                    logger.info(f"Received WAV audio: {len(audio_array)} samples, {sample_rate}Hz, duration: {len(audio_array)/sample_rate:.2f}s")
+        except Exception as wav_error:
+            # If not a valid WAV, try raw PCM
+            logger.debug(f"Not a WAV file, trying raw PCM: {wav_error}")
+            audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
+            logger.info(f"Received raw audio: {len(audio_array)} samples, duration: {len(audio_array)/16000:.2f}s")
         
         # Check if audio is too short
         if len(audio_array) < 1600:  # Less than 0.1 seconds
@@ -466,11 +482,27 @@ def transcribe_for_document():
         return jsonify({'success': False, 'error': 'No audio data'})
     
     try:
+        import io
+        import wave
+        
         # Decode audio
         audio_bytes = base64.b64decode(audio_base64)
-        audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
         
-        logger.info(f"Document transcription - Received audio: {len(audio_array)} samples, duration: {len(audio_array)/16000:.2f}s")
+        # Try to parse as WAV file first
+        try:
+            with io.BytesIO(audio_bytes) as audio_buffer:
+                with wave.open(audio_buffer, 'rb') as wav_file:
+                    # Read audio data from WAV file
+                    frames = wav_file.readframes(wav_file.getnframes())
+                    audio_array = np.frombuffer(frames, dtype=np.int16)
+                    sample_rate = wav_file.getframerate()
+                    
+                    logger.info(f"Document transcription - Received WAV audio: {len(audio_array)} samples, {sample_rate}Hz, duration: {len(audio_array)/sample_rate:.2f}s")
+        except Exception as wav_error:
+            # If not a valid WAV, try raw PCM
+            logger.debug(f"Not a WAV file, trying raw PCM: {wav_error}")
+            audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
+            logger.info(f"Document transcription - Received raw audio: {len(audio_array)} samples, duration: {len(audio_array)/16000:.2f}s")
         
         # Check if audio is too short
         if len(audio_array) < 1600:  # Less than 0.1 seconds

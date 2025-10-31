@@ -12,6 +12,33 @@
     </div>
 </div>
 
+<!-- Success/Error Messages -->
+{% if request.query_params.get('success') %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    <i class="bi bi-check-circle"></i>
+    {% if request.query_params.get('success') == 'created' %}
+        User created successfully!
+    {% elif request.query_params.get('success') == 'updated' %}
+        User updated successfully!
+    {% endif %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if request.query_params.get('error') %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle"></i>
+    {% if request.query_params.get('error') == 'create_failed' %}
+        Failed to create user. Please check the form data.
+    {% elif request.query_params.get('error') == 'update_failed' %}
+        Failed to update user. Please try again.
+    {% elif request.query_params.get('error') == 'user_not_found' %}
+        User not found.
+    {% endif %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-body">
         {% if users %}
@@ -31,7 +58,11 @@
                 <tbody>
                     {% for user in users %}
                     <tr>
-                        <td>{{ user.name }}</td>
+                        <td>
+                            <a href="/admin/user-account/{{ user.id }}" class="text-decoration-none">
+                                <strong>{{ user.name }}</strong>
+                            </a>
+                        </td>
                         <td>{{ user.email }}</td>
                         <td>{{ user.phone_e164 or 'Not set' }}</td>
                         <td>
@@ -43,16 +74,19 @@
                         <td>{{ user.created_at.strftime('%m/%d/%Y') }}</td>
                         <td>
                             <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-primary" onclick="editUser('{{ user.id }}')">
+                                <a href="/admin/user-account/{{ user.id }}" class="btn btn-outline-info" title="View Account">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <button class="btn btn-outline-primary" onclick="editUser('{{ user.id }}')" title="Edit User">
                                     <i class="bi bi-pencil"></i>
                                 </button>
-                                <button class="btn btn-outline-success" onclick="testCall('{{ user.id }}')">
+                                <button class="btn btn-outline-success" onclick="testCall('{{ user.id }}')" title="Test Call">
                                     <i class="bi bi-telephone"></i>
                                 </button>
-                                <button class="btn btn-outline-warning" onclick="testEmail('{{ user.id }}')">
+                                <button class="btn btn-outline-warning" onclick="testEmail('{{ user.id }}')" title="Test Email">
                                     <i class="bi bi-envelope"></i>
                                 </button>
-                                <button class="btn btn-outline-danger" onclick="deleteUser('{{ user.id }}')">
+                                <button class="btn btn-outline-danger" onclick="deleteUser('{{ user.id }}')" title="Delete User">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
@@ -159,23 +193,32 @@ function editUser(userId) {
 }
 
 function testCall(userId) {
-    // TODO: Implement test call functionality
-    alert('Test call for user: ' + userId);
-}
-
-function testEmail(userId) {
-    fetch(`/email/test/${userId}`, {
-        method: 'POST',
-        headers: {
-            'Authorization': 'Bearer admin:admin123'
-        }
+    fetch(`/admin/users/${userId}/test-call`, {
+        method: 'POST'
     })
     .then(response => response.json())
     .then(data => {
-        if (data.message) {
+        if (data.success) {
+            alert('Test call initiated: ' + data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error initiating test call: ' + error);
+    });
+}
+
+function testEmail(userId) {
+    fetch(`/admin/users/${userId}/test-email`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
             alert('Test email sent: ' + data.message);
         } else {
-            alert('Error: ' + data.detail);
+            alert('Error: ' + data.error);
         }
     })
     .catch(error => {
@@ -185,8 +228,21 @@ function testEmail(userId) {
 
 function deleteUser(userId) {
     if (confirm('Are you sure you want to delete this user?')) {
-        // TODO: Implement delete user functionality
-        alert('Delete user: ' + userId);
+        fetch(`/admin/users/${userId}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('User deleted successfully');
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error deleting user: ' + error);
+        });
     }
 }
 
@@ -195,23 +251,22 @@ document.getElementById('addUserForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
-    const userData = Object.fromEntries(formData);
     
-    fetch('/api/users', {
+    fetch('/admin/users', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer admin:admin123'
-        },
-        body: JSON.stringify(userData)
+        body: formData
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.id) {
-            alert('User created successfully!');
-            location.reload();
+    .then(response => {
+        if (response.redirected) {
+            // Redirect to users page with success/error message
+            window.location.href = response.url;
         } else {
-            alert('Error: ' + data.detail);
+            return response.text();
+        }
+    })
+    .then(data => {
+        if (data) {
+            alert('Error: ' + data);
         }
     })
     .catch(error => {

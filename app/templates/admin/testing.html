@@ -1,0 +1,1237 @@
+{% extends "base.html" %}
+
+{% block title %}Testing - Personal Assistant Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-bug"></i> Testing Dashboard</h1>
+    <div>
+        <button class="btn btn-info" onclick="testJavaScript()">
+            <i class="bi bi-code-slash"></i> Test JavaScript
+        </button>
+        <button class="btn btn-secondary" onclick="testEndpoint()">
+            <i class="bi bi-gear"></i> Test Endpoint
+        </button>
+        <button class="btn btn-info" onclick="testDirectCall()">
+            <i class="bi bi-telephone"></i> Test Direct Call
+        </button>
+        <button class="btn btn-success" onclick="runAllTests()">
+            <i class="bi bi-play-circle"></i> Run All Tests
+        </button>
+        <button class="btn btn-warning" onclick="clearResults()">
+            <i class="bi bi-trash"></i> Clear Results
+        </button>
+    </div>
+</div>
+
+<!-- User Selection -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person"></i> Select User</h5>
+            </div>
+            <div class="card-body">
+                <select class="form-select" id="userSelect" onchange="updateUserInfo()">
+                    <option value="">Choose a user to test...</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" data-name="{{ user.name }}" data-email="{{ user.email }}" data-phone="{{ user.phone_e164 }}">
+                        {{ user.name }} ({{ user.email }})
+                    </option>
+                    {% endfor %}
+                </select>
+                
+                <div id="userInfo" class="mt-3" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Name:</strong> <span id="selectedUserName"></span><br>
+                            <strong>Email:</strong> <span id="selectedUserEmail"></span><br>
+                            <strong>Phone:</strong> <span id="selectedUserPhone"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Channel Pref:</strong> <span id="selectedUserChannel" class="badge bg-primary"></span><br>
+                            <strong>Timezone:</strong> <span id="selectedUserTimezone"></span><br>
+                            <strong>Quiet Hours:</strong> <span id="selectedUserQuiet"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Test Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="test-status" id="emailStatus">
+                            <i class="bi bi-envelope display-4 text-muted"></i>
+                            <div class="mt-2">Email</div>
+                            <small class="text-muted">Ready</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="test-status" id="callStatus">
+                            <i class="bi bi-telephone display-4 text-muted"></i>
+                            <div class="mt-2">Call</div>
+                            <small class="text-muted">Ready</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="test-status" id="smsStatus">
+                            <i class="bi bi-chat-dots display-4 text-muted"></i>
+                            <div class="mt-2">SMS</div>
+                            <small class="text-muted">Ready</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Controls -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> Test Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="d-grid">
+                            <button class="btn btn-primary btn-lg" onclick="testEmail()" id="emailBtn" disabled>
+                                <i class="bi bi-envelope"></i> Test Email
+                            </button>
+                        </div>
+                        <small class="text-muted">Send a test email with RSVP link</small>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <div class="d-grid">
+                            <button class="btn btn-success btn-lg" onclick="testCall()" id="callBtn" disabled>
+                                <i class="bi bi-telephone"></i> Test Call
+                            </button>
+                        </div>
+                        <small class="text-muted">Make a test phone call with DTMF</small>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <div class="d-grid">
+                            <button class="btn btn-info btn-lg" onclick="testSMS()" id="smsBtn" disabled>
+                                <i class="bi bi-chat-dots"></i> Test SMS
+                            </button>
+                        </div>
+                        <small class="text-muted">Send a test SMS message</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- User Device Emulation -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-phone"></i> User Device Emulation</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="device-mockup">
+                            <div class="device-header">
+                                <div class="device-status-bar">
+                                    <span class="time">6:08 PM</span>
+                                    <span class="battery">100%</span>
+                                </div>
+                                <div class="device-title">Personal Assistant</div>
+                            </div>
+                            <div class="device-content" id="deviceContent">
+                                <div class="text-center text-muted py-5">
+                                    <i class="bi bi-phone display-1"></i>
+                                    <h4 class="mt-3">No communications yet</h4>
+                                    <p>Run tests to see how they appear on the user's device.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Communication Log</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="communicationLog" class="communication-log">
+                                    <div class="text-center text-muted py-3">
+                                        <small>No communications received yet</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test Results -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Test Results</h5>
+            </div>
+            <div class="card-body">
+                <div id="testResults">
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-clipboard-data display-1"></i>
+                        <h4 class="mt-3">No tests run yet</h4>
+                        <p>Select a user and run some tests to see results here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Test History Modal -->
+<div class="modal fade" id="testHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Test History</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="testHistoryContent">
+                    <!-- Test history will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.test-status {
+    text-align: center;
+    padding: 10px;
+    border-radius: 8px;
+    transition: all 0.3s;
+}
+
+.test-status.running {
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+}
+
+.test-status.success {
+    background-color: #d1edff;
+    border: 1px solid #74c0fc;
+}
+
+.test-status.error {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.test-result {
+    border-left: 4px solid #dee2e6;
+    padding: 15px;
+    margin-bottom: 15px;
+    background-color: #f8f9fa;
+    border-radius: 0 8px 8px 0;
+}
+
+.test-result.success {
+    border-left-color: #28a745;
+    background-color: #d4edda;
+}
+
+.test-result.error {
+    border-left-color: #dc3545;
+    background-color: #f8d7da;
+}
+
+.test-result.running {
+    border-left-color: #ffc107;
+    background-color: #fff3cd;
+}
+
+.test-timestamp {
+    font-size: 0.8em;
+    color: #6c757d;
+}
+
+.test-details {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: rgba(0,0,0,0.05);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+/* Device Emulation Styles */
+.device-mockup {
+    background: #000;
+    border-radius: 25px;
+    padding: 20px;
+    max-width: 300px;
+    margin: 0 auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.device-header {
+    background: #1a1a1a;
+    border-radius: 15px;
+    padding: 10px;
+    margin-bottom: 15px;
+}
+
+.device-status-bar {
+    display: flex;
+    justify-content: space-between;
+    color: #fff;
+    font-size: 0.8em;
+    margin-bottom: 10px;
+}
+
+.device-title {
+    color: #fff;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.device-content {
+    background: #f8f9fa;
+    border-radius: 15px;
+    min-height: 400px;
+    padding: 15px;
+    overflow-y: auto;
+}
+
+.communication-item {
+    background: #fff;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    border-left: 4px solid #007bff;
+}
+
+.communication-item.email {
+    border-left-color: #28a745;
+}
+
+.communication-item.call {
+    border-left-color: #ffc107;
+}
+
+.communication-item.sms {
+    border-left-color: #17a2b8;
+}
+
+.communication-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.communication-type {
+    font-weight: bold;
+    color: #333;
+}
+
+.communication-time {
+    font-size: 0.8em;
+    color: #666;
+}
+
+.communication-content {
+    color: #555;
+    line-height: 1.4;
+}
+
+.communication-log {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.phone-call {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    text-align: center;
+    padding: 20px;
+    border-radius: 15px;
+    margin: 10px 0;
+}
+
+.call-actions {
+    margin-top: 20px;
+}
+
+.call-btn {
+    background: rgba(255,255,255,0.2);
+    border: 2px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 10px 20px;
+    margin: 0 5px;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.call-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.email-preview {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.email-header {
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.email-subject {
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.email-meta {
+    font-size: 0.9em;
+    color: #666;
+}
+
+.email-body {
+    color: #555;
+    line-height: 1.5;
+}
+
+.rsvp-buttons {
+    margin-top: 15px;
+    text-align: center;
+}
+
+.rsvp-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    margin: 0 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.rsvp-btn:hover {
+    background: #0056b3;
+    color: white;
+    text-decoration: none;
+}
+
+.sms-bubble {
+    background: #e3f2fd;
+    border-radius: 15px;
+    padding: 12px 16px;
+    margin: 10px 0;
+    max-width: 80%;
+    position: relative;
+}
+
+.sms-bubble::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 15px;
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-right: 8px solid #e3f2fd;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedUserId = null;
+let testResults = [];
+let communicationLog = [];
+
+function updateUserInfo() {
+    const select = document.getElementById('userSelect');
+    const userInfo = document.getElementById('userInfo');
+    const selectedOption = select.options[select.selectedIndex];
+    
+    if (selectedOption.value) {
+        selectedUserId = selectedOption.value;
+        document.getElementById('selectedUserName').textContent = selectedOption.dataset.name;
+        document.getElementById('selectedUserEmail').textContent = selectedOption.dataset.email;
+        document.getElementById('selectedUserPhone').textContent = selectedOption.dataset.phone || 'Not set';
+        userInfo.style.display = 'block';
+        
+        // Enable test buttons
+        document.getElementById('emailBtn').disabled = false;
+        document.getElementById('callBtn').disabled = false;
+        document.getElementById('smsBtn').disabled = false;
+    } else {
+        selectedUserId = null;
+        userInfo.style.display = 'none';
+        
+        // Disable test buttons
+        document.getElementById('emailBtn').disabled = true;
+        document.getElementById('callBtn').disabled = true;
+        document.getElementById('smsBtn').disabled = true;
+    }
+}
+
+function updateTestStatus(channel, status, message = '') {
+    const statusElement = document.getElementById(channel + 'Status');
+    const icon = statusElement.querySelector('i');
+    const statusText = statusElement.querySelector('small');
+    
+    statusElement.className = 'test-status ' + status;
+    
+    switch(status) {
+        case 'running':
+            icon.className = 'bi bi-hourglass-split display-4 text-warning';
+            statusText.textContent = 'Running...';
+            break;
+        case 'success':
+            icon.className = 'bi bi-check-circle display-4 text-success';
+            statusText.textContent = 'Success';
+            break;
+        case 'error':
+            icon.className = 'bi bi-x-circle display-4 text-danger';
+            statusText.textContent = 'Error';
+            break;
+        default:
+            icon.className = 'bi bi-envelope display-4 text-muted';
+            statusText.textContent = 'Ready';
+    }
+}
+
+function addTestResult(channel, success, message, details = null) {
+    const result = {
+        id: Date.now(),
+        channel: channel,
+        success: success,
+        message: message,
+        details: details,
+        timestamp: new Date().toLocaleString()
+    };
+    
+    testResults.unshift(result);
+    displayTestResults();
+    
+    // Add to device emulation if successful
+    if (success) {
+        addToDeviceEmulation(channel, message, details);
+    }
+}
+
+function addToDeviceEmulation(channel, message, details) {
+    const communication = {
+        id: Date.now(),
+        channel: channel,
+        message: message,
+        details: details,
+        timestamp: new Date().toLocaleString()
+    };
+    
+    communicationLog.unshift(communication);
+    displayDeviceEmulation();
+    displayCommunicationLog();
+}
+
+function displayDeviceEmulation() {
+    const container = document.getElementById('deviceContent');
+    
+    if (communicationLog.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-phone display-1"></i>
+                <h4 class="mt-3">No communications yet</h4>
+                <p>Run tests to see how they appear on the user's device.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    communicationLog.slice(0, 3).forEach(comm => { // Show last 3 communications
+        switch(comm.channel) {
+            case 'email':
+                html += createEmailPreview(comm);
+                break;
+            case 'call':
+                html += createCallPreview(comm);
+                break;
+            case 'sms':
+                html += createSMSPreview(comm);
+                break;
+            case 'call_response':
+                html += createCallResponsePreview(comm);
+                break;
+            case 'email_response':
+                html += createEmailResponsePreview(comm);
+                break;
+            case 'sms_response':
+                html += createSMSResponsePreview(comm);
+                break;
+        }
+    });
+    
+    container.innerHTML = html;
+}
+
+function createEmailPreview(comm) {
+    const details = comm.details ? JSON.parse(comm.details) : {};
+    const user = details.user || 'User';
+    const eventId = details.event_id || 'test-event';
+    
+    return `
+        <div class="communication-item email">
+            <div class="communication-header">
+                <div class="communication-type">
+                    <i class="bi bi-envelope"></i> Email
+                </div>
+                <div class="communication-time">${comm.timestamp}</div>
+            </div>
+            <div class="email-preview">
+                <div class="email-header">
+                    <div class="email-subject">Appointment Reminder</div>
+                    <div class="email-meta">From: Personal Assistant &lt;noreply@assistant.com&gt;</div>
+                </div>
+                <div class="email-body">
+                    <p>Hello ${user},</p>
+                    <p>This is a reminder about your upcoming appointment. Please confirm your attendance.</p>
+                    <div class="rsvp-buttons">
+                        <button class="rsvp-btn" onclick="handleEmailAction('confirm', '${eventId}')">Confirm</button>
+                        <button class="rsvp-btn" onclick="handleEmailAction('reschedule', '${eventId}')">Reschedule</button>
+                        <button class="rsvp-btn" onclick="handleEmailAction('cancel', '${eventId}')">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function createCallPreview(comm) {
+    const details = comm.details ? JSON.parse(comm.details) : {};
+    return `
+        <div class="communication-item call">
+            <div class="communication-header">
+                <div class="communication-type">
+                    <i class="bi bi-telephone"></i> Incoming Call
+                </div>
+                <div class="communication-time">${comm.timestamp}</div>
+            </div>
+            <div class="phone-call">
+                <h5>Personal Assistant</h5>
+                <p>Calling about your appointment...</p>
+                <div class="call-actions">
+                    <button class="call-btn" onclick="testJavaScript()">Test JS</button>
+                    <button class="call-btn" onclick="handleCallAction('answer')">Answer</button>
+                    <button class="call-btn" onclick="handleCallAction('decline')">Decline</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function createSMSPreview(comm) {
+    const details = comm.details ? JSON.parse(comm.details) : {};
+    const message = details.message || 'Test SMS from Personal Assistant';
+    return `
+        <div class="communication-item sms">
+            <div class="communication-header">
+                <div class="communication-type">
+                    <i class="bi bi-chat-dots"></i> SMS
+                </div>
+                <div class="communication-time">${comm.timestamp}</div>
+            </div>
+            <div class="sms-bubble">
+                <strong>Personal Assistant:</strong><br>
+                ${message}
+            </div>
+            <div class="sms-response" style="margin-top: 10px;">
+                <input type="text" class="form-control form-control-sm" placeholder="Type your response..." id="smsResponse_${comm.id}">
+                <button class="btn btn-primary btn-sm mt-2" onclick="handleSMSResponse('${comm.id}')">Send Response</button>
+            </div>
+        </div>
+    `;
+}
+
+function displayCommunicationLog() {
+    const container = document.getElementById('communicationLog');
+    
+    if (communicationLog.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-3">
+                <small>No communications received yet</small>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    communicationLog.forEach(comm => {
+        const iconClass = comm.channel === 'email' ? 'envelope' : 
+                         comm.channel === 'call' ? 'telephone' : 'chat-dots';
+        const badgeClass = comm.channel === 'email' ? 'success' : 
+                          comm.channel === 'call' ? 'warning' : 'info';
+        
+        html += `
+            <div class="communication-item ${comm.channel}">
+                <div class="communication-header">
+                    <div class="communication-type">
+                        <i class="bi bi-${iconClass}"></i> ${comm.channel.toUpperCase()}
+                    </div>
+                    <div class="communication-time">${comm.timestamp}</div>
+                </div>
+                <div class="communication-content">
+                    ${comm.message}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Test function to verify JavaScript is working
+function testJavaScript() {
+    console.log('=== JAVASCRIPT TEST ===');
+    console.log('JavaScript is working!');
+    console.log('selectedUserId:', selectedUserId);
+    alert('JavaScript is working! Check console for details.');
+}
+
+// Test function to verify endpoint directly
+async function testEndpoint() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+    
+    try {
+        console.log('=== ENDPOINT TEST ===');
+        const response = await fetch(`/admin/users/${selectedUserId}/email-action`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'action=confirm&event_id=test-direct'
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+        
+        const responseText = await response.text();
+        console.log('Response text:', responseText);
+        
+        const data = JSON.parse(responseText);
+        console.log('Parsed data:', data);
+        alert('Endpoint test successful! Check console for details.');
+    } catch (error) {
+        console.error('Endpoint test error:', error);
+        alert('Endpoint test failed: ' + error.message);
+    }
+}
+
+// Test direct call action
+async function testDirectCall() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+    
+    try {
+        console.log('Testing direct call action...');
+        
+        const formData = new FormData();
+        formData.append('action', 'answer');
+        
+        const response = await fetch(`/admin/users/${selectedUserId}/call-action`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('Call response status:', response.status);
+        console.log('Call response headers:', Object.fromEntries(response.headers.entries()));
+        
+        const responseText = await response.text();
+        console.log('Call response text:', responseText);
+        console.log('Call response type:', typeof responseText);
+        console.log('Call response length:', responseText.length);
+        
+        if (responseText.trim() === '') {
+            throw new Error('Empty response received');
+        }
+        
+        if (responseText.includes('<html>') || responseText.includes('<!DOCTYPE')) {
+            throw new Error('Received HTML instead of JSON');
+        }
+        
+        const data = JSON.parse(responseText);
+        console.log('Call parsed data:', data);
+        alert('Direct call test successful! Check console for details.');
+    } catch (error) {
+        console.error('Direct call test error:', error);
+        alert('Direct call test failed: ' + error.message);
+    }
+}
+
+// Interactive handler functions
+async function handleCallAction(action) {
+    console.log('=== CALL ACTION DEBUG ===');
+    console.log('handleCallAction called with action:', action);
+    console.log('selectedUserId:', selectedUserId);
+    console.log('Current time:', new Date().toISOString());
+    
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('action', action);
+        
+        console.log('Making request to:', `/admin/users/${selectedUserId}/call-action`);
+        const response = await fetch(`/admin/users/${selectedUserId}/call-action`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        // Check if response is HTML (redirect to login)
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+            alert('Session expired. Please refresh the page and login again.');
+            window.location.href = '/admin/login';
+            return;
+        }
+        
+        // Check if response is ok
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Use response.json() instead of manual parsing
+        const data = await response.json();
+        
+        if (data.success) {
+            // Add response to device emulation
+            addToDeviceEmulation('call_response', data.message, JSON.stringify(data));
+            alert(`Call ${action}ed: ${data.message}`);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Call action error:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+async function handleEmailAction(action, eventId) {
+    console.log('handleEmailAction called with action:', action, 'eventId:', eventId);
+    console.log('selectedUserId:', selectedUserId);
+    
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('action', action);
+        formData.append('event_id', eventId);
+        
+        console.log('Making request to:', `/admin/users/${selectedUserId}/email-action`);
+        const response = await fetch(`/admin/users/${selectedUserId}/email-action`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        // Check if response is HTML (redirect to login)
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+            alert('Session expired. Please refresh the page and login again.');
+            window.location.href = '/admin/login';
+            return;
+        }
+        
+        // Check if response is ok
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Use response.json() instead of manual parsing
+        const data = await response.json();
+        console.log('Email action response:', data);
+        
+        if (data.success) {
+            // Add response to device emulation
+            addToDeviceEmulation('email_response', data.message, JSON.stringify(data));
+            alert(`Email action ${action}ed: ${data.message}`);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Email action error:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+async function handleSMSResponse(commId) {
+    console.log('handleSMSResponse called with commId:', commId);
+    console.log('selectedUserId:', selectedUserId);
+    
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+    
+    const responseInput = document.getElementById(`smsResponse_${commId}`);
+    const responseText = responseInput.value.trim();
+    
+    if (!responseText) {
+        alert('Please enter a response');
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('response', responseText);
+        
+        console.log('Making request to:', `/admin/users/${selectedUserId}/sms-response`);
+        const response = await fetch(`/admin/users/${selectedUserId}/sms-response`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        // Check if response is HTML (redirect to login)
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+            alert('Session expired. Please refresh the page and login again.');
+            window.location.href = '/admin/login';
+            return;
+        }
+        
+        // Check if response is ok
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        // Use response.json() instead of manual parsing
+        const data = await response.json();
+        console.log('SMS response:', data);
+        
+        if (data.success) {
+            // Add response to device emulation
+            addToDeviceEmulation('sms_response', `You: ${data.response}`, JSON.stringify(data));
+            responseInput.value = ''; // Clear input
+            alert('SMS response sent: ' + data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('SMS response error:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+// Response preview functions
+function createCallResponsePreview(comm) {
+    const details = comm.details ? JSON.parse(comm.details) : {};
+    return `
+        <div class="communication-item call-response">
+            <div class="communication-header">
+                <div class="communication-type">
+                    <i class="bi bi-check-circle text-success"></i> Call Response
+                </div>
+                <div class="communication-time">${comm.timestamp}</div>
+            </div>
+            <div class="response-content">
+                <strong>You ${details.action}ed the call</strong><br>
+                <small class="text-muted">${comm.message}</small>
+            </div>
+        </div>
+    `;
+}
+
+function createEmailResponsePreview(comm) {
+    const details = comm.details ? JSON.parse(comm.details) : {};
+    return `
+        <div class="communication-item email-response">
+            <div class="communication-header">
+                <div class="communication-type">
+                    <i class="bi bi-check-circle text-success"></i> Email Response
+                </div>
+                <div class="communication-time">${comm.timestamp}</div>
+            </div>
+            <div class="response-content">
+                <strong>You ${details.action}ed the appointment</strong><br>
+                <small class="text-muted">${comm.message}</small>
+            </div>
+        </div>
+    `;
+}
+
+function createSMSResponsePreview(comm) {
+    const details = comm.details ? JSON.parse(comm.details) : {};
+    return `
+        <div class="communication-item sms-response">
+            <div class="communication-header">
+                <div class="communication-type">
+                    <i class="bi bi-check-circle text-success"></i> SMS Response
+                </div>
+                <div class="communication-time">${comm.timestamp}</div>
+            </div>
+            <div class="sms-bubble" style="background: #d4edda; border-left: 4px solid #28a745;">
+                <strong>You:</strong><br>
+                ${comm.message.replace('You: ', '')}
+            </div>
+        </div>
+    `;
+}
+
+// Legacy functions for backward compatibility
+function answerCall() {
+    handleCallAction('answer');
+}
+
+function declineCall() {
+    handleCallAction('decline');
+}
+
+function displayTestResults() {
+    const container = document.getElementById('testResults');
+    
+    if (testResults.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-clipboard-data display-1"></i>
+                <h4 class="mt-3">No tests run yet</h4>
+                <p>Select a user and run some tests to see results here.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    testResults.forEach(result => {
+        const statusClass = result.success ? 'success' : 'error';
+        const icon = result.success ? 'check-circle' : 'x-circle';
+        const iconColor = result.success ? 'text-success' : 'text-danger';
+        
+        html += `
+            <div class="test-result ${statusClass}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">
+                            <i class="bi bi-${icon} ${iconColor}"></i>
+                            ${result.channel.toUpperCase()} Test
+                        </h6>
+                        <p class="mb-1">${result.message}</p>
+                        <small class="test-timestamp">${result.timestamp}</small>
+                    </div>
+                    <div>
+                        <span class="badge bg-${result.success ? 'success' : 'danger'}">
+                            ${result.success ? 'SUCCESS' : 'FAILED'}
+                        </span>
+                    </div>
+                </div>
+                ${result.details ? `<div class="test-details">${result.details}</div>` : ''}
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+async function testEmail() {
+    if (!selectedUserId) return;
+    
+    updateTestStatus('email', 'running');
+    
+    try {
+        const response = await fetch(`/admin/users/${selectedUserId}/test-email`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            updateTestStatus('email', 'success');
+            addTestResult('email', true, 'Email sent successfully', JSON.stringify(data, null, 2));
+        } else {
+            updateTestStatus('email', 'error');
+            addTestResult('email', false, data.error || 'Email test failed');
+        }
+    } catch (error) {
+        updateTestStatus('email', 'error');
+        addTestResult('email', false, 'Network error: ' + error.message);
+    }
+}
+
+async function testCall() {
+    if (!selectedUserId) return;
+    
+    updateTestStatus('call', 'running');
+    
+    try {
+        const response = await fetch(`/admin/users/${selectedUserId}/test-call`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            updateTestStatus('call', 'success');
+            addTestResult('call', true, 'Call initiated successfully', JSON.stringify(data, null, 2));
+        } else {
+            updateTestStatus('call', 'error');
+            addTestResult('call', false, data.error || 'Call test failed');
+        }
+    } catch (error) {
+        updateTestStatus('call', 'error');
+        addTestResult('call', false, 'Network error: ' + error.message);
+    }
+}
+
+async function testSMS() {
+    if (!selectedUserId) return;
+    
+    updateTestStatus('sms', 'running');
+    
+    try {
+        const response = await fetch(`/admin/users/${selectedUserId}/test-sms`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            updateTestStatus('sms', 'success');
+            addTestResult('sms', true, 'SMS sent successfully', JSON.stringify(data, null, 2));
+        } else {
+            updateTestStatus('sms', 'error');
+            addTestResult('sms', false, data.error || 'SMS test failed');
+        }
+    } catch (error) {
+        updateTestStatus('sms', 'error');
+        addTestResult('sms', false, 'Network error: ' + error.message);
+    }
+}
+
+async function runAllTests() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+    
+    if (confirm('Run all tests for the selected user? This will test email, call, and SMS.')) {
+        await testEmail();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        await testCall();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        await testSMS();
+    }
+}
+
+function clearResults() {
+    if (confirm('Clear all test results and device emulation?')) {
+        testResults = [];
+        communicationLog = [];
+        displayTestResults();
+        displayDeviceEmulation();
+        displayCommunicationLog();
+        
+        // Reset status indicators
+        updateTestStatus('email', 'ready');
+        updateTestStatus('call', 'ready');
+        updateTestStatus('sms', 'ready');
+    }
+}
+
+// Session management
+async function checkSession() {
+    try {
+        // Check if we have a valid session by making a simple request
+        const response = await fetch('/admin/dashboard', {
+            method: 'GET'
+        });
+        
+        if (response.status === 401 || response.status === 302) {
+            alert('Session expired. Redirecting to login...');
+            window.location.href = '/admin/login';
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.error('Session check failed:', error);
+        return false;
+    }
+}
+
+// Cache busting - force reload if old version detected
+if (typeof window.scriptVersion === 'undefined') {
+    window.scriptVersion = '2025-10-18-21:05-JSON-FIX';
+} else if (window.scriptVersion !== '2025-10-18-21:05-JSON-FIX') {
+    console.log('Old script version detected, reloading page...');
+    window.location.reload(true);
+}
+
+// Force cache clear on page load
+if (performance.navigation.type === 1) {
+    console.log('Page refreshed, clearing all caches...');
+    if ('caches' in window) {
+        caches.keys().then(function(names) {
+            for (let name of names) {
+                caches.delete(name);
+            }
+        });
+    }
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    updateUserInfo();
+    console.log('Testing page loaded at:', new Date().toISOString());
+    console.log('Script version: 2025-10-18-20:45-DEBUG');
+    console.log('Cache busting enabled');
+    console.log('Debug logging enabled');
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js?v=202510181930"></script>
+{% endblock %}

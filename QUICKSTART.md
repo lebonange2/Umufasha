@@ -1,284 +1,455 @@
-# 🚀 Unified Assistant - Quick Start Guide
+# 🚀 Assistant Application - Complete Quick Start Guide
 
-Get your AI-Powered Unified Assistant (Voice Brainstorming + Personal Assistant) up and running in minutes!
+A comprehensive AI-powered personal assistant with voice brainstorming capabilities, powered by MCP (Model Context Protocol) server.
 
-## ⚡ One-Command Setup
+## 📋 Table of Contents
 
-```bash
-# Clone and setup everything
-git clone <your-repo-url>
-cd ASSISTANT
-./setup.sh
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Quick Setup](#quick-setup)
+4. [Running the Application](#running-the-application)
+5. [Using MCP Server](#using-mcp-server)
+6. [Web Application](#web-application)
+7. [Examples](#examples)
+8. [Troubleshooting](#troubleshooting)
+
+## 🎯 Overview
+
+This application consists of two main components:
+
+1. **Web Application** - FastAPI-based personal assistant with admin UI
+   - User management
+   - Calendar integration
+   - Notification planning
+   - Voice and email notifications
+
+2. **MCP Server** - Model Context Protocol server for application control
+   - Start/stop web application
+   - Manage users, events, notifications
+   - Dashboard statistics
+   - LLM integration via MCP protocol
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│            MCP Server (Control Layer)           │
+│  ┌──────────────┐  ┌──────────────┐            │
+│  │ App Mgmt     │  │ User/Event   │            │
+│  │ Tools        │  │ Management   │            │
+│  └──────────────┘  └──────────────┘            │
+└─────────────────────────────────────────────────┘
+          │                    │
+          ▼                    ▼
+┌─────────────────────────────────────────────────┐
+│      Web Application (Port 8000)                │
+│  FastAPI + Admin UI + API Endpoints             │
+└─────────────────────────────────────────────────┘
 ```
 
-That's it! The setup script will:
-- ✅ Install all dependencies
-- ✅ Create virtual environment
-- ✅ Generate secure encryption keys
-- ✅ Initialize database
-- ✅ Run internal tests
-- ✅ Create helper scripts
-- ✅ Set up both brainstorming and personal assistant modes
+## ⚡ Quick Setup
 
-## 🎯 Quick Start
+### Prerequisites
 
-### 1. Start the Unified Application
+- Python 3.10+
+- pip
+- Virtual environment (recommended)
+
+### Installation Steps
+
+```bash
+# 1. Clone or navigate to project directory
+cd /home/uwisiyose/ASSISTANT
+
+# 2. Create virtual environment (if not exists)
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Install MCP server
+cd mcp
+pip install -e ".[app-management]"
+cd ..
+
+# 5. Initialize database
+python3 scripts/init_db.py
+
+# 6. Create .env file (if not exists)
+cp .env.example .env
+```
+
+## 🚀 Running the Application
+
+### Option 1: Start via MCP Server (Recommended)
+
+The MCP server can start and control the entire application:
+
+```bash
+# Start web application via MCP
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"startWebApplication","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+
+# Check status
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"webApplicationStatus","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+```
+
+### Option 2: Start Web Application Directly
+
+```bash
+# Using startup script
+./start.sh
+
+# Or directly
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Option 3: Unified Application (Brainstorming + Assistant)
+
 ```bash
 ./start_unified.sh
 ```
 
-**Or start Personal Assistant only:**
+## 🎮 Using MCP Server
+
+The MCP server acts as the **control layer** for the entire application. You can manage everything through MCP tools.
+
+### Start MCP Server
+
+**Stdio Mode:**
 ```bash
-./start.sh
+python3 -m mcp.server --transport stdio
 ```
 
-### 2. Access the Dashboard
-Open your browser and go to:
-- **🏠 Unified Dashboard**: http://localhost:8000
-- **🧠 Brainstorming Mode**: http://localhost:8000/brainstorm
+**WebSocket Mode:**
+```bash
+python3 -m mcp.server --transport websocket --host localhost --port 8080
+```
+
+### Available MCP Tools
+
+#### Application Management
+- `startWebApplication` - Start web app on port 8000
+- `stopWebApplication` - Stop web app
+- `webApplicationStatus` - Check web app status
+
+#### User Management
+- `createUser` - Create new user account
+- `getUser` - Get user details by ID
+- `updateUser` - Update user preferences
+- `deleteUser` - Delete user account
+
+#### Event Management
+- `getEvent` - Get event details by ID
+- `listEvents` - List events with filters
+
+#### Notification Management
+- `listNotifications` - List notifications with filters
+- `planNotifications` - Plan notifications using LLM policy
+- `cancelNotification` - Cancel scheduled notification
+
+#### Calendar Management
+- `syncCalendar` - Sync Google Calendar events for a user
+
+#### Dashboard
+- `getDashboardStats` - Get dashboard statistics
+
+### Example: Complete Workflow via MCP
+
+```bash
+# 1. Start web application
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"startWebApplication","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 2. Create a user
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"createUser","arguments":{"name":"John Doe","email":"john@example.com"}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 3. Get dashboard statistics
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"getDashboardStats","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 4. Stop web application
+echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"stopWebApplication","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+```
+
+### Integration with Claude Desktop
+
+Add to Claude Desktop config:
+```json
+{
+  "mcpServers": {
+    "assistant": {
+      "command": "python3",
+      "args": ["-m", "mcp.server", "--transport", "stdio"],
+      "cwd": "/home/uwisiyose/ASSISTANT"
+    }
+  }
+}
+```
+
+Then you can ask Claude:
+- "Start the web application"
+- "Create a user named John with email john@example.com"
+- "Show me the dashboard statistics"
+
+## 🌐 Web Application
+
+### Access Points
+
+Once the web application is running (port 8000):
+
+- **🏠 Main Dashboard**: http://localhost:8000
+- **🧠 Brainstorming Mode**: http://localhost:8000/brainstorm (if unified mode)
 - **📅 Personal Assistant**: http://localhost:8000/personal
 - **⚙️ Admin Panel**: http://localhost:8000/admin
+  - Default login: `admin` / `admin123`
 - **📚 API Documentation**: http://localhost:8000/docs
+  - Interactive Swagger UI
 - **🔧 Health Check**: http://localhost:8000/health
 
-**Login Credentials:**
-- Username: `admin`
-- Password: `admin123`
+### Features
 
-### 3. Try Both Modes
-
-#### 🧠 Voice-Driven Brainstorming
-1. Go to **Brainstorming Mode**: http://localhost:8000/brainstorm
-2. Click **Start Recording** to speak your ideas
-3. Watch as AI organizes and clusters your thoughts
-4. Tag, promote, or delete ideas as needed
-5. Export your session when done
-
-#### 📅 Personal Assistant
-1. Go to **Admin Panel**: http://localhost:8000/admin
-2. Create a user in **Users** section
-3. Add events in **Events** section
-4. Test mock functionality:
-   ```bash
-   # Test mock call
-   curl -X POST -H "Authorization: Bearer admin:admin123" \
-        http://localhost:8000/testing/mock/test-call/USER_ID
-   
-   # Test mock email
-   curl -X POST -H "Authorization: Bearer admin:admin123" \
-        http://localhost:8000/testing/mock/test-email/USER_ID
-   ```
-
-### 4. Automatic Port Management
-The startup scripts automatically:
-- ✅ Kill any existing processes on port 8000
-- ✅ Stop any running uvicorn processes
-- ✅ Start fresh without conflicts
-- ✅ Initialize database if needed
-
-## 🧪 Testing Without External APIs
-
-The application runs in **Mock Mode** by default, which means:
-- ✅ **No Twilio API needed** - Mock calls simulate real phone calls
-- ✅ **No SendGrid API needed** - Mock emails simulate real email sending
-- ✅ **No OpenAI API needed** - Mock LLM responses for testing
-- ✅ **No Google Calendar needed** - Mock calendar events for testing
-
-### Mock Features Available:
-- 📞 **Mock Phone Calls**: Simulate calls with DTMF responses
-- 📧 **Mock Emails**: Generate HTML emails with RSVP links
-- 🤖 **Mock LLM**: Policy decisions without real API calls
-- 📅 **Mock Calendar**: Test calendar integration
-
-## 🔧 Helper Scripts
-
-The setup creates several helper scripts:
-
-### `start_unified.sh` - Start Unified Application
-```bash
-./start_unified.sh
-```
-Starts the unified application with both brainstorming and personal assistant modes.
-
-### `start.sh` - Start Personal Assistant Only
-```bash
-./start.sh
-```
-Starts only the personal assistant mode.
-
-### `stop.sh` - Stop the Application
-```bash
-./stop.sh
-```
-Stops all running instances.
-
-### `test.sh` - Run Tests
-```bash
-./test.sh
-```
-Runs internal tests and API health checks.
-
-### `demo.sh` - Interactive Demo
-```bash
-./demo.sh
-```
-Shows an interactive demo of all features.
-
-### `reset_db.sh` - Reset Database
-```bash
-./reset_db.sh
-```
-Resets the database to a clean state.
-
-## 📊 What You Can Test
-
-### 1. User Management
+#### User Management
 - Create, edit, delete users
 - Set notification preferences
 - Configure quiet hours and channels
+- Phone and email settings
 
-### 2. Mock Notifications
-- **Mock Calls**: Test phone call flows
-- **Mock Emails**: Test email generation
-- **RSVP Links**: Test email action buttons
+#### Calendar Integration
+- Google Calendar sync
+- Event management
+- OAuth authentication
+- Calendar webhook handling
 
-### 3. Admin Interface
+#### Notifications
+- Intelligent notification planning
+- Email notifications
+- Voice call notifications
+- RSVP links in emails
+
+#### Admin Interface
 - Dashboard with system overview
 - User management
 - Event management
 - Notification history
 - Audit logs
 
-### 4. API Endpoints
-- RESTful API for all operations
-- Webhook endpoints for external services
-- Testing endpoints for mock functionality
+### API Endpoints
 
-## 🌐 API Endpoints
-
-### Core API
+#### Core API
 - `GET /api/users/` - List users
 - `POST /api/users/` - Create user
 - `GET /api/events/` - List events
 - `GET /api/notifications/` - List notifications
 
-### Testing API
+#### Testing API
 - `GET /testing/status` - Check mock mode status
 - `POST /testing/mock/test-call/{user_id}` - Test mock call
 - `POST /testing/mock/test-email/{user_id}` - Test mock email
-- `GET /testing/mock/calls` - View mock calls
-- `GET /testing/mock/emails` - View mock emails
 
-### Webhooks
-- `POST /twilio/voice/answer` - Twilio call webhook
-- `POST /twilio/voice/gather` - Twilio DTMF webhook
-- `GET /rsvp/{token}` - Email RSVP handler
+## 💡 Examples
 
-## 🔐 Security Features
+### Create User via MCP
 
-- **Encrypted OAuth Tokens**: Secure storage of calendar credentials
-- **HMAC RSVP Tokens**: Secure email action links
-- **Admin Authentication**: Password-based admin access
-- **Webhook Validation**: Signed webhook verification
-
-## 📁 Project Structure
-
-```
-ASSISTANT/
-├── app/                    # Main application code
-│   ├── main.py            # FastAPI application
-│   ├── models.py          # Database models
-│   ├── schemas.py         # Pydantic schemas
-│   ├── routes/            # API routes
-│   ├── llm/               # LLM integration
-│   ├── calendar/          # Calendar integration
-│   ├── telephony/         # Phone call handling
-│   ├── email/             # Email handling
-│   └── templates/         # Admin UI templates
-├── scripts/               # Utility scripts
-├── tests/                 # Test files
-├── prompts/               # LLM prompts
-├── .env                   # Environment configuration
-├── setup.sh              # Setup script
-├── start.sh              # Start script
-├── stop.sh               # Stop script
-└── test.sh               # Test script
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"createUser","arguments":{"name":"Jane Smith","email":"jane@example.com","phone_e164":"+15551234567","channel_pref":"both"}}}' | \
+python3 -m mcp.server --transport stdio
 ```
 
-## 🚀 Production Deployment
+### Plan Notifications via MCP
 
-When ready for production:
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"planNotifications","arguments":{"user_id":"user-123"}}}' | \
+python3 -m mcp.server --transport stdio
+```
 
-1. **Add Real API Keys** to `.env`:
-   ```bash
-   # Real API keys
-   OPENAI_API_KEY=your_real_openai_key
-   TWILIO_ACCOUNT_SID=your_real_twilio_sid
-   TWILIO_AUTH_TOKEN=your_real_twilio_token
-   SENDGRID_API_KEY=your_real_sendgrid_key
-   
-   # Disable mock mode
-   MOCK_MODE=false
-   MOCK_TWILIO=false
-   MOCK_SENDGRID=false
-   ```
+### Check Web App Status
 
-2. **Use PostgreSQL** instead of SQLite:
-   ```bash
-   DATABASE_URL=postgresql://user:pass@localhost/assistant
-   ```
+```bash
+# Via MCP
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"webApplicationStatus","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
 
-3. **Set up HTTPS** and proper domain configuration
+# Or directly
+curl http://localhost:8000/health
+```
 
-4. **Configure OAuth** for Google Calendar integration
+### Check Status Script
 
-## 🆘 Troubleshooting
+```bash
+# Quick status check
+./mcp/scripts/check_webapp.sh
+```
 
-### Application Won't Start
+## 🔧 Troubleshooting
+
+### Web Application Won't Start
+
 ```bash
 # Check if port 8000 is in use
 lsof -i :8000
 
 # Kill existing processes
-./stop.sh
+pkill -f "uvicorn app.main"
 
-# Start fresh
-./start.sh
+# Check logs
+tail -f logs/webapp_stderr.log
+```
+
+### MCP Server Errors
+
+```bash
+# Check if MCP server can start
+python3 -m mcp.server --transport stdio
+
+# Check imports
+python3 -c "from mcp import server; print('OK')"
 ```
 
 ### Database Issues
+
 ```bash
 # Reinitialize database
 rm assistant.db
 python3 scripts/init_db.py
 ```
 
-### Permission Issues
+### Module Not Found
+
 ```bash
-# Make scripts executable
-chmod +x *.sh
+# Ensure you're in the correct directory
+cd /home/uwisiyose/ASSISTANT
+
+# Check PYTHONPATH
+export PYTHONPATH=$PWD:$PYTHONPATH
+
+# Reinstall MCP server
+cd mcp
+pip install -e ".[app-management]"
 ```
 
-### Dependencies Issues
+## 📚 Additional Documentation
+
+### MCP Server Documentation
+- **MCP Quick Start**: `mcp/QUICK_START_BRAIN.md`
+- **MCP as Brain**: `mcp/docs/MCP_AS_BRAIN.md`
+- **Adding Users**: `mcp/docs/ADD_USER_GUIDE.md`
+- **How It Works**: `mcp/docs/HOW_IT_WORKS.md`
+- **Usage Guide**: `mcp/docs/USAGE_GUIDE.md`
+- **Troubleshooting**: `mcp/docs/TROUBLESHOOTING.md`
+- **Installation**: `mcp/docs/INSTALLATION.md`
+
+### Web Application Documentation
+- **Testing Guide**: `TESTING_GUIDE.md`
+- **Architecture**: `ARCHITECTURE.md`
+- **Deployment**: `DEPLOYMENT.md`
+
+## 🎯 Common Workflows
+
+### Workflow 1: Start Everything via MCP
+
 ```bash
-# Reinstall dependencies
-source venv/bin/activate
-pip install -r requirements-app.txt
+# 1. Start web app
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"startWebApplication","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 2. Create user
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"createUser","arguments":{"name":"John","email":"john@example.com"}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 3. Access web UI
+# Open: http://localhost:8000/admin
 ```
 
-## 📚 Additional Resources
+### Workflow 2: Traditional Start
 
-- **Testing Guide**: `TESTING_GUIDE.md` - Detailed testing instructions
-- **API Documentation**: http://localhost:8000/docs - Interactive API docs
-- **Admin Interface**: http://localhost:8000/admin - Web management interface
+```bash
+# 1. Start web app directly
+./start.sh
+
+# 2. Access web UI
+# Open: http://localhost:8000/admin
+
+# 3. Create user via web UI
+```
+
+### Workflow 3: Development Mode
+
+```bash
+# Terminal 1: Web app with auto-reload
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2: MCP server
+python3 -m mcp.server --transport websocket --host localhost --port 8080
+
+# Terminal 3: Test client
+python3 mcp/examples/test_websocket.py
+```
+
+## 🔐 Security Notes
+
+- Default admin credentials: `admin` / `admin123` (change in production!)
+- OAuth tokens are encrypted
+- RSVP tokens use HMAC signing
+- Use HTTPS in production
+
+## 📦 Project Structure
+
+```
+ASSISTANT/
+├── app/                    # Web application code
+│   ├── main.py            # FastAPI app
+│   ├── models.py          # Database models
+│   ├── routes/            # API routes
+│   ├── templates/         # Admin UI
+│   └── ...
+├── mcp/                    # MCP server
+│   ├── server.py          # MCP server main
+│   ├── capabilities/      # MCP tools/resources/prompts
+│   ├── core/              # MCP protocol implementation
+│   ├── docs/              # MCP documentation
+│   └── ...
+├── scripts/               # Utility scripts
+├── logs/                  # Application logs
+├── assistant.db           # SQLite database
+├── start.sh              # Start script
+└── README.md              # Main README
+```
+
+## ✅ Verification
+
+After setup, verify everything works:
+
+```bash
+# 1. Check web app status
+./mcp/scripts/check_webapp.sh
+
+# 2. Test MCP server
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"getDashboardStats","arguments":{}}}' | \
+python3 -m mcp.server --transport stdio
+
+# 3. Test web app health
+curl http://localhost:8000/health
+```
 
 ## 🎉 You're Ready!
 
-Your Personal Assistant is now ready for development and testing. The mock mode allows you to:
+Your Assistant application is now set up with:
+- ✅ Web application with admin UI
+- ✅ MCP server for programmatic control
+- ✅ User and event management
+- ✅ Notification planning
+- ✅ Calendar integration
 
-- ✅ Test all features without external APIs
-- ✅ Develop and iterate quickly
-- ✅ Validate the complete workflow
-- ✅ Prepare for production deployment
+Start with MCP server or web application - both work independently and together!
 
-Start with `./start.sh` and begin building your intelligent personal assistant! 🚀
+## 🆘 Need Help?
+
+- Check troubleshooting section above
+- Review detailed documentation in `mcp/docs/`
+- Check logs in `logs/` directory
+- Review API documentation at http://localhost:8000/docs

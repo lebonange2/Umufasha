@@ -1,0 +1,38 @@
+[Unit]
+Description=Assistant MCP Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=mcp
+Group=mcp
+WorkingDirectory=/opt/assistant
+Environment="MCP_TRANSPORT=stdio"
+Environment="DATABASE_URL=postgresql://postgres:postgres@localhost/assistant"
+Environment="MCP_LOG_LEVEL=INFO"
+Environment="MCP_MAX_CONCURRENT=32"
+Environment="MCP_DEFAULT_TIMEOUT=30.0"
+ExecStart=/usr/bin/python3 -m mcp.server --transport stdio
+Restart=always
+RestartSec=10
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=assistant-mcp
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/assistant
+ReadOnlyPaths=/etc
+
+# Resource limits
+LimitNOFILE=1024
+LimitNPROC=256
+
+[Install]
+WantedBy=multi-user.target
+

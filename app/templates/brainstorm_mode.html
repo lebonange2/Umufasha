@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        body {
+            background: #f5f7fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
         .header {
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
             color: white;
@@ -28,6 +32,363 @@
             padding: 0.5rem 1rem;
             display: inline-block;
         }
+        .project-name {
+            font-weight: 500;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+        }
+        
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        @media (max-width: 992px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Card Styles */
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        /* Recording Card */
+        .recording-card {
+            min-height: 300px;
+        }
+        
+        /* Text Input Card */
+        .text-input-card {
+            min-height: 200px;
+        }
+        
+        .text-input-container {
+            padding: 0.5rem 0;
+        }
+        
+        #textInput {
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        #textInput:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.15);
+            outline: none;
+        }
+        
+        .text-input-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .text-input-actions button {
+            flex: 1;
+            min-width: 120px;
+        }
+        
+        .recording-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+        
+        .btn-record {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-record:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-record.recording {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .recording-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #f5576c;
+            font-weight: 500;
+        }
+        
+        .pulse-dot {
+            width: 12px;
+            height: 12px;
+            background: #f5576c;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s infinite;
+        }
+        
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .audio-visualization {
+            margin-top: 1rem;
+            display: flex;
+            justify-content: center;
+        }
+        
+        #audioCanvas {
+            border-radius: 8px;
+            background: #000;
+        }
+        
+        /* Transcript Card */
+        .transcript-content {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .transcript-placeholder {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #6c757d;
+        }
+        
+        .transcript-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+        
+        .transcript-entry {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .transcript-entry.user {
+            border-left: 3px solid #667eea;
+        }
+        
+        .transcript-entry.assistant {
+            border-left: 3px solid #f5576c;
+        }
+        
+        .project-name {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        
+        .llm-selector select {
+            min-width: 180px;
+            font-size: 0.875rem;
+            border: 2px solid #667eea;
+            background: white;
+            padding: 0.375rem 0.75rem;
+        }
+        
+        .llm-selector select:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .transcript-text {
+            color: #495057;
+            margin-bottom: 0.5rem;
+        }
+        
+        .transcript-time {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        
+        /* Ideas Card */
+        .ideas-content, .actions-content, .assistant-content {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .ideas-placeholder, .actions-placeholder, .assistant-placeholder {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #6c757d;
+        }
+        
+        .ideas-placeholder i, .actions-placeholder i, .assistant-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+        
+        .idea-item {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            transition: all 0.2s;
+        }
+        
+        .idea-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        
+        .idea-item.idea-promoted {
+            border-color: #ffc107;
+            background: #fffbf0;
+        }
+        
+        .idea-content {
+            flex: 1;
+        }
+        
+        .idea-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+        
+        .idea-content p {
+            margin: 0 0 0.5rem 0;
+            color: #2c3e50;
+        }
+        
+        .idea-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        
+        .idea-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        /* Action Items */
+        .action-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .action-item:last-child {
+            border-bottom: none;
+        }
+        
+        /* Assistant Card */
+        .assistant-content {
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .assistant-response-item {
+            background: white;
+            border-left: 3px solid #28a745;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .assistant-response-time {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+        }
+        
+        .assistant-response-context {
+            background: #e7f5ff;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: #495057;
+        }
+        
+        .assistant-response-text {
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+        
+        /* Scrollbar Styling */
+        .transcript-content::-webkit-scrollbar,
+        .ideas-content::-webkit-scrollbar,
+        .actions-content::-webkit-scrollbar,
+        .assistant-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .transcript-content::-webkit-scrollbar-track,
+        .ideas-content::-webkit-scrollbar-track,
+        .actions-content::-webkit-scrollbar-track,
+        .assistant-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .transcript-content::-webkit-scrollbar-thumb,
+        .ideas-content::-webkit-scrollbar-thumb,
+        .actions-content::-webkit-scrollbar-thumb,
+        .assistant-content::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        
+        .transcript-content::-webkit-scrollbar-thumb:hover,
+        .ideas-content::-webkit-scrollbar-thumb:hover,
+        .actions-content::-webkit-scrollbar-thumb:hover,
+        .assistant-content::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
     </style>
 </head>
 <body>
@@ -48,7 +409,18 @@
                         <i class="fas fa-brain"></i> Brainstorming Mode
                     </div>
                     <span class="project-name" id="projectName">Loading...</span>
-                    <button class="btn btn-light btn-sm ms-3" onclick="showExportModal()">
+                    
+                    <!-- LLM Model Selector -->
+                    <div class="llm-selector ms-3">
+                        <select id="llmBackendSelector" class="form-select form-select-sm" onchange="switchLLMBackend()" title="Choose AI Model">
+                            <option value="">Loading models...</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn btn-danger btn-sm ms-3" onclick="clearAllData()" title="Clear all data and start fresh">
+                        <i class="fas fa-trash"></i> Clear All
+                    </button>
+                    <button class="btn btn-light btn-sm ms-2" onclick="showExportModal()">
                         <i class="fas fa-download"></i> Export
                     </button>
                 </div>
@@ -91,15 +463,51 @@
                         </div>
                     </div>
 
+                    <!-- Text Input Card -->
+                    <div class="card text-input-card">
+                        <h2 class="card-title">
+                            <i class="fas fa-keyboard"></i> Text Input
+                        </h2>
+                        <div class="text-input-container">
+                            <textarea 
+                                id="textInput" 
+                                class="form-control" 
+                                rows="3" 
+                                placeholder="Type your idea here and press Enter or click Add..."
+                                onkeypress="handleTextInputKeypress(event)"
+                            ></textarea>
+                            <div class="text-input-actions mt-2">
+                                <button class="btn btn-primary" onclick="submitTextInput(false)" id="addIdeaBtn">
+                                    <i class="fas fa-plus"></i> Add Idea (Fast)
+                                </button>
+                                <button class="btn btn-success" onclick="submitTextInput(true)" id="addWithAIBtn">
+                                    <i class="fas fa-robot"></i> Add with AI
+                                </button>
+                                <button class="btn btn-secondary" onclick="clearTextInput()">
+                                    <i class="fas fa-eraser"></i> Clear
+                                </button>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="autoAICheck">
+                                <label class="form-check-label" for="autoAICheck">
+                                    <small>Always use AI assistant (slower)</small>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Transcript Card -->
                     <div class="card transcript-card">
                         <h2 class="card-title">
                             <i class="fas fa-comments"></i> Live Transcript
+                            <button class="btn btn-sm btn-outline-danger ms-auto" onclick="clearPanel('transcript')" title="Clear transcript">
+                                <i class="fas fa-eraser"></i>
+                            </button>
                         </h2>
                         <div class="transcript-content" id="transcriptContent">
                             <div class="transcript-placeholder">
                                 <i class="fas fa-microphone-slash"></i>
-                                <p>Start recording to see your ideas transcribed here...</p>
+                                <p>Start recording or type your ideas to see them here...</p>
                             </div>
                         </div>
                     </div>
@@ -112,6 +520,12 @@
                         <h2 class="card-title">
                             <i class="fas fa-lightbulb"></i> Ideas
                             <span class="badge bg-primary" id="ideaCount">0</span>
+                            <button class="btn btn-sm btn-success ms-auto me-2" onclick="askAIAboutIdeas()" title="Get AI analysis of recent ideas">
+                                <i class="fas fa-robot"></i> Ask AI
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="clearPanel('ideas')" title="Clear all ideas">
+                                <i class="fas fa-eraser"></i>
+                            </button>
                         </h2>
                         <div class="ideas-content" id="ideasContent">
                             <div class="ideas-placeholder">
@@ -139,6 +553,9 @@
                     <div class="card assistant-card">
                         <h2 class="card-title">
                             <i class="fas fa-robot"></i> AI Assistant
+                            <button class="btn btn-sm btn-outline-danger ms-auto" onclick="clearPanel('assistant')" title="Clear AI responses">
+                                <i class="fas fa-eraser"></i>
+                            </button>
                         </h2>
                         <div class="assistant-content" id="assistantContent">
                             <div class="assistant-placeholder">
@@ -254,28 +671,41 @@
                 return;
             }
             
-            container.innerHTML = ideas.map(idea => `
-                <div class="idea-item" data-id="${idea.id}">
-                    <div class="idea-content">
-                        <p>${idea.text}</p>
-                        <div class="idea-meta">
-                            <span class="idea-source">${idea.source}</span>
-                            <span class="idea-time">${new Date(idea.created_at).toLocaleTimeString()}</span>
+            container.innerHTML = ideas.map(idea => {
+                const tagsHtml = idea.tags && idea.tags.length > 0 
+                    ? `<div class="idea-tags mt-2">${idea.tags.map(tag => `<span class="badge bg-secondary me-1">${tag}</span>`).join('')}</div>`
+                    : '';
+                const promotedBadge = idea.promoted 
+                    ? `<span class="badge bg-warning text-dark ms-2"><i class="fas fa-star"></i> Key Idea</span>`
+                    : '';
+                
+                return `
+                    <div class="idea-item ${idea.promoted ? 'idea-promoted' : ''}" data-id="${idea.id}">
+                        <div class="idea-content">
+                            <p>${idea.text}${promotedBadge}</p>
+                            ${tagsHtml}
+                            <div class="idea-meta">
+                                <span class="idea-source">${idea.source}</span>
+                                <span class="idea-time">${new Date(idea.created_at).toLocaleTimeString()}</span>
+                            </div>
+                        </div>
+                        <div class="idea-actions">
+                            <button class="btn btn-sm btn-success" onclick="analyzeIdea('${idea.id}', '${idea.text.replace(/'/g, "\\'")}')}" title="Get AI analysis">
+                                <i class="fas fa-robot"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="tagIdea('${idea.id}')" title="Add tags">
+                                <i class="fas fa-tag"></i>
+                            </button>
+                            <button class="btn btn-sm ${idea.promoted ? 'btn-warning' : 'btn-outline-warning'}" onclick="promoteIdea('${idea.id}')" title="Mark as key idea">
+                                <i class="fas fa-star"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteIdea('${idea.id}')" title="Delete idea">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="idea-actions">
-                        <button class="btn btn-sm btn-outline-primary" onclick="tagIdea('${idea.id}')">
-                            <i class="fas fa-tag"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-success" onclick="promoteIdea('${idea.id}')">
-                            <i class="fas fa-star"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteIdea('${idea.id}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         // Update actions display
@@ -351,17 +781,37 @@
         // Start recording
         async function startRecording() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: 16000,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
                 
-                mediaRecorder = new MediaRecorder(stream);
+                // Store stream for later processing
+                window.recordingStream = stream;
+                
+                // Use MediaRecorder with explicit MIME type
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+                    ? 'audio/webm;codecs=opus' 
+                    : 'audio/webm';
+                
+                mediaRecorder = new MediaRecorder(stream, { mimeType });
                 audioChunks = [];
                 
+                console.log('Recording started with MIME type:', mimeType);
+                
                 mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
                 };
                 
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioBlob = new Blob(audioChunks, { type: mimeType });
+                    console.log('Recording stopped, blob size:', audioBlob.size);
                     await processAudio(audioBlob);
                 };
                 
@@ -389,6 +839,12 @@
                 mediaRecorder.stop();
                 isRecording = false;
                 
+                // Stop all tracks to release microphone
+                if (window.recordingStream) {
+                    window.recordingStream.getTracks().forEach(track => track.stop());
+                    window.recordingStream = null;
+                }
+                
                 // Update UI
                 document.getElementById('recordBtn').classList.remove('recording');
                 document.getElementById('recordBtnText').textContent = 'Start Recording';
@@ -405,9 +861,26 @@
         // Process audio
         async function processAudio(audioBlob) {
             try {
+                console.log('Processing audio blob...');
+                
+                // Convert to WAV format using Web Audio API
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Decode the audio data
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                console.log('Audio decoded:', audioBuffer.length, 'samples,', audioBuffer.sampleRate, 'Hz');
+                
+                // Convert to 16kHz mono WAV
+                const targetSampleRate = 16000;
+                const wavBlob = await audioBufferToWav(audioBuffer, targetSampleRate);
+                console.log('Converted to WAV:', wavBlob.size, 'bytes');
+                
+                // Convert to base64
                 const reader = new FileReader();
                 reader.onload = async () => {
                     const base64Audio = reader.result.split(',')[1];
+                    console.log('Sending audio to server...');
                     
                     const response = await fetch('/api/brainstorm/transcribe', {
                         method: 'POST',
@@ -421,15 +894,104 @@
                     });
                     
                     const data = await response.json();
+                    console.log('Server response:', data);
+                    
                     if (data.success) {
+                        console.log('Transcription successful:', data.text);
                         await loadSessionData(); // Refresh the display
                     } else {
                         console.error('Transcription failed:', data.error);
+                        alert('Transcription failed: ' + data.error);
                     }
                 };
-                reader.readAsDataURL(audioBlob);
+                reader.readAsDataURL(wavBlob);
             } catch (error) {
                 console.error('Failed to process audio:', error);
+                alert('Failed to process audio: ' + error.message);
+            }
+        }
+        
+        // Convert AudioBuffer to WAV format
+        async function audioBufferToWav(audioBuffer, targetSampleRate) {
+            const channelData = audioBuffer.getChannelData(0); // Get first channel (mono)
+            
+            // Resample if needed
+            let samples;
+            if (audioBuffer.sampleRate !== targetSampleRate) {
+                samples = resampleAudio(channelData, audioBuffer.sampleRate, targetSampleRate);
+            } else {
+                samples = channelData;
+            }
+            
+            // Convert float32 to int16
+            const int16Data = new Int16Array(samples.length);
+            for (let i = 0; i < samples.length; i++) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            
+            // Create WAV file
+            const wavBuffer = createWavFile(int16Data, targetSampleRate);
+            return new Blob([wavBuffer], { type: 'audio/wav' });
+        }
+        
+        // Resample audio to target sample rate
+        function resampleAudio(samples, sourceSampleRate, targetSampleRate) {
+            if (sourceSampleRate === targetSampleRate) {
+                return samples;
+            }
+            
+            const ratio = sourceSampleRate / targetSampleRate;
+            const newLength = Math.round(samples.length / ratio);
+            const result = new Float32Array(newLength);
+            
+            for (let i = 0; i < newLength; i++) {
+                const sourceIndex = i * ratio;
+                const index = Math.floor(sourceIndex);
+                const fraction = sourceIndex - index;
+                
+                if (index + 1 < samples.length) {
+                    result[i] = samples[index] * (1 - fraction) + samples[index + 1] * fraction;
+                } else {
+                    result[i] = samples[index];
+                }
+            }
+            
+            return result;
+        }
+        
+        // Create WAV file from PCM data
+        function createWavFile(samples, sampleRate) {
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+            
+            // WAV header
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true); // fmt chunk size
+            view.setUint16(20, 1, true); // PCM format
+            view.setUint16(22, 1, true); // mono
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true); // byte rate
+            view.setUint16(32, 2, true); // block align
+            view.setUint16(34, 16, true); // bits per sample
+            writeString(view, 36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+            
+            // Write PCM data
+            for (let i = 0; i < samples.length; i++) {
+                view.setInt16(44 + i * 2, samples[i], true);
+            }
+            
+            return buffer;
+        }
+        
+        // Helper function to write string to DataView
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
             }
         }
 
@@ -505,14 +1067,468 @@
             }
         }
 
+        // Tag idea
+        async function tagIdea(ideaId) {
+            const tags = prompt('Enter tags (comma separated):');
+            if (!tags) return;
+            
+            const tagList = tags.split(',').map(t => t.trim()).filter(t => t);
+            
+            try {
+                const response = await fetch('/api/brainstorm/idea/tag', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        idea_id: ideaId,
+                        tags: tagList
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    await loadSessionData(); // Refresh display
+                } else {
+                    console.error('Failed to tag idea:', data.error);
+                }
+            } catch (error) {
+                console.error('Failed to tag idea:', error);
+            }
+        }
+
+        // Promote idea
+        async function promoteIdea(ideaId) {
+            try {
+                const response = await fetch('/api/brainstorm/idea/promote', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        idea_id: ideaId
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    await loadSessionData(); // Refresh display
+                } else {
+                    console.error('Failed to promote idea:', data.error);
+                }
+            } catch (error) {
+                console.error('Failed to promote idea:', error);
+            }
+        }
+
+        // Delete idea
+        async function deleteIdea(ideaId) {
+            if (!confirm('Are you sure you want to delete this idea?')) return;
+            
+            try {
+                const response = await fetch('/api/brainstorm/idea/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        idea_id: ideaId
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    await loadSessionData(); // Refresh display
+                } else {
+                    console.error('Failed to delete idea:', data.error);
+                }
+            } catch (error) {
+                console.error('Failed to delete idea:', error);
+            }
+        }
+
+        // Handle text input keypress (submit on Ctrl+Enter)
+        function handleTextInputKeypress(event) {
+            if (event.ctrlKey && event.key === 'Enter') {
+                event.preventDefault();
+                const autoAI = document.getElementById('autoAICheck').checked;
+                submitTextInput(autoAI);
+            }
+        }
+
+        // Submit text input
+        async function submitTextInput(withAssistant = false) {
+            const textInput = document.getElementById('textInput');
+            const text = textInput.value.trim();
+            
+            if (!text) {
+                alert('Please enter some text');
+                return;
+            }
+            
+            if (!currentSessionId) {
+                alert('No active session');
+                return;
+            }
+            
+            // Check if auto AI is enabled
+            const autoAI = document.getElementById('autoAICheck').checked;
+            const useAI = withAssistant || autoAI;
+            
+            // Disable buttons during submission
+            const addBtn = document.getElementById('addIdeaBtn');
+            const aiBtn = document.getElementById('addWithAIBtn');
+            const originalAddText = addBtn.innerHTML;
+            const originalAIText = aiBtn.innerHTML;
+            
+            try {
+                if (useAI) {
+                    aiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                    aiBtn.disabled = true;
+                    addBtn.disabled = true;
+                } else {
+                    addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+                    addBtn.disabled = true;
+                    aiBtn.disabled = true;
+                }
+                
+                console.log('Submitting text idea:', text, 'with AI:', useAI);
+                
+                const startTime = Date.now();
+                
+                // Send text to backend
+                const response = await fetch('/api/brainstorm/idea/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        text: text,
+                        with_assistant: useAI
+                    })
+                });
+                
+                const data = await response.json();
+                const elapsed = Date.now() - startTime;
+                console.log(`Server response (${elapsed}ms):`, data);
+                
+                if (data.success) {
+                    console.log('Idea added successfully');
+                    textInput.value = ''; // Clear input
+                    
+                    // Show AI response in assistant panel if received
+                    if (data.assistant_response) {
+                        console.log('AI response received');
+                        displayAIResponse(data.assistant_response);
+                    }
+                    
+                    await loadSessionData(); // Refresh display
+                } else {
+                    console.error('Failed to add idea:', data.error);
+                    alert('Failed to add idea: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Failed to submit text:', error);
+                alert('Failed to submit text: ' + error.message);
+            } finally {
+                // Re-enable buttons
+                addBtn.innerHTML = originalAddText;
+                aiBtn.innerHTML = originalAIText;
+                addBtn.disabled = false;
+                aiBtn.disabled = false;
+                textInput.focus();
+            }
+        }
+
+        // Display AI response in assistant panel
+        function displayAIResponse(response, ideaText = null) {
+            const container = document.getElementById('assistantContent');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const ideaContextHtml = ideaText 
+                ? `<div class="assistant-response-context"><strong>About:</strong> "${ideaText}"</div>`
+                : '';
+            
+            const responseHtml = `
+                <div class="assistant-response-item">
+                    <div class="assistant-response-time">${timestamp}</div>
+                    ${ideaContextHtml}
+                    <div class="assistant-response-text">${response.replace(/\n/g, '<br>')}</div>
+                </div>
+            `;
+            
+            // Remove placeholder if it exists
+            const placeholder = container.querySelector('.assistant-placeholder');
+            if (placeholder) {
+                container.innerHTML = '';
+            }
+            
+            // Add response to top
+            container.insertAdjacentHTML('afterbegin', responseHtml);
+            
+            // Scroll to top of assistant panel
+            container.scrollTop = 0;
+        }
+
+        // Analyze specific idea with AI
+        async function analyzeIdea(ideaId, ideaText) {
+            if (!currentSessionId) {
+                alert('No active session');
+                return;
+            }
+            
+            try {
+                console.log('Analyzing idea:', ideaText);
+                
+                // Show loading in AI panel
+                const container = document.getElementById('assistantContent');
+                const placeholder = container.querySelector('.assistant-placeholder');
+                if (placeholder) {
+                    container.innerHTML = '';
+                }
+                
+                container.insertAdjacentHTML('afterbegin', `
+                    <div class="assistant-response-item">
+                        <div class="assistant-response-time">Analyzing...</div>
+                        <div class="assistant-response-text">
+                            <i class="fas fa-spinner fa-spin"></i> Getting AI analysis for: "${ideaText}"
+                        </div>
+                    </div>
+                `);
+                
+                const startTime = Date.now();
+                
+                // Call backend to get AI analysis
+                const response = await fetch('/api/brainstorm/idea/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        idea_id: ideaId,
+                        text: ideaText
+                    })
+                });
+                
+                const data = await response.json();
+                const elapsed = Date.now() - startTime;
+                
+                console.log(`AI analysis completed (${elapsed}ms):`, data);
+                
+                if (data.success && data.assistant_response) {
+                    // Replace loading with actual response
+                    displayAIResponse(data.assistant_response, ideaText);
+                } else {
+                    console.error('Failed to analyze idea:', data.error);
+                    displayAIResponse('Failed to get AI analysis: ' + (data.error || 'Unknown error'), ideaText);
+                }
+                
+                // Refresh session data to get any new ideas/actions from AI
+                await loadSessionData();
+                
+            } catch (error) {
+                console.error('Failed to analyze idea:', error);
+                displayAIResponse('Error: ' + error.message, ideaText);
+            }
+        }
+
+        // Ask AI about recent ideas (batch analysis)
+        async function askAIAboutIdeas() {
+            if (!currentSessionId) {
+                alert('No active session');
+                return;
+            }
+            
+            try {
+                // Get current session data to find recent ideas
+                const sessionResponse = await fetch(`/api/brainstorm/session/data?session_id=${currentSessionId}`);
+                const sessionData = await sessionResponse.json();
+                
+                if (!sessionData.success || !sessionData.ideas || sessionData.ideas.length === 0) {
+                    alert('No ideas to analyze. Add some ideas first!');
+                    return;
+                }
+                
+                // Get the most recent idea (last added)
+                const latestIdea = sessionData.ideas[sessionData.ideas.length - 1];
+                
+                console.log('Asking AI about latest idea:', latestIdea.text);
+                
+                // Analyze the latest idea
+                await analyzeIdea(latestIdea.id, latestIdea.text);
+                
+            } catch (error) {
+                console.error('Failed to ask AI:', error);
+                alert('Failed to get AI analysis: ' + error.message);
+            }
+        }
+
+        // Clear specific panel
+        async function clearPanel(panelType) {
+            if (!confirm(`Clear all ${panelType}?`)) return;
+            
+            const container = document.getElementById(
+                panelType === 'ideas' ? 'ideasContent' :
+                panelType === 'actions' ? 'actionsContent' :
+                panelType === 'transcript' ? 'transcriptContent' :
+                panelType === 'assistant' ? 'assistantContent' : null
+            );
+            
+            if (!container) return;
+            
+            // Show placeholder
+            let placeholderHtml = '';
+            if (panelType === 'ideas') {
+                placeholderHtml = '<div class="ideas-placeholder"><i class="fas fa-lightbulb"></i><p>Your ideas will appear here...</p></div>';
+                document.getElementById('ideaCount').textContent = '0';
+            } else if (panelType === 'actions') {
+                placeholderHtml = '<div class="actions-placeholder"><i class="fas fa-tasks"></i><p>Action items will be generated...</p></div>';
+                document.getElementById('actionCount').textContent = '0';
+            } else if (panelType === 'transcript') {
+                placeholderHtml = '<div class="transcript-placeholder"><i class="fas fa-microphone-slash"></i><p>Start recording or typing...</p></div>';
+            } else if (panelType === 'assistant') {
+                placeholderHtml = '<div class="assistant-placeholder"><i class="fas fa-robot"></i><p>AI responses will appear here...</p></div>';
+            }
+            
+            container.innerHTML = placeholderHtml;
+            console.log(`Cleared ${panelType} panel`);
+        }
+
+        // Clear all data and start fresh
+        async function clearAllData() {
+            if (!confirm('Clear ALL data and start a new session? This cannot be undone.')) return;
+            
+            try {
+                // Create new session
+                const response = await fetch('/api/brainstorm/session/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        project_name: 'new-session-' + Date.now()
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    currentSessionId = data.session_id;
+                    document.getElementById('projectName').textContent = data.project_name;
+                    
+                    // Clear all panels
+                    clearPanel('ideas');
+                    clearPanel('actions');
+                    clearPanel('transcript');
+                    clearPanel('assistant');
+                    
+                    console.log('Started new session:', currentSessionId);
+                    alert('All data cleared! Started fresh session.');
+                } else {
+                    console.error('Failed to create new session:', data.error);
+                    alert('Failed to clear data');
+                }
+            } catch (error) {
+                console.error('Failed to clear data:', error);
+                alert('Failed to clear data: ' + error.message);
+            }
+        }
+
+        // Clear text input
+        function clearTextInput() {
+            document.getElementById('textInput').value = '';
+            document.getElementById('textInput').focus();
+        }
+
         // Show export modal
         function showExportModal() {
             const modal = new bootstrap.Modal(document.getElementById('exportModal'));
             modal.show();
         }
 
+        // Load available LLM backends
+        async function loadLLMBackends() {
+            try {
+                const response = await fetch('/api/llm/backends');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const selector = document.getElementById('llmBackendSelector');
+                    selector.innerHTML = '';
+                    
+                    for (const [name, info] of Object.entries(data.backends)) {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        
+                        let label = name === 'openai' ? '🌐 ChatGPT (OpenAI)' : '🏠 Local (Ollama)';
+                        label += ` - ${info.model}`;
+                        
+                        if (!info.available) {
+                            label += ' (offline)';
+                            option.disabled = true;
+                        }
+                        
+                        option.textContent = label;
+                        option.selected = info.active;
+                        selector.appendChild(option);
+                    }
+                    
+                    console.log('LLM backends loaded:', Object.keys(data.backends));
+                } else {
+                    console.error('Failed to load LLM backends');
+                }
+            } catch (error) {
+                console.error('Error loading LLM backends:', error);
+            }
+        }
+
+        // Switch LLM backend
+        async function switchLLMBackend() {
+            const selector = document.getElementById('llmBackendSelector');
+            const backend_type = selector.value;
+            
+            if (!backend_type) return;
+            
+            try {
+                console.log('Switching to', backend_type);
+                
+                const response = await fetch('/api/llm/switch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ backend_type })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('Switched to', data.current, 'model:', data.model);
+                    
+                    // Show success message
+                    const modelName = backend_type === 'openai' ? 'ChatGPT' : 'Local Ollama';
+                    alert(`✓ Switched to ${modelName}\nModel: ${data.model}`);
+                } else {
+                    console.error('Failed to switch:', data.error);
+                    alert('Failed to switch model: ' + data.error);
+                    // Reload to reset selector
+                    await loadLLMBackends();
+                }
+            } catch (error) {
+                console.error('Error switching LLM:', error);
+                alert('Error switching model: ' + error.message);
+            }
+        }
+
         // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', async () => {
+            await init();
+            await loadLLMBackends();
+        });
     </script>
 </body>
 </html>

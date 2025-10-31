@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user.name }} - User Account - Personal Assistant Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/admin">Admin</a></li>
+                <li class="breadcrumb-item"><a href="/admin/users">Users</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ user.name }}</li>
+            </ol>
+        </nav>
+        <h1><i class="bi bi-person-circle"></i> {{ user.name }}</h1>
+        <p class="text-muted">User Account Details & Activity</p>
+    </div>
+    <div>
+        <a href="/admin/users" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Users
+        </a>
+        <a href="/admin/testing" class="btn btn-primary">
+            <i class="bi bi-bug"></i> Test User
+        </a>
+    </div>
+</div>
+
+<!-- User Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">{{ stats.total_events }}</h4>
+                        <p class="card-text">Total Events</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-calendar-event display-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">{{ stats.successful_notifications }}</h4>
+                        <p class="card-text">Successful Notifications</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-check-circle display-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">{{ stats.total_notifications }}</h4>
+                        <p class="card-text">Total Notifications</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-bell display-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="card-title">{{ (stats.successful_notifications / stats.total_notifications * 100) | round(1) if stats.total_notifications > 0 else 0 }}%</h4>
+                        <p class="card-text">Success Rate</p>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-graph-up display-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- User Details and Activity -->
+<div class="row">
+    <!-- User Information -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person"></i> User Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Name:</strong><br>
+                    <span class="text-muted">{{ user.name }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Email:</strong><br>
+                    <span class="text-muted">{{ user.email }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Phone:</strong><br>
+                    <span class="text-muted">{{ user.phone_e164 or 'Not set' }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Timezone:</strong><br>
+                    <span class="text-muted">{{ user.timezone or 'Not set' }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Channel Preference:</strong><br>
+                    <span class="badge bg-{{ 'primary' if user.channel_preference == 'email' else 'success' if user.channel_preference == 'sms' else 'info' }}">
+                        {{ user.channel_preference or 'Not set' }}
+                    </span>
+                </div>
+                <div class="mb-3">
+                    <strong>Quiet Hours:</strong><br>
+                    <span class="text-muted">
+                        {% if user.quiet_hours_start and user.quiet_hours_end %}
+                            {{ user.quiet_hours_start.strftime('%H:%M') }} - {{ user.quiet_hours_end.strftime('%H:%M') }}
+                        {% else %}
+                            Not set
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="mb-3">
+                    <strong>Created:</strong><br>
+                    <span class="text-muted">{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Last Updated:</strong><br>
+                    <span class="text-muted">{{ user.updated_at.strftime('%Y-%m-%d %H:%M') if user.updated_at else 'Never' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="testUserEmail()">
+                        <i class="bi bi-envelope"></i> Test Email
+                    </button>
+                    <button class="btn btn-success" onclick="testUserCall()">
+                        <i class="bi bi-telephone"></i> Test Call
+                    </button>
+                    <button class="btn btn-info" onclick="testUserSMS()">
+                        <i class="bi bi-chat-dots"></i> Test SMS
+                    </button>
+                    <a href="/admin/users/{{ user.id }}/edit" class="btn btn-warning">
+                        <i class="bi bi-pencil"></i> Edit User
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Tabs -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="activityTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="events-tab" data-bs-toggle="tab" data-bs-target="#events" type="button" role="tab">
+                            <i class="bi bi-calendar-event"></i> Events ({{ events|length }})
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="notifications-tab" data-bs-toggle="tab" data-bs-target="#notifications" type="button" role="tab">
+                            <i class="bi bi-bell"></i> Notifications ({{ notifications|length }})
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" role="tab">
+                            <i class="bi bi-journal-text"></i> Activity Logs ({{ audit_logs|length }})
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content" id="activityTabContent">
+                    <!-- Events Tab -->
+                    <div class="tab-pane fade show active" id="events" role="tabpanel">
+                        {% if events %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Title</th>
+                                            <th>Start Time</th>
+                                            <th>End Time</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for event in events %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ event.title }}</strong>
+                                                {% if event.description %}
+                                                    <br><small class="text-muted">{{ event.description[:50] }}{% if event.description|length > 50 %}...{% endif %}</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ event.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>{{ event.end_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>
+                                                <span class="badge bg-{{ 'success' if event.status == 'confirmed' else 'warning' if event.status == 'pending' else 'danger' }}">
+                                                    {{ event.status }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-calendar-x display-1"></i>
+                                <h4 class="mt-3">No Events</h4>
+                                <p>This user has no events yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Notifications Tab -->
+                    <div class="tab-pane fade" id="notifications" role="tabpanel">
+                        {% if notifications %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Channel</th>
+                                            <th>Status</th>
+                                            <th>Created</th>
+                                            <th>Attempts</th>
+                                            <th>Plan Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for notification in notifications %}
+                                        <tr>
+                                            <td>
+                                                <span class="badge bg-{{ 'primary' if notification.channel == 'email' else 'success' if notification.channel == 'sms' else 'info' }}">
+                                                    {{ notification.channel }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-{{ 'success' if notification.status == 'sent' else 'warning' if notification.status == 'pending' else 'danger' }}">
+                                                    {{ notification.status }}
+                                                </span>
+                                            </td>
+                                            <td>{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                            <td>{{ notification.attempts }}</td>
+                                            <td>{{ notification.plan_time.strftime('%Y-%m-%d %H:%M') if notification.plan_time else 'N/A' }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-bell-slash display-1"></i>
+                                <h4 class="mt-3">No Notifications</h4>
+                                <p>This user has no notifications yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Activity Logs Tab -->
+                    <div class="tab-pane fade" id="logs" role="tabpanel">
+                        {% if audit_logs %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Action</th>
+                                            <th>Timestamp</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for log in audit_logs %}
+                                        <tr>
+                                            <td>
+                                                <span class="badge bg-{{ 'info' if 'test' in log.action else 'success' if 'confirm' in log.action else 'warning' if 'reschedule' in log.action else 'danger' if 'cancel' in log.action else 'secondary' }}">
+                                                    {{ log.action }}
+                                                </span>
+                                            </td>
+                                            <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                            <td>
+                                                {% if log.meta_json %}
+                                                    <small class="text-muted">{{ log.meta_json }}</small>
+                                                {% else %}
+                                                    <span class="text-muted">No details</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-journal-x display-1"></i>
+                                <h4 class="mt-3">No Activity Logs</h4>
+                                <p>This user has no activity logs yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Quick action functions
+async function testUserEmail() {
+    try {
+        const response = await fetch(`/admin/users/{{ user.id }}/test-email`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Email test sent successfully!');
+            location.reload(); // Refresh to show new notification
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function testUserCall() {
+    try {
+        const response = await fetch(`/admin/users/{{ user.id }}/test-call`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Call test initiated successfully!');
+            location.reload(); // Refresh to show new notification
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+async function testUserSMS() {
+    try {
+        const response = await fetch(`/admin/users/{{ user.id }}/test-sms`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('SMS test sent successfully!');
+            location.reload(); // Refresh to show new notification
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+</script>
+{% endblock %}
