@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant - Unified Workspace</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --writer-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --brainstorm-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --coding-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            --personal-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            --admin-gradient: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8f9fa;
+        }
+
+        .hero-section {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 4rem 0;
+            margin-bottom: 3rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .hero-title {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            margin-bottom: 2rem;
+        }
+
+        .feature-card {
+            border: none;
+            border-radius: 20px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            height: 100%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            position: relative;
+            color: white;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .feature-card.writer {
+            background: var(--writer-gradient);
+        }
+
+        .feature-card.brainstorm {
+            background: var(--brainstorm-gradient);
+        }
+
+        .feature-card.coding {
+            background: var(--coding-gradient);
+        }
+
+        .feature-card.personal {
+            background: var(--personal-gradient);
+        }
+
+        .feature-card.admin {
+            background: var(--admin-gradient);
+        }
+
+        .feature-icon {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.9;
+        }
+
+        .feature-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .feature-description {
+            font-size: 1rem;
+            opacity: 0.95;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-link {
+            display: inline-block;
+            padding: 0.75rem 2rem;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .feature-link:hover {
+            background: rgba(255,255,255,0.3);
+            color: white;
+            transform: scale(1.05);
+            border-color: rgba(255,255,255,0.5);
+        }
+
+        .feature-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .badge {
+            padding: 0.4rem 0.8rem;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .stats-section {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 1rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+
+        .quick-links {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .quick-link-item {
+            padding: 1rem;
+            border-bottom: 1px solid #e9ecef;
+            transition: background 0.2s;
+        }
+
+        .quick-link-item:last-child {
+            border-bottom: none;
+        }
+
+        .quick-link-item:hover {
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .quick-link-item a {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .quick-link-item i {
+            font-size: 1.5rem;
+            color: #667eea;
+        }
+
+        footer {
+            background: #2c3e50;
+            color: white;
+            padding: 2rem 0;
+            margin-top: 4rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="text-center">
+                <h1 class="hero-title">🤖 AI Assistant</h1>
+                <p class="hero-subtitle">Your Unified Workspace for Writing, Brainstorming, Coding, and More</p>
+                <div class="mt-4">
+                    <a href="/docs" class="btn btn-light btn-lg me-3">
+                        <i class="bi bi-book"></i> API Documentation
+                    </a>
+                    <a href="/health" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-heart-pulse"></i> System Status
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Features Grid -->
+    <div class="container">
+        <div class="row g-4 mb-5">
+            <!-- Writer Assistant -->
+            <div class="col-lg-4 col-md-6">
+                <div class="feature-card writer">
+                    <div class="card-body p-4">
+                        <div class="text-center">
+                            <i class="bi bi-pencil-square feature-icon"></i>
+                            <h3 class="feature-title">Book Writer</h3>
+                            <p class="feature-description">
+                                AI-powered writing assistant with autocomplete, continue writing, and smart editing features. 
+                                Perfect for authors and content creators.
+                            </p>
+                            <a href="/writer" class="feature-link">
+                                <i class="bi bi-arrow-right-circle"></i> Open Writer
+                            </a>
+                            <div class="feature-badges">
+                                <span class="badge">AI Autocomplete</span>
+                                <span class="badge">Streaming</span>
+                                <span class="badge">Version History</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Brainstorming -->
+            <div class="col-lg-4 col-md-6">
+                <div class="feature-card brainstorm">
+                    <div class="card-body p-4">
+                        <div class="text-center">
+                            <i class="bi bi-lightbulb feature-icon"></i>
+                            <h3 class="feature-title">Brainstorming</h3>
+                            <p class="feature-description">
+                                Voice-driven brainstorming with real-time transcription, AI organization, 
+                                and intelligent idea clustering. Capture and develop your ideas effortlessly.
+                            </p>
+                            <a href="/brainstorm" class="feature-link">
+                                <i class="bi bi-arrow-right-circle"></i> Start Brainstorming
+                            </a>
+                            <div class="feature-badges">
+                                <span class="badge">Voice Input</span>
+                                <span class="badge">AI Organization</span>
+                                <span class="badge">Export</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coding Environment -->
+            <div class="col-lg-4 col-md-6">
+                <div class="feature-card coding">
+                    <div class="card-body p-4">
+                        <div class="text-center">
+                            <i class="bi bi-code-slash feature-icon"></i>
+                            <h3 class="feature-title">Coding Environment</h3>
+                            <p class="feature-description">
+                                AI-powered coding workspace with file operations, code search, 
+                                and task execution. Integrated with MCP for seamless development.
+                            </p>
+                            <a href="/docs" class="feature-link">
+                                <i class="bi bi-arrow-right-circle"></i> View Docs
+                            </a>
+                            <div class="feature-badges">
+                                <span class="badge">File Ops</span>
+                                <span class="badge">Code Search</span>
+                                <span class="badge">MCP</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Personal Assistant -->
+            <div class="col-lg-4 col-md-6">
+                <div class="feature-card personal">
+                    <div class="card-body p-4">
+                        <div class="text-center">
+                            <i class="bi bi-calendar-check feature-icon"></i>
+                            <h3 class="feature-title">Personal Assistant</h3>
+                            <p class="feature-description">
+                                Smart appointment reminders with calendar integration, 
+                                phone calls, and email notifications. Never miss an important event.
+                            </p>
+                            <a href="/admin" class="feature-link">
+                                <i class="bi bi-arrow-right-circle"></i> Open Admin
+                            </a>
+                            <div class="feature-badges">
+                                <span class="badge">Calendar Sync</span>
+                                <span class="badge">Smart Notifications</span>
+                                <span class="badge">Voice Calls</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Panel -->
+            <div class="col-lg-4 col-md-6">
+                <div class="feature-card admin">
+                    <div class="card-body p-4">
+                        <div class="text-center">
+                            <i class="bi bi-gear feature-icon"></i>
+                            <h3 class="feature-title">Admin Panel</h3>
+                            <p class="feature-description">
+                                Comprehensive admin dashboard for managing users, events, 
+                                notifications, and system configuration.
+                            </p>
+                            <a href="/admin" class="feature-link">
+                                <i class="bi bi-arrow-right-circle"></i> Open Admin
+                            </a>
+                            <div class="feature-badges">
+                                <span class="badge">User Management</span>
+                                <span class="badge">Analytics</span>
+                                <span class="badge">Settings</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Documentation -->
+            <div class="col-lg-4 col-md-6">
+                <div class="feature-card" style="background: var(--primary-gradient);">
+                    <div class="card-body p-4">
+                        <div class="text-center">
+                            <i class="bi bi-book feature-icon"></i>
+                            <h3 class="feature-title">API Docs</h3>
+                            <p class="feature-description">
+                                Interactive API documentation with Swagger UI. 
+                                Explore all endpoints, test requests, and integrate with your applications.
+                            </p>
+                            <a href="/docs" class="feature-link">
+                                <i class="bi bi-arrow-right-circle"></i> View API Docs
+                            </a>
+                            <div class="feature-badges">
+                                <span class="badge">Swagger</span>
+                                <span class="badge">Interactive</span>
+                                <span class="badge">REST API</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status Section -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="stats-section">
+                    <h3 class="mb-4 text-center">
+                        <i class="bi bi-activity"></i> System Status
+                    </h3>
+                    <div class="row">
+                        <div class="col-md-3 col-6">
+                            <div class="stat-item">
+                                <div class="stat-number" id="status-indicator">●</div>
+                                <div class="stat-label">System</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="stat-item">
+                                <div class="stat-number">6</div>
+                                <div class="stat-label">Features</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="stat-item">
+                                <div class="stat-number">API</div>
+                                <div class="stat-label">REST + MCP</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="stat-item">
+                                <div class="stat-number">AI</div>
+                                <div class="stat-label">Powered</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Links Section -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="quick-links">
+                    <h3 class="mb-4">
+                        <i class="bi bi-lightning-charge"></i> Quick Links
+                    </h3>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="quick-link-item">
+                                <a href="/writer">
+                                    <i class="bi bi-pencil-square"></i>
+                                    <div>
+                                        <strong>Book Writer</strong>
+                                        <div class="text-muted small">AI-powered writing assistant</div>
+                                    </div>
+                                </a>
+                            </div>
+                            <div class="quick-link-item">
+                                <a href="/brainstorm">
+                                    <i class="bi bi-lightbulb"></i>
+                                    <div>
+                                        <strong>Brainstorming</strong>
+                                        <div class="text-muted small">Voice-driven idea capture</div>
+                                    </div>
+                                </a>
+                            </div>
+                            <div class="quick-link-item">
+                                <a href="/admin">
+                                    <i class="bi bi-gear"></i>
+                                    <div>
+                                        <strong>Admin Panel</strong>
+                                        <div class="text-muted small">System management</div>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="quick-link-item">
+                                <a href="/docs">
+                                    <i class="bi bi-book"></i>
+                                    <div>
+                                        <strong>API Documentation</strong>
+                                        <div class="text-muted small">Interactive API explorer</div>
+                                    </div>
+                                </a>
+                            </div>
+                            <div class="quick-link-item">
+                                <a href="/health">
+                                    <i class="bi bi-heart-pulse"></i>
+                                    <div>
+                                        <strong>System Health</strong>
+                                        <div class="text-muted small">Check system status</div>
+                                    </div>
+                                </a>
+                            </div>
+                            <div class="quick-link-item">
+                                <a href="/api/llm" target="_blank">
+                                    <i class="bi bi-code-slash"></i>
+                                    <div>
+                                        <strong>LLM API</strong>
+                                        <div class="text-muted small">Writer AI endpoint</div>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>AI Assistant</h5>
+                    <p class="text-muted">Unified workspace for all your AI-powered needs.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <h5>Features</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="/writer" class="text-light">Book Writer</a></li>
+                        <li><a href="/brainstorm" class="text-light">Brainstorming</a></li>
+                        <li><a href="/admin" class="text-light">Admin Panel</a></li>
+                        <li><a href="/docs" class="text-light">API Docs</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="bg-light">
+            <div class="text-center text-muted">
+                <p>&copy; 2024 AI Assistant. Built with FastAPI, React, and OpenAI.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Check system health
+        fetch('/health')
+            .then(response => response.json())
+            .then(data => {
+                const indicator = document.getElementById('status-indicator');
+                if (data.status === 'healthy') {
+                    indicator.style.color = '#28a745';
+                    indicator.title = 'System is healthy';
+                } else {
+                    indicator.style.color = '#dc3545';
+                    indicator.title = 'System has issues';
+                }
+            })
+            .catch(error => {
+                const indicator = document.getElementById('status-indicator');
+                indicator.style.color = '#ffc107';
+                indicator.title = 'Unable to check status';
+            });
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,71 @@
+# Cursor-AI Clone Configuration
+# Default configuration file
+
+# LLM Settings
+llm:
+  # Provider: "local" or "openai" (or "chatgpt")
+  provider: "${LLM_PROVIDER:-local}"
+  # For local models
+  model_path: "${LOCAL_LLM_MODEL_PATH:-models/gemma3-4b.gguf}"
+  use_gpu: "${LOCAL_LLM_USE_GPU:-false}"
+  # For OpenAI/ChatGPT
+  model: "${OPENAI_MODEL:-gpt-4o-mini}"
+  base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+  # Common settings
+  context_tokens: "${LOCAL_LLM_CONTEXT_TOKENS:-8192}"
+  max_tokens: "${LOCAL_LLM_MAX_TOKENS:-1024}"
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 40
+
+# Workspace Settings
+workspace:
+  root: "${WORKSPACE_ROOT:-.}"
+  disable_network: "${ASSISTANT_DISABLE_NETWORK:-true}"
+  audit_log: "${ASSISTANT_AUDIT_LOG:-logs/assistant_audit.jsonl}"
+
+# UI Settings
+ui:
+  enable_webpanel: "${ASSISTANT_ENABLE_WEBPANEL:-true}"
+  port: "${ASSISTANT_PORT:-7701}"
+
+# Logging
+logging:
+  level: "${ASSISTANT_LOG_LEVEL:-INFO}"
+
+# Repository Indexing
+indexing:
+  enabled: true
+  ignore_patterns:
+    - "**/.git/**"
+    - "**/__pycache__/**"
+    - "**/node_modules/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/*.pyc"
+    - "**/.pytest_cache/**"
+  chunk_size: 1000
+  chunk_overlap: 200
+
+# Execution Sandbox
+sandbox:
+  timeout: 300  # seconds
+  memory_limit: 512  # MB
+  cpu_limit: 1.0  # CPU cores
+
+# Git Integration
+git:
+  auto_commit: false
+  commit_message_template: "AI: {description}"
+
+# Safety
+safety:
+  require_confirmation: true
+  max_file_size: 10485760  # 10MB
+  allowed_commands:
+    - "python3"
+    - "pytest"
+    - "make"
+    - "npm"
+    - "git"
+

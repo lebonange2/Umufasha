@@ -14,8 +14,10 @@ class Settings(BaseSettings):
     
     # LLM
     OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None  # Claude API key
     LLM_BASE_URL: Optional[str] = None
     LLM_MODEL: str = "gpt-4o"
+    LLM_PROVIDER: str = "openai"  # openai, anthropic, or custom
     
     # Twilio
     TWILIO_ACCOUNT_SID: Optional[str] = None
@@ -65,7 +67,10 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        env_file_encoding = "utf-8"
         case_sensitive = True
+        # Allow reading from environment variables (takes precedence over .env file)
+        # This is the default behavior of pydantic-settings
 
 
 settings = Settings()

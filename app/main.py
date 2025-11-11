@@ -23,8 +23,10 @@ from app.routes import (
     admin,
     webhooks,
     rsvp,
-    testing
+    testing,
+    writer
 )
+from app.routes import writer_documents
 from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
@@ -75,6 +77,11 @@ app.add_middleware(
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+# Mount writer static files (after build)
+writer_static_path = "app/static/writer"
+if os.path.exists(writer_static_path):
+    app.mount("/writer-static", StaticFiles(directory=writer_static_path), name="writer-static")
+
 # Templates
 templates = Jinja2Templates(directory="app/templates")
 
@@ -89,12 +96,43 @@ app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(webhooks.router, prefix="/hooks", tags=["webhooks"])
 app.include_router(rsvp.router, prefix="/rsvp", tags=["rsvp"])
 app.include_router(testing.router, prefix="/testing", tags=["testing"])
+app.include_router(writer.router, tags=["writer"])
+app.include_router(writer_documents.router, tags=["writer-documents"])
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    """Root endpoint - redirect to admin."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    """Root endpoint - unified homepage."""
+    return templates.TemplateResponse("homepage.html", {
+        "request": request,
+        "title": "AI Assistant - Unified Workspace"
+    })
+
+
+@app.get("/writer", response_class=HTMLResponse)
+async def writer_page(request: Request):
+    """Writer page - serve React app."""
+    # Check if built files exist
+    writer_index = os.path.join("app/static/writer", "index.html")
+    if os.path.exists(writer_index):
+        with open(writer_index, "r") as f:
+            return HTMLResponse(content=f.read())
+    else:
+        # Development mode - return a simple page that loads from Vite dev server
+        return HTMLResponse(content="""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Writing Assistant</title>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="http://localhost:5173/src/main.tsx"></script>
+</body>
+</html>
+        """)
 
 
 @app.get("/health")

@@ -46,6 +46,21 @@ from mcp.capabilities.tools.coding_environment import (
     LIST_FILES_TOOL,
     RUN_COMMAND_TOOL
 )
+# Cursor-AI Clone tools
+try:
+    from mcp.plugins.cursor_clone.agent.tools import (
+        CURSOR_PLAN_AND_PATCH_TOOL,
+        CURSOR_APPLY_PATCH_TOOL,
+        CURSOR_ROLLBACK_LAST_TOOL,
+        CURSOR_CHAT_TOOL,
+        CURSOR_RUN_TESTS_TOOL,
+        CURSOR_INDEX_REFRESH_TOOL,
+        CURSOR_SEARCH_CODE_TOOL
+    )
+    CURSOR_TOOLS_AVAILABLE = True
+except ImportError:
+    CURSOR_TOOLS_AVAILABLE = False
+    logger.warning("Cursor-AI Clone tools not available")
 from mcp.capabilities.resources.base import Resource
 from mcp.capabilities.resources.assistant_resources import (
     USER_RESOURCE,
@@ -156,6 +171,19 @@ class MCPServer:
             RUN_COMMAND_TOOL
         ]:
             self.tools[tool.name] = tool
+        
+        # Register Cursor-AI Clone tools if available
+        if CURSOR_TOOLS_AVAILABLE:
+            for tool in [
+                CURSOR_PLAN_AND_PATCH_TOOL,
+                CURSOR_APPLY_PATCH_TOOL,
+                CURSOR_ROLLBACK_LAST_TOOL,
+                CURSOR_CHAT_TOOL,
+                CURSOR_RUN_TESTS_TOOL,
+                CURSOR_INDEX_REFRESH_TOOL,
+                CURSOR_SEARCH_CODE_TOOL
+            ]:
+                self.tools[tool.name] = tool
         
         # Register resources
         for resource in [

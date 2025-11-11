@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cursor-AI Clone Configuration Schema",
+  "type": "object",
+  "properties": {
+    "llm": {
+      "type": "object",
+      "properties": {
+        "model_path": {"type": "string"},
+        "use_gpu": {"type": "boolean"},
+        "context_tokens": {"type": "integer", "minimum": 512, "maximum": 32768},
+        "max_tokens": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+        "top_p": {"type": "number", "minimum": 0, "maximum": 1},
+        "top_k": {"type": "integer", "minimum": 1}
+      },
+      "required": ["model_path"]
+    },
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "root": {"type": "string"},
+        "disable_network": {"type": "boolean"},
+        "audit_log": {"type": "string"}
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "enable_webpanel": {"type": "boolean"},
+        "port": {"type": "integer", "minimum": 1024, "maximum": 65535}
+      }
+    },
+    "logging": {
+      "type": "object",
+      "properties": {
+        "level": {"type": "string", "enum": ["DEBUG", "INFO", "WARNING", "ERROR"]}
+      }
+    },
+    "indexing": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ignore_patterns": {"type": "array", "items": {"type": "string"}},
+        "chunk_size": {"type": "integer"},
+        "chunk_overlap": {"type": "integer"}
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "properties": {
+        "timeout": {"type": "integer"},
+        "memory_limit": {"type": "integer"},
+        "cpu_limit": {"type": "number"}
+      }
+    },
+    "git": {
+      "type": "object",
+      "properties": {
+        "auto_commit": {"type": "boolean"},
+        "commit_message_template": {"type": "string"}
+      }
+    },
+    "safety": {
+      "type": "object",
+      "properties": {
+        "require_confirmation": {"type": "boolean"},
+        "max_file_size": {"type": "integer"},
+        "allowed_commands": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
+

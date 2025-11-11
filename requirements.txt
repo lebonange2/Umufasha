@@ -28,6 +28,10 @@ vosk==0.3.45
 
 # LLM
 openai==1.12.0
+
+# Document Processing
+PyPDF2==3.0.1
+python-docx==1.1.0
 httpx==0.26.0
 
 # Text processing & search

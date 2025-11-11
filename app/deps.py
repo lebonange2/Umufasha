@@ -33,10 +33,22 @@ def get_llm_client() -> LLMClient:
     """Get LLM client."""
     global _llm_client
     if _llm_client is None:
+        # Determine provider and API key
+        provider = settings.LLM_PROVIDER.lower() if hasattr(settings, 'LLM_PROVIDER') else "openai"
+        
+        if provider == "anthropic":
+            api_key = settings.ANTHROPIC_API_KEY
+            # Use Claude model if specified, otherwise default to latest
+            model = settings.LLM_MODEL if settings.LLM_MODEL.startswith("claude") else "claude-3-5-sonnet-20241022"
+        else:
+            api_key = settings.OPENAI_API_KEY
+            model = settings.LLM_MODEL
+        
         _llm_client = LLMClient(
-            api_key=settings.OPENAI_API_KEY,
+            api_key=api_key,
             base_url=settings.LLM_BASE_URL,
-            model=settings.LLM_MODEL
+            model=model,
+            provider=provider
         )
     return _llm_client
 

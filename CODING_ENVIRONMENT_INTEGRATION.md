@@ -110,8 +110,85 @@ Security features are maintained:
 
 ## Next Steps
 
-1. Use coding environment tools via MCP server
-2. Configure `.cws-policy.json` for security
-3. Test all tools to ensure they work correctly
-4. Update any client code to use integrated tools
+1. ✅ Use coding environment tools via MCP server
+2. ✅ Configure `.cws-policy.json` for security
+3. ✅ Test all tools to ensure they work correctly
+4. ✅ Update any client code to use integrated tools
+5. ✅ **Added ChatGPT Support** - Choose between local (gemma3:4b) or ChatGPT (OpenAI)
+
+## ChatGPT Integration ✅
+
+The Cursor-AI Clone plugin now supports **multiple LLM providers**:
+
+### Available Providers
+
+1. **Local (gemma3:4b)** - Default, no API key required
+2. **ChatGPT (OpenAI)** - Requires `OPENAI_API_KEY` environment variable
+
+### Configuration
+
+#### Via Environment Variables
+
+```bash
+# Choose provider
+export LLM_PROVIDER=openai  # or "local" or "chatgpt"
+
+# For OpenAI/ChatGPT
+export OPENAI_API_KEY=your-api-key-here
+export OPENAI_MODEL=gpt-4o-mini  # optional, defaults to gpt-4o-mini
+```
+
+#### Via Config File
+
+Edit `mcp/plugins/cursor_clone/config/default.yaml`:
+
+```yaml
+llm:
+  provider: "openai"  # or "local" or "chatgpt"
+  model: "gpt-4o-mini"
+  base_url: "https://api.openai.com/v1"
+```
+
+### Usage
+
+#### Via CLI
+
+```bash
+# Use local model
+python3 -m mcp.plugins.cursor_clone.ui.cli --chat --provider local
+
+# Use ChatGPT
+python3 -m mcp.plugins.cursor_clone.ui.cli --chat --provider openai
+```
+
+#### Via Web Panel
+
+1. Start web panel: `python3 -m mcp.plugins.cursor_clone.ui.webpanel.app`
+2. Open http://localhost:7701
+3. Use the provider dropdown to switch between "Local (gemma3:4b)" and "ChatGPT (OpenAI)"
+
+#### Via MCP Server
+
+The provider is automatically selected based on `LLM_PROVIDER` environment variable:
+
+```bash
+# Use local model (default)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cursor.chat","arguments":{"messages":[{"role":"user","content":"Hello"}]}}}' | \
+python3 -m mcp.server --transport stdio
+
+# Use ChatGPT (set OPENAI_API_KEY first)
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=your-api-key-here
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cursor.chat","arguments":{"messages":[{"role":"user","content":"Hello"}]}}}' | \
+python3 -m mcp.server --transport stdio
+```
+
+### Features
+
+- ✅ **Provider Selection**: Choose between local and ChatGPT
+- ✅ **Environment Variable Support**: API key via `OPENAI_API_KEY`
+- ✅ **Web UI Integration**: Provider selector in web panel
+- ✅ **CLI Support**: `--provider` flag for CLI
+- ✅ **Automatic Fallback**: Falls back to local if API key not set
+- ✅ **Streaming Support**: Both providers support streaming responses
 

@@ -4,6 +4,7 @@ An intelligent personal assistant that calls or emails you about appointments, p
 
 ## ✨ Features
 
+### Personal Assistant
 - 📅 **Calendar Integration**: Sync with Google Calendar (OAuth)
 - 🤖 **LLM-Powered Policy**: Smart decisions on when/how to notify you
 - 📞 **Phone Calls**: Twilio-powered voice calls with TTS and DTMF
@@ -12,6 +13,20 @@ An intelligent personal assistant that calls or emails you about appointments, p
 - 🛡️ **Security**: Encrypted tokens, HMAC signatures, audit trails
 - 🎛️ **Admin Interface**: Web-based management dashboard
 - 🧪 **Mock Mode**: Test everything without external APIs
+
+### Book Writing Assistant
+- ✍️ **Distraction-free Writing**: Clean editor with title and body
+- 🤖 **AI-Powered Assistance**: Autocomplete, continue writing, expand, summarize, outline, rewrite, Q&A
+- 📄 **Document Context**: Upload PDF, DOCX, TXT files for AI reference
+- 🔄 **Provider Selection**: Switch between OpenAI (ChatGPT) and Anthropic (Claude) in UI
+- 💾 **File Management**: Open/save `.txt` files with autosave and version history
+- ⚡ **Streaming Responses**: Real-time token streaming for AI suggestions
+- ⌨️ **Keyboard Shortcuts**: Full keyboard navigation support
+
+### Brainstorming Assistant
+- 🎤 **Voice-Driven**: Real-time speech-to-text brainstorming
+- 🧠 **AI Organization**: Automatic idea clustering and tagging
+- 📊 **Visual Interface**: Web-based brainstorming workspace
 
 ## 🚀 Quick Start
 
@@ -39,9 +54,21 @@ The application runs in **Mock Mode** by default:
 
 ## 📚 Documentation
 
+### Getting Started
 - **[Quick Start Guide](QUICKSTART.md)** - Get up and running in minutes
-- **[Testing Guide](TESTING_GUIDE.md)** - Comprehensive testing instructions
+- **[How to Run](HOW_TO_RUN.md)** - Detailed setup and running instructions
 - **[API Documentation](http://localhost:8000/docs)** - Interactive API docs
+
+### Writer Assistant
+- **[Writer Assistant Guide](README_writer.md)** - Complete writer documentation
+- **[Document Context Feature](README_writer_documents.md)** - Upload and use documents
+- **[Provider Selection Guide](PROVIDER_SELECTION_GUIDE.md)** - Switch between AI providers
+- **[Claude API Setup](CLAUDE_API_SETUP.md)** - Configure Claude/Anthropic API
+- **[API Key Setup](API_KEY_SETUP.md)** - Environment variable configuration
+
+### Testing & Troubleshooting
+- **[Testing Guide](TESTING_GUIDE.md)** - Comprehensive testing instructions
+- **[Quick Fix: Anthropic](QUICK_FIX_ANTHROPIC.md)** - Troubleshoot Claude API issues
 
 ## 🔧 Helper Scripts
 
@@ -126,7 +153,7 @@ The application runs in **Mock Mode** by default:
 - **Telephony**: Twilio Programmable Voice
 - **Email**: SendGrid
 - **Calendar**: Google Calendar API
-- **LLM**: OpenAI GPT-4 (pluggable)
+- **LLM**: OpenAI GPT-4 / Anthropic Claude (pluggable, runtime selectable)
 - **Frontend**: Jinja2 templates
 - **Security**: Cryptography, HMAC, OAuth 2.0
 
@@ -154,9 +181,22 @@ The application runs in **Mock Mode** by default:
 ## 🚀 Production Deployment
 
 ### 1. Add Real API Keys
+
+**Option A: Environment Variables (Recommended)**
+```bash
+# Set as environment variables
+export OPENAI_API_KEY=your_real_openai_key
+export ANTHROPIC_API_KEY=sk-ant-your_claude_key
+export TWILIO_ACCOUNT_SID=your_real_twilio_sid
+export TWILIO_AUTH_TOKEN=your_real_twilio_token
+export SENDGRID_API_KEY=your_real_sendgrid_key
+```
+
+**Option B: .env File**
 ```bash
 # Edit .env file
 OPENAI_API_KEY=your_real_openai_key
+ANTHROPIC_API_KEY=sk-ant-your_claude_key
 TWILIO_ACCOUNT_SID=your_real_twilio_sid
 TWILIO_AUTH_TOKEN=your_real_twilio_token
 SENDGRID_API_KEY=your_real_sendgrid_key
@@ -166,6 +206,8 @@ MOCK_MODE=false
 MOCK_TWILIO=false
 MOCK_SENDGRID=false
 ```
+
+**Note**: For Writer Assistant, you can switch between OpenAI and Claude in the UI without restarting the server.
 
 ### 2. Use PostgreSQL
 ```bash
@@ -185,11 +227,20 @@ ASSISTANT/
 │   ├── models.py          # Database models
 │   ├── schemas.py         # Pydantic schemas
 │   ├── routes/            # API routes
-│   ├── llm/               # LLM integration
+│   │   ├── writer.py      # Writer API endpoints
+│   │   └── writer_documents.py  # Document upload/processing
+│   ├── llm/               # LLM integration (OpenAI/Claude)
 │   ├── calendar/          # Calendar integration
 │   ├── telephony/         # Phone call handling
 │   ├── email/             # Email handling
-│   └── templates/         # Admin UI templates
+│   ├── templates/         # HTML templates
+│   │   └── homepage.html  # Unified homepage
+│   └── static/            # Static files
+│       └── writer/        # Built writer frontend
+├── writer/                # Writer Assistant frontend
+│   ├── src/               # React/TypeScript source
+│   ├── tests/             # Unit and E2E tests
+│   └── package.json       # Frontend dependencies
 ├── scripts/               # Utility scripts
 ├── tests/                 # Test files
 ├── prompts/               # LLM prompts
@@ -197,9 +248,8 @@ ASSISTANT/
 ├── start.sh              # Start script
 ├── stop.sh               # Stop script
 ├── test.sh               # Test script
-├── QUICKSTART.md         # Quick start guide
-├── TESTING_GUIDE.md      # Testing guide
-└── README.md             # This file
+├── README.md             # This file
+└── [Documentation files] # Various .md guides
 ```
 
 ## 🆘 Troubleshooting
@@ -252,3 +302,31 @@ This project is licensed under the MIT License.
 ---
 
 **Ready to build your intelligent personal assistant?** Start with `./setup.sh` and begin testing! 🚀
+
+**Documentation structure**
+
+Documentation/
+├── Getting Started
+│   ├── README.md (main overview)
+│   ├── QUICKSTART.md
+│   └── HOW_TO_RUN.md
+│
+├── Writer Assistant
+│   ├── README_writer.md (main guide)
+│   ├── README_writer_documents.md (documents)
+│   ├── PROVIDER_SELECTION_GUIDE.md (providers)
+│   └── INTEGRATION_NOTES_WRITER.md
+│
+├── AI Configuration
+│   ├── API_KEY_SETUP.md
+│   ├── CLAUDE_API_SETUP.md
+│   └── QUICK_FIX_ANTHROPIC.md
+│
+├── Reference
+│   ├── DOCUMENTATION_INDEX.md (master index)
+│   ├── CHANGELOG.md
+│   └── ARCHITECTURE.md
+│
+└── Testing & Troubleshooting
+    ├── TESTING_GUIDE.md
+    └── [Various troubleshooting guides]
