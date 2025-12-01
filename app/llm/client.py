@@ -10,7 +10,7 @@ logger = structlog.get_logger(__name__)
 class LLMClient:
     """Generic LLM client that can work with OpenAI, Claude (Anthropic), or other HTTP endpoints."""
     
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: str = "llama3.1", provider: str = "local"):
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: str = "llama3:latest", provider: str = "local"):
         self.api_key = api_key
         self.provider = provider.lower()  # local, openai, anthropic, or custom
         if provider.lower() == "anthropic":
@@ -18,9 +18,11 @@ class LLMClient:
         elif provider.lower() == "local":
             # Ollama uses OpenAI-compatible API at /v1
             self.base_url = base_url or "http://localhost:11434/v1"
+            # Use model name directly (must be valid Ollama model name like llama3:latest)
+            self.model = model
         else:
             self.base_url = base_url or "https://api.openai.com/v1"
-        self.model = model
+            self.model = model
         # Initialize httpx client with proper settings and connection pooling
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=10.0),

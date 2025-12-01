@@ -141,7 +141,7 @@ MOCK_SENDGRID=true
 # LLM Configuration - Local models only (Ollama)
 # No API keys needed - uses local Ollama models
 LLM_PROVIDER=local
-LLM_MODEL=llama3.1
+LLM_MODEL=llama3:latest
 LLM_LOCAL_URL=http://localhost:11434/v1
 
 # Twilio Configuration (not used in mock mode)
@@ -276,15 +276,22 @@ EOF
 chmod +x stop.sh
 print_success "Stop script created"
 
-# Setup Ollama for local AI models (optional but recommended)
+# Setup Ollama for local AI models (required for local LLM)
 print_status "Setting up Ollama for local AI models..."
 if ! command -v ollama &> /dev/null; then
     print_status "Installing Ollama..."
+    print_status "This will download and install Ollama (required for local LLM models)..."
     if curl -fsSL https://ollama.com/install.sh | sh; then
-        print_success "Ollama installed"
+        print_success "Ollama installed successfully"
+        # Add Ollama to PATH if not already there
+        if ! echo "$PATH" | grep -q "/usr/local/bin"; then
+            export PATH="$PATH:/usr/local/bin"
+        fi
     else
-        print_warning "Ollama installation failed. You can install it later with: curl -fsSL https://ollama.com/install.sh | sh"
-        print_warning "The app will work without Ollama, but local AI features won't be available"
+        print_error "Ollama installation failed!"
+        print_error "The app requires Ollama for local LLM models."
+        print_error "Please install manually: curl -fsSL https://ollama.com/install.sh | sh"
+        exit 1
     fi
 else
     print_success "Ollama is already installed"
@@ -307,23 +314,23 @@ if command -v ollama &> /dev/null; then
         print_success "Ollama server is already running"
     fi
     
-    # Check if llama3.1 model is already installed
-    if ollama list 2>/dev/null | grep -q "llama3.1"; then
-        print_success "llama3.1 model is already installed"
+    # Check if llama3:latest model is already installed
+    if ollama list 2>/dev/null | grep -q "llama3:latest"; then
+        print_success "llama3:latest model is already installed"
     else
-        print_status "Downloading llama3.1 model (this may take 5-10 minutes, ~5GB)..."
-        print_warning "You can skip this and download later with: ollama pull llama3.1"
+        print_status "Downloading llama3:latest model (this may take 5-10 minutes, ~5GB)..."
+        print_warning "You can skip this and download later with: ollama pull llama3:latest"
         print_warning "The app will work, but local AI needs the model to be downloaded"
         
         # Try to pull with timeout (10 minutes)
-        if timeout 600 ollama pull llama3.1 2>&1 | tee /tmp/ollama_pull.log; then
-            print_success "llama3.1 model downloaded successfully"
+        if timeout 600 ollama pull llama3:latest 2>&1 | tee /tmp/ollama_pull.log; then
+            print_success "llama3:latest model downloaded successfully"
         else
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
-                print_warning "Model download timed out (10 minutes). Download it later with: ollama pull llama3.1"
+                print_warning "Model download timed out (10 minutes). Download it later with: ollama pull llama3:latest"
             else
-                print_warning "Model download failed. You can try again later with: ollama pull llama3.1"
+                print_warning "Model download failed. You can try again later with: ollama pull llama3:latest"
             fi
             print_warning "The app will still work, but local AI features require the model"
         fi
@@ -370,10 +377,10 @@ echo "5. Run tests: ./test.sh"
 echo "6. Stop application: ./stop.sh"
 echo ""
 echo "🤖 Local AI (Ollama):"
-echo "- Model: llama3.1 (default)"
+echo "- Model: llama3:latest (default)"
 echo "- Status: Check with: ollama list"
-echo "- If model not downloaded: ollama pull llama3.1"
-echo "- Test: ollama run llama3.1 'Hello'"
+echo "- If model not downloaded: ollama pull llama3:latest"
+echo "- Test: ollama run llama3:latest 'Hello'"
 echo ""
 echo "📚 Documentation:"
 echo "- Quick Start Guide: QUICKSTART.md"

@@ -226,11 +226,11 @@ export default function AIToolbox({
                 onChange={(e) => onSettingsChange({ ...settings, model: e.target.value, provider: 'local' })}
                 className="w-full p-1 border rounded text-sm"
               >
-                <option value="llama3.1">Llama 3.1</option>
-                <option value="llama3.2">Llama 3.2</option>
-                <option value="mistral">Mistral</option>
-                <option value="codellama">CodeLlama</option>
-                <option value="phi3">Phi-3</option>
+                <option value="llama3:latest">Llama 3 (Latest)</option>
+                <option value="llama3.2:latest">Llama 3.2 (Latest)</option>
+                <option value="mistral:latest">Mistral (Latest)</option>
+                <option value="codellama:latest">CodeLlama (Latest)</option>
+                <option value="phi3:latest">Phi-3 (Latest)</option>
               </select>
             </div>
 

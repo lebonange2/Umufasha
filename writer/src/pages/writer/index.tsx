@@ -13,7 +13,7 @@ import { structureStorage } from '../../features/structure/storage';
 
 const DEFAULT_SETTINGS: WriterSettings = {
   provider: 'local',
-  model: 'llama3.1',
+  model: 'llama3:latest',
   temperature: 0.7,
   maxTokens: 1000,
   sendFullContext: false,
@@ -27,7 +27,16 @@ const loadSettings = (): WriterSettings => {
     const saved = localStorage.getItem('writerSettings');
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...DEFAULT_SETTINGS, ...parsed };
+      // Always force provider to 'local' and ensure model is a local model
+      const settings = { ...DEFAULT_SETTINGS, ...parsed };
+      settings.provider = 'local';  // Always use local provider
+      // If model is not a local model, use default
+      // Validate model is a local model (Ollama format: name:tag)
+      const validLocalModels = ['llama3:latest', 'llama3.2:latest', 'mistral:latest', 'codellama:latest', 'phi3:latest'];
+      if (!validLocalModels.includes(settings.model)) {
+        settings.model = DEFAULT_SETTINGS.model;
+      }
+      return settings;
     }
   } catch (e) {
     console.error('Failed to load settings:', e);
@@ -231,7 +240,7 @@ export default function WriterPage() {
             document_context: selectedDocuments.length > 0 ? selectedDocuments : undefined,
             text_context: textContext.trim() || undefined,
             mode: 'autocomplete',
-            provider: settings.provider,
+            provider: 'local' as const,  // Always use local provider
             model: settings.model,
             params: {
               temperature: settings.temperature * 0.7, // Lower temp for autocomplete
@@ -314,7 +323,7 @@ export default function WriterPage() {
             document_context: selectedDocuments.length > 0 ? selectedDocuments : undefined,
             text_context: textContext.trim() || undefined,
             mode,
-            provider: settings.provider,
+            provider: 'local' as const,  // Always use local provider
             model: settings.model,
             params: {
               temperature: settings.temperature,

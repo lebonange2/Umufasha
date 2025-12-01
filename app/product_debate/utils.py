@@ -33,7 +33,7 @@ def create_llm_client_for_model(model_name: str) -> Tuple[Optional[str], str]:
     """Create LLM client configuration for a model.
     
     Args:
-        model_name: Model name (e.g., "llama3.1")
+        model_name: Model name (e.g., "llama3:latest")
         
     Returns:
         Tuple of (api_key=None, provider="local")

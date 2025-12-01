@@ -28,8 +28,8 @@ class DebateOrchestrator:
         core_market: str,
         category: str,
         known_products: List[Dict[str, Any]],
-        agent_a_model: str = "llama3.1",
-        agent_b_model: str = "llama3.1"
+        agent_a_model: str = "llama3:latest",
+        agent_b_model: str = "llama3:latest"
     ):
         """Initialize debate orchestrator.
         
