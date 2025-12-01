@@ -127,6 +127,12 @@ cd writer && npm run build
 4. [API_KEY_SETUP.md](API_KEY_SETUP.md) - API keys
 
 ### Writer Assistant
+
+### Structure Feature
+- **[Structure Feature Guide](writer/README_structure.md)** - Complete guide to hierarchical document structure
+- **[Structure Quick Start](writer/QUICKSTART_STRUCTURE.md)** - Get started with structure mode in 5 minutes
+
+## Writer Assistant (Legacy)
 1. [README_writer.md](README_writer.md) - Main guide
 2. [README_writer_documents.md](README_writer_documents.md) - Documents
 3. [PROVIDER_SELECTION_GUIDE.md](PROVIDER_SELECTION_GUIDE.md) - Providers

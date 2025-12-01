@@ -169,3 +169,52 @@ class AuditLog(Base):
         Index("idx_audit_user_action", "user_id", "action"),
         Index("idx_audit_created_at", "created_at"),
     )
+
+
+class Mindmap(Base):
+    """Mind map model."""
+    __tablename__ = "mindmaps"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=False, default="Untitled Mind Map")
+    owner_id = Column(String(36), ForeignKey("users.id"), nullable=True)  # Optional for now
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    nodes = relationship("MindmapNode", back_populates="mindmap", cascade="all, delete-orphan", order_by="MindmapNode.created_at")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_mindmaps_owner", "owner_id"),
+        Index("idx_mindmaps_updated", "updated_at"),
+    )
+
+
+class MindmapNode(Base):
+    """Mind map node model."""
+    __tablename__ = "mindmap_nodes"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    mindmap_id = Column(String(36), ForeignKey("mindmaps.id"), nullable=False)
+    parent_id = Column(String(36), ForeignKey("mindmap_nodes.id"), nullable=True)
+    x = Column(Integer, nullable=False, default=0)
+    y = Column(Integer, nullable=False, default=0)
+    text = Column(Text, nullable=False, default="")
+    color = Column(String(7), nullable=False, default="#ffffff")  # Hex color
+    text_color = Column(String(7), nullable=False, default="#000000")  # Hex color
+    shape = Column(String(20), nullable=False, default="rect")  # rect, pill
+    width = Column(Integer, nullable=True)  # Auto-calculated if None
+    height = Column(Integer, nullable=True)  # Auto-calculated if None
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    mindmap = relationship("Mindmap", back_populates="nodes")
+    parent = relationship("MindmapNode", remote_side=[id], backref="children")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_nodes_mindmap", "mindmap_id"),
+        Index("idx_nodes_parent", "parent_id"),
+    )

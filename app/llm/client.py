@@ -10,15 +10,22 @@ logger = structlog.get_logger(__name__)
 class LLMClient:
     """Generic LLM client that can work with OpenAI, Claude (Anthropic), or other HTTP endpoints."""
     
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: str = "gpt-4o", provider: str = "openai"):
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: str = "llama3.1", provider: str = "local"):
         self.api_key = api_key
-        self.provider = provider.lower()  # openai, anthropic, or custom
+        self.provider = provider.lower()  # local, openai, anthropic, or custom
         if provider.lower() == "anthropic":
             self.base_url = base_url or "https://api.anthropic.com/v1"
+        elif provider.lower() == "local":
+            # Ollama uses OpenAI-compatible API at /v1
+            self.base_url = base_url or "http://localhost:11434/v1"
         else:
             self.base_url = base_url or "https://api.openai.com/v1"
         self.model = model
-        self.client = httpx.AsyncClient(timeout=30.0)
+        # Initialize httpx client with proper settings and connection pooling
+        self.client = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0, connect=10.0),
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        )
     
     async def complete(self, system: str, user: str, tools: Optional[List[Dict[str, Any]]] = None) -> str:
         """Complete a conversation with the LLM.
@@ -46,18 +53,59 @@ class LLMClient:
                 if not self.api_key:
                     raise ValueError("ANTHROPIC_API_KEY is required but not set")
                 
+                # Validate API key format
+                if not self.api_key.startswith("sk-ant-"):
+                    logger.warning("ANTHROPIC_API_KEY doesn't start with 'sk-ant-', may be invalid")
+                    # Still try the request, as some keys might have different formats
+                
                 headers = {
                     "Content-Type": "application/json",
                     "x-api-key": self.api_key,
                     "anthropic-version": "2023-06-01"
                 }
                 
-                response = await self.client.post(
-                    f"{self.base_url}/messages",
-                    json=payload,
-                    headers=headers
-                )
-                response.raise_for_status()
+                # Log the request for debugging (without sensitive data)
+                logger.debug("Making Anthropic API request", 
+                           url=f"{self.base_url}/messages",
+                           model=self.model,
+                           has_api_key=bool(self.api_key))
+                
+                # Make request with retry logic for first attempt
+                max_retries = 2
+                last_error = None
+                for attempt in range(max_retries):
+                    try:
+                        response = await self.client.post(
+                            f"{self.base_url}/messages",
+                            json=payload,
+                            headers=headers
+                        )
+                        response.raise_for_status()
+                        break  # Success, exit retry loop
+                    except httpx.HTTPStatusError as e:
+                        last_error = e
+                        if e.response.status_code == 404:
+                            # 404 might be a transient issue or wrong endpoint
+                            logger.warning(f"Anthropic API 404 error on attempt {attempt + 1}", 
+                                         status_code=e.response.status_code,
+                                         response_text=e.response.text[:200] if e.response.text else None)
+                            if attempt < max_retries - 1:
+                                # Wait a bit before retry
+                                import asyncio
+                                await asyncio.sleep(0.5 * (attempt + 1))
+                                continue
+                        raise  # Re-raise if not 404 or last attempt
+                    except httpx.RequestError as e:
+                        last_error = e
+                        logger.warning(f"Anthropic API request error on attempt {attempt + 1}", error=str(e))
+                        if attempt < max_retries - 1:
+                            import asyncio
+                            await asyncio.sleep(0.5 * (attempt + 1))
+                            continue
+                        raise
+                
+                if last_error:
+                    raise last_error
                 
                 result = response.json()
                 # Claude returns content in a different format
@@ -106,6 +154,26 @@ class LLMClient:
                 logger.info("LLM completion successful", model=self.model, tokens=result.get("usage", {}).get("total_tokens"))
                 return content
             
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Client error '{e.response.status_code} {e.response.reason_phrase}' for url '{e.request.url}'"
+            if e.response.text:
+                try:
+                    error_data = e.response.json()
+                    if "error" in error_data:
+                        error_msg += f"\n{error_data['error'].get('message', '')}"
+                except:
+                    error_msg += f"\n{e.response.text[:500]}"
+            error_msg += f"\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/{e.response.status_code}"
+            logger.error("LLM HTTP error", 
+                        status_code=e.response.status_code,
+                        url=str(e.request.url),
+                        provider=self.provider,
+                        model=self.model)
+            raise Exception(error_msg) from e
+        except httpx.RequestError as e:
+            error_msg = f"Request error: {str(e)}"
+            logger.error("LLM request error", error=str(e), provider=self.provider, model=self.model)
+            raise Exception(error_msg) from e
         except Exception as e:
             logger.error("LLM completion failed", error=str(e), model=self.model, provider=self.provider)
             raise

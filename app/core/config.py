@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None  # Claude API key
     LLM_BASE_URL: Optional[str] = None
-    LLM_MODEL: str = "gpt-4o"
-    LLM_PROVIDER: str = "openai"  # openai, anthropic, or custom
+    LLM_MODEL: str = "llama3.1"  # Default to local model
+    LLM_PROVIDER: str = "local"  # local, openai, anthropic, or custom
+    LLM_LOCAL_URL: str = "http://localhost:11434"  # Ollama default URL
     
     # Twilio
     TWILIO_ACCOUNT_SID: Optional[str] = None

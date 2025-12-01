@@ -11,7 +11,7 @@ When asked to continue, maintain tense, POV, and style of the last 50 tokens.`;
     continue: 'Continue this draft for ~150–250 words, matching tone and POV. Avoid repeating the last lines. Introduce 1 new concrete detail.',
     expand: 'Expand the selection to the target word count, preserving meaning and style.',
     summarize: 'Provide a brief, accurate summary of the selection.',
-    outline: 'Produce a hierarchical outline (Chapters > Sections > Beats) from the draft. Return JSON with: title, chapters[{title, summary, sections[{title, beats[]}] }].',
+    outline: 'Produce a hierarchical outline (Chapters > Sections > Beats) from the draft. Return ONLY valid JSON, no markdown, no explanations, no code blocks. Format: {"title": "Document Title", "chapters": [{"title": "Chapter Title", "summary": "Optional summary", "sections": [{"title": "Section Title", "beats": ["beat 1", "beat 2"]}]}]}.',
     rewrite: 'Rewrite the selection in the requested tone. Keep facts. Return text only.',
     qa: 'Answer questions about the selection concisely and accurately.',
   };
@@ -46,7 +46,29 @@ export function buildUserPrompt(
       return `Summarize this section:\n\n${context || ''}`;
 
     case 'outline':
-      return `Draft:\n${context || prompt}\n\nGenerate an outline:`;
+      return `Draft:\n${context || prompt}\n\nGenerate an outline. Return ONLY valid JSON in this exact format (no markdown, no code blocks, no explanations, no extra text before or after):
+
+{
+  "title": "Document Title",
+  "chapters": [
+    {
+      "title": "Chapter Title",
+      "summary": "Optional chapter summary",
+      "sections": [
+        {
+          "title": "Section Title",
+          "beats": ["First beat", "Second beat", "Third beat"]
+        }
+      ]
+    }
+  ]
+}
+
+IMPORTANT: 
+- Return ONLY the JSON object, nothing else
+- Ensure all strings in arrays have commas between them (e.g., ["beat1", "beat2", "beat3"])
+- Ensure all closing brackets and braces are present
+- Do not add any text, explanations, or markdown formatting around the JSON`;
 
     case 'rewrite':
       const tone = params?.tone || 'plain';

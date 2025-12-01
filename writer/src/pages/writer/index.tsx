@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import WriterEditor from '../../features/writer/WriterEditor';
 import AIToolbox from '../../features/writer/AIToolbox';
 import DocumentManager from '../../features/writer/DocumentManager';
+import StructureView from '../../features/structure/StructureView';
 import { LLMAdapter } from '../../lib/llmAdapter';
 import { storage } from '../../lib/storage';
 import { fileIO } from '../../lib/fileIO';
 import { buildSystemPrompt, buildUserPrompt, getRecentContext } from '../../features/writer/promptBuilders';
 import { WriterMode, WriterSettings, Version } from '../../lib/types';
+import { structureStorage } from '../../features/structure/storage';
 
 const DEFAULT_SETTINGS: WriterSettings = {
   provider: 'openai',
@@ -42,6 +45,8 @@ const saveSettings = (settings: WriterSettings) => {
 };
 
 export default function WriterPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [draftId, setDraftId] = useState<string>('');
   const [title, setTitle] = useState('Untitled');
   const [content, setContent] = useState('');
@@ -65,16 +70,94 @@ export default function WriterPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [textContext, setTextContext] = useState('');
   const [showDocumentManager, setShowDocumentManager] = useState(false);
+  const [structureMode, setStructureMode] = useState(
+    location.state?.structureMode || false
+  );
+  
+  // Check if we should enable structure mode from location state
+  useEffect(() => {
+    console.log('Location state changed:', location.state);
+    
+    // Handle content from preview approval
+    if (location.state?.content && !location.state?.structureMode) {
+      console.log('Content provided from preview approval');
+      setContent(location.state.content);
+      if (location.state.title) {
+        setTitle(location.state.title);
+      }
+      // Clear the state to prevent re-applying on re-render
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    
+    // Handle structure mode toggle
+    if (location.state?.structureMode !== undefined) {
+      setStructureMode(location.state.structureMode);
+      
+      if (location.state.structureMode) {
+        // Try to get saved structure draft ID, or use provided one, or create new
+        const savedStructureDraft = localStorage.getItem('writer_current_structure_draft');
+        const draftId = location.state.draftId || savedStructureDraft || `draft_${Date.now()}`;
+        console.log('Enabling structure mode with draftId:', draftId);
+        setDraftId(draftId);
+        localStorage.setItem('writer_current_structure_draft', draftId);
+        
+        // If documentState is passed directly, save it immediately
+        if (location.state?.documentState) {
+          console.log('Document state provided in navigation, saving...');
+          structureStorage.init().then(async () => {
+            await structureStorage.saveStructuredDraft(draftId, location.state.documentState);
+            console.log('Document state saved');
+          }).catch((err: any) => {
+            console.warn('Failed to save document state:', err);
+            // Fallback to localStorage
+            try {
+              localStorage.setItem(`writer_structure_${draftId}`, JSON.stringify({ 
+                id: draftId, 
+                state: location.state.documentState, 
+                updatedAt: Date.now() 
+              }));
+            } catch (e) {
+              console.error('Failed to save to localStorage:', e);
+            }
+          });
+        }
+      } else {
+        // When disabling structure mode, save current writer content
+        if (draftId && (title || content)) {
+          storage.saveDraft(draftId, title, content).then(() => {
+            localStorage.setItem('writer_current_draft', draftId);
+            console.log('Writer content saved when exiting structure mode');
+          }).catch(err => {
+            console.error('Failed to save writer content:', err);
+          });
+        }
+      }
+    }
+  }, [location]);
 
   const llmAdapter = useRef(new LLMAdapter());
   const autocompleteTimeoutRef = useRef<number | null>(null);
 
-  // Initialize storage
+  // Initialize storage and load saved content
   useEffect(() => {
-    storage.init().then(() => {
-      // Create or load draft
+    storage.init().then(async () => {
+      // Try to load last draft ID from localStorage
+      const lastDraftId = localStorage.getItem('writer_current_draft');
+      if (lastDraftId) {
+        const saved = await storage.getDraft(lastDraftId);
+        if (saved) {
+          setDraftId(lastDraftId);
+          setTitle(saved.title);
+          setContent(saved.content);
+          console.log('Loaded saved draft:', lastDraftId);
+          return;
+        }
+      }
+      
+      // Create new draft if no saved one found
       const newDraftId = `draft_${Date.now()}`;
       setDraftId(newDraftId);
+      localStorage.setItem('writer_current_draft', newDraftId);
     });
   }, []);
 
@@ -84,6 +167,49 @@ export default function WriterPage() {
       storage.getVersions(draftId).then(setVersions);
     }
   }, [draftId]);
+
+  // Autosave content and title
+  useEffect(() => {
+    if (draftId && (title || content)) {
+      const saveTimeout = setTimeout(async () => {
+        try {
+          await storage.saveDraft(draftId, title, content);
+          localStorage.setItem('writer_current_draft', draftId);
+          console.log('Content autosaved:', draftId);
+        } catch (error) {
+          console.error('Failed to autosave:', error);
+        }
+      }, 2000); // Save after 2 seconds of inactivity
+
+      return () => clearTimeout(saveTimeout);
+    }
+  }, [draftId, title, content]);
+
+  // Save immediately before page unload
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (draftId && (title || content)) {
+        try {
+          await storage.saveDraft(draftId, title, content);
+          localStorage.setItem('writer_current_draft', draftId);
+          // Also save to localStorage as backup
+          localStorage.setItem(`writer_draft_${draftId}`, JSON.stringify({ 
+            id: draftId, 
+            title, 
+            content, 
+            updatedAt: Date.now() 
+          }));
+        } catch (error) {
+          console.error('Failed to save on unload:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [draftId, title, content]);
 
   // Autocomplete on pause
   useEffect(() => {
@@ -138,6 +264,31 @@ export default function WriterPage() {
   const handleAIAction = useCallback(
     async (mode: WriterMode, params?: Record<string, any>) => {
       if (isStreaming) return;
+
+      // For outline mode, navigate to preview page immediately with context
+      if (mode === 'outline') {
+        // Save current content and settings for outline generation
+        const context = settings.sendFullContext
+          ? content
+          : getRecentContext(content, cursorPos, 3000);
+        
+        localStorage.setItem('outline_generation_context', JSON.stringify({
+          content: context,
+          fullContent: content,
+          settings,
+          selectedDocuments,
+          textContext,
+        }));
+        
+        // Navigate to outline preview page
+        navigate('/outline-preview', { 
+          state: { 
+            generateOutline: true,
+            context,
+          } 
+        });
+        return;
+      }
 
       setIsStreaming(true);
       setStreamingText('');
@@ -274,6 +425,27 @@ export default function WriterPage() {
     await fileIO.saveFile(name.endsWith('.txt') ? name : `${name}.txt`, content);
   }, [title, content]);
 
+  // Show structure view if enabled
+  if (structureMode) {
+    // Get the saved structure draft ID to ensure consistency
+    const savedStructureDraft = localStorage.getItem('writer_current_structure_draft');
+    const structureDraftId = draftId || savedStructureDraft || `draft_${Date.now()}`;
+    
+    // Ensure it's saved
+    if (structureDraftId && structureDraftId !== savedStructureDraft) {
+      localStorage.setItem('writer_current_structure_draft', structureDraftId);
+    }
+    
+    return (
+      <StructureView
+        draftId={structureDraftId}
+        monospace={monospace}
+        focusMode={focusMode}
+        initialState={location.state?.documentState}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen bg-white">
       {/* Main Editor */}
@@ -318,6 +490,29 @@ export default function WriterPage() {
               aria-label="Focus mode"
             >
               Focus
+            </button>
+            <button
+              onClick={() => setStructureMode(!structureMode)}
+              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+              aria-label="Structure mode"
+            >
+              {structureMode ? 'Simple' : 'Structure'}
+            </button>
+            <button
+              onClick={() => {
+                // Test outline preview - check if there's a pending outline
+                const pendingOutline = localStorage.getItem('pending_outline');
+                if (pendingOutline) {
+                  navigate('/outline-preview');
+                } else {
+                  alert('No outline found. Generate an outline first using the AI "Outline" feature, or paste outline JSON into localStorage with key "pending_outline"');
+                }
+              }}
+              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+              aria-label="Preview outline"
+              title="Preview outline (if available)"
+            >
+              Preview Outline
             </button>
           </div>
         </div>

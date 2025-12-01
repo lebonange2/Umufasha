@@ -16,17 +16,31 @@ An intelligent personal assistant that calls or emails you about appointments, p
 
 ### Book Writing Assistant
 - ✍️ **Distraction-free Writing**: Clean editor with title and body
+- 📚 **Structure Mode**: LaTeX-like hierarchical document organization (Parts → Chapters → Sections → Subsections → Paragraphs)
+- 🎯 **AI Outline Generation**: Generate structured outlines from freeform text with preview and approval workflow
+- 👁️ **Document Preview**: Preview full document with approve button to send to writer
 - 🤖 **AI-Powered Assistance**: Autocomplete, continue writing, expand, summarize, outline, rewrite, Q&A
 - 📄 **Document Context**: Upload PDF, DOCX, TXT files for AI reference
 - 🔄 **Provider Selection**: Switch between OpenAI (ChatGPT) and Anthropic (Claude) in UI
 - 💾 **File Management**: Open/save `.txt` files with autosave and version history
+- 💾 **Full Persistence**: All data persists across navigation, page reloads, and browser sessions
 - ⚡ **Streaming Responses**: Real-time token streaming for AI suggestions
 - ⌨️ **Keyboard Shortcuts**: Full keyboard navigation support
+- 🔗 **Cross-References**: Label nodes and insert dynamic cross-references
+- 📑 **Table of Contents**: Auto-generated TOC with live preview
+- 📤 **Multiple Export Formats**: JSON, Markdown, Plain Text, LaTeX
 
 ### Brainstorming Assistant
 - 🎤 **Voice-Driven**: Real-time speech-to-text brainstorming
 - 🧠 **AI Organization**: Automatic idea clustering and tagging
 - 📊 **Visual Interface**: Web-based brainstorming workspace
+
+### Product Debate System (1-Sigma Novelty Explorer)
+- 🤖 **Two Autonomous Agents**: Opportunity Seeker (OpenAI) and Skeptical Builder (Anthropic) debate to find feasible products
+- 📊 **Novelty Scoring**: Measures product novelty within 1-sigma of known products
+- ✅ **Feasibility Analysis**: Comprehensive checks for BOM, manufacturing, compliance, and unit economics
+- 📤 **Export Functionality**: Generates taxonomy, one-pager, BOM CSV, and debate logs
+- 🎯 **Structured Debate**: Multi-round protocol with convergence and Go Threshold checks
 
 ## 🚀 Quick Start
 
@@ -57,14 +71,19 @@ The application runs in **Mock Mode** by default:
 ### Getting Started
 - **[Quick Start Guide](QUICKSTART.md)** - Get up and running in minutes
 - **[How to Run](HOW_TO_RUN.md)** - Detailed setup and running instructions
+- **[RunPod GPU Setup](RUNPOD_GPU_SETUP.md)** - Run in browser with GPU acceleration
 - **[API Documentation](http://localhost:8000/docs)** - Interactive API docs
 
 ### Writer Assistant
 - **[Writer Assistant Guide](README_writer.md)** - Complete writer documentation
+- **[Structure Feature Guide](writer/README_structure.md)** - Hierarchical document structure with LaTeX-like organization
 - **[Document Context Feature](README_writer_documents.md)** - Upload and use documents
 - **[Provider Selection Guide](PROVIDER_SELECTION_GUIDE.md)** - Switch between AI providers
 - **[Claude API Setup](CLAUDE_API_SETUP.md)** - Configure Claude/Anthropic API
 - **[API Key Setup](API_KEY_SETUP.md)** - Environment variable configuration
+
+### Product Debate System
+- **[Product Debate Guide](PRODUCT_DEBATE_README.md)** - Complete guide to the 1-Sigma Novelty Explorer
 
 ### Testing & Troubleshooting
 - **[Testing Guide](TESTING_GUIDE.md)** - Comprehensive testing instructions

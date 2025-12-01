@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1-Sigma Novelty Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+        .sidebar {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            height: fit-content;
+        }
+        .main-content {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+            font-size: 13px;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #loadSessionBtn, #exportBtn {
+            width: auto;
+            flex: 1;
+            margin-top: 0;
+            padding: 8px 15px;
+            font-size: 13px;
+        }
+        #loadSessionBtn:hover {
+            background: #218838;
+        }
+        #exportBtn:hover {
+            background: #138496;
+        }
+        .debate-chat {
+            flex: 1;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .chat-message {
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s ease-out;
+            max-width: 85%;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .chat-message.agent-a {
+            border-left: 4px solid #007bff;
+            margin-left: 0;
+            margin-right: auto;
+            background: #e7f3ff;
+        }
+        .chat-message.agent-b {
+            border-left: 4px solid #28a745;
+            margin-left: auto;
+            margin-right: 0;
+            background: #e8f5e9;
+        }
+        .chat-message.system {
+            border-left: 4px solid #ffc107;
+            background: #fff9e6;
+            margin-left: auto;
+            margin-right: auto;
+            max-width: 70%;
+            text-align: center;
+        }
+        .chat-message.streaming {
+            opacity: 0.7;
+        }
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .agent-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .agent-a .agent-name {
+            color: #007bff;
+        }
+        .agent-b .agent-name {
+            color: #28a745;
+        }
+        .round-number {
+            font-size: 12px;
+            color: #666;
+            background: #f0f0f0;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .message-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .proposals-list {
+            margin-top: 10px;
+        }
+        .proposal-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 4px;
+            border-left: 3px solid #007bff;
+        }
+        .proposal-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .proposal-scores {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status-badge.in-progress {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .status-badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-badge.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .file-upload {
+            margin-top: 10px;
+        }
+        .file-upload input[type="file"] {
+            padding: 5px;
+        }
+        .final-concept {
+            background: #e7f3ff;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .final-concept h3 {
+            color: #007bff;
+            margin-bottom: 15px;
+        }
+        .concept-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .concept-detail-item {
+            font-size: 13px;
+        }
+        .concept-detail-item strong {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h1>1-Sigma Novelty Explorer</h1>
+            <p class="subtitle">AI agents debate to find feasible products</p>
+            
+            <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h3 style="margin-top: 0; font-size: 16px;">Session Management</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" id="loadSessionBtn" style="background: #28a745; flex: 1; min-width: 100px;">
+                        📂 Load Session
+                    </button>
+                    <button type="button" id="exportBtn" style="background: #17a2b8; flex: 1; min-width: 100px;">
+                        💾 Export
+                    </button>
+                </div>
+                <div id="sessionInfo" style="margin-top: 10px; font-size: 12px; color: #666; display: none;">
+                    <div>Session: <span id="currentSessionDisplay">-</span></div>
+                </div>
+            </div>
+            
+            <form id="debateForm">
+                <div class="form-group">
+                    <label for="agentAModel">Agent A (Opportunity Seeker) - Model</label>
+                    <select id="agentAModel" name="agentAModel">
+                        <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</option>
+                        <option value="gpt-4">GPT-4 (OpenAI)</option>
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo (OpenAI)</option>
+                        <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet (Anthropic)</option>
+                        <option value="claude-3-opus-20240229">Claude 3 Opus (Anthropic)</option>
+                        <option value="claude-3-sonnet-20240229">Claude 3 Sonnet (Anthropic)</option>
+                        <option value="claude-3-haiku-20240307">Claude 3 Haiku (Anthropic)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="agentBModel">Agent B (Skeptical Builder) - Model</label>
+                    <select id="agentBModel" name="agentBModel">
+                        <option value="claude-3-haiku-20240307">Claude 3 Haiku (Anthropic)</option>
+                        <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet (Anthropic)</option>
+                        <option value="claude-3-opus-20240229">Claude 3 Opus (Anthropic)</option>
+                        <option value="claude-3-sonnet-20240229">Claude 3 Sonnet (Anthropic)</option>
+                        <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo (OpenAI)</option>
+                        <option value="gpt-4">GPT-4 (OpenAI)</option>
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo (OpenAI)</option>
+                    </select>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="seed">Seed</label>
+                        <input type="number" id="seed" name="seed" value="42" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="temperature">Temperature</label>
+                        <input type="number" id="temperature" name="temperature" value="0.7" min="0" max="2" step="0.1">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="maxRounds">Max Rounds</label>
+                    <input type="number" id="maxRounds" name="maxRounds" value="6" min="1" max="20">
+                </div>
+                
+                <div class="form-group">
+                    <label for="coreMarket">Core Market</label>
+                    <input type="text" id="coreMarket" name="coreMarket" placeholder="Consumer Electronics">
+                </div>
+                
+                <div class="form-group">
+                    <label for="category">Category</label>
+                    <input type="text" id="category" name="category" placeholder="Portable Power">
+                </div>
+                
+                <div class="form-group">
+                    <label>CSV File (optional)</label>
+                    <div class="file-upload">
+                        <input type="file" id="csvFile" name="csvFile" accept=".csv">
+                    </div>
+                </div>
+                
+                <button type="submit" id="startBtn">Start Debate</button>
+                <button type="button" id="stopBtn" style="background: #dc3545; display: none;">Stop Debate</button>
+            </form>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px; font-size: 12px;">Running debate...</p>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2>Debate Chat</h2>
+                <span id="statusBadge" class="status-badge" style="display: none;"></span>
+            </div>
+            
+            <div class="debate-chat" id="debateChat">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <p>Start a debate session to see the conversation</p>
+                </div>
+            </div>
+            
+            <div id="finalConcept" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <script>
+        let currentSessionId = null;
+        let pollInterval = null;
+        let debateRounds = [];
+        
+        const form = document.getElementById('debateForm');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const loading = document.getElementById('loading');
+        const debateChat = document.getElementById('debateChat');
+        const statusBadge = document.getElementById('statusBadge');
+        const finalConcept = document.getElementById('finalConcept');
+        
+        // Session management
+        const loadSessionBtn = document.getElementById('loadSessionBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const sessionInfo = document.getElementById('sessionInfo');
+        const currentSessionDisplay = document.getElementById('currentSessionDisplay');
+        
+        async function loadSessionList() {
+            try {
+                const response = await fetch('/api/product-debate/sessions');
+                const data = await response.json();
+                return data.sessions || [];
+            } catch (error) {
+                console.error('Failed to load sessions:', error);
+                return [];
+            }
+        }
+        
+        loadSessionBtn.addEventListener('click', async () => {
+            const sessions = await loadSessionList();
+            if (sessions.length === 0) {
+                alert('No saved sessions found.');
+                return;
+            }
+            
+            // Create selection dialog
+            const sessionList = sessions.map(s => 
+                `${s.session_id.substring(0, 8)}... | ${s.core_market} | ${s.rounds_completed} rounds | ${new Date(s.created_at).toLocaleDateString()}`
+            ).join('\n');
+            
+            const selected = prompt(`Select a session (enter number 1-${sessions.length}):\n\n${sessions.map((s, i) => `${i + 1}. ${s.session_id.substring(0, 8)}... | ${s.core_market} | ${s.rounds_completed} rounds`).join('\n')}`);
+            
+            if (selected) {
+                const index = parseInt(selected) - 1;
+                if (index >= 0 && index < sessions.length) {
+                    const sessionId = sessions[index].session_id;
+                    await loadSessionIntoUI(sessionId);
+                }
+            }
+        });
+        
+        async function loadSessionIntoUI(sessionId) {
+            try {
+                const response = await fetch(`/api/product-debate/sessions/${sessionId}`);
+                if (!response.ok) {
+                    throw new Error('Failed to load session');
+                }
+                
+                const sessionData = await response.json();
+                
+                // Clear current chat
+                debateChat.innerHTML = '';
+                debateRounds = [];
+                
+                // Display all rounds
+                if (sessionData.rounds && sessionData.rounds.length > 0) {
+                    sessionData.rounds.forEach(round => {
+                        debateRounds.push(round.round_number);
+                        
+                        // Round header
+                        addChatMessage(round.round_number, 'system', `=== Round ${round.round_number} Started ===`);
+                        
+                        // Agent A message
+                        if (round.agent_a_response) {
+                            const agentAMessage = formatAgentResponse(round.agent_a_response, 'a');
+                            addChatMessage(round.round_number, 'agent-a', agentAMessage);
+                        }
+                        
+                        // Agent B message
+                        if (round.agent_b_response) {
+                            const agentBMessage = formatAgentResponse(round.agent_b_response, 'b');
+                            addChatMessage(round.round_number, 'agent-b', agentBMessage);
+                        }
+                        
+                        // Convergence
+                        if (round.converged_proposals && round.converged_proposals.length > 0) {
+                            const topProposal = round.converged_proposals[0];
+                            addChatMessage(
+                                round.round_number,
+                                'system',
+                                `✅ Converged on top proposal: "${topProposal.name}" (Score: ${topProposal.composite_score?.toFixed(2) || 'N/A'}/10)`
+                            );
+                        }
+                    });
+                }
+                
+                // Display final concept if available
+                if (sessionData.final_concept) {
+                    displayFinalConcept(sessionData.final_concept);
+                }
+                
+                // Update session info
+                currentSessionId = sessionId;
+                currentSessionDisplay.textContent = sessionId.substring(0, 8) + '...';
+                sessionInfo.style.display = 'block';
+                
+                // Update status
+                updateStatus('completed', 'Loaded');
+                
+                addChatMessage(0, 'system', `Session loaded: ${sessionId.substring(0, 8)}...`);
+            } catch (error) {
+                alert(`Failed to load session: ${error.message}`);
+            }
+        }
+        
+        exportBtn.addEventListener('click', async () => {
+            if (!currentSessionId) {
+                alert('No active session to export. Please start a debate or load a session first.');
+                return;
+            }
+            
+            // Show export format selection
+            const format = prompt('Select export format:\n1. Text (.txt)\n2. Markdown (.md)\n3. JSON (.json)\n\nEnter 1, 2, or 3:');
+            
+            if (!format) return;
+            
+            let exportFormat = 'text';
+            if (format === '2') exportFormat = 'markdown';
+            else if (format === '3') exportFormat = 'json';
+            
+            try {
+                const response = await fetch(`/api/product-debate/sessions/${currentSessionId}/export-conversation?format=${exportFormat}`);
+                if (!response.ok) {
+                    throw new Error('Export failed');
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = `conversation_${currentSessionId.substring(0, 8)}.txt`;
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                addChatMessage(0, 'system', `Conversation exported as ${filename}`);
+            } catch (error) {
+                alert(`Failed to export: ${error.message}`);
+            }
+        });
+        
+        // Load available models on page load
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/product-debate/available-models');
+                const data = await response.json();
+                
+                // Populate both dropdowns with all models
+                const agentASelect = document.getElementById('agentAModel');
+                const agentBSelect = document.getElementById('agentBModel');
+                
+                if (data.all_models) {
+                    // Populate Agent A dropdown
+                    if (agentASelect) {
+                        agentASelect.innerHTML = '';
+                        data.all_models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.value;
+                            option.textContent = model.label;
+                            if (model.value === 'gpt-4o') option.selected = true; // Default
+                            agentASelect.appendChild(option);
+                        });
+                    }
+                    
+                    // Populate Agent B dropdown
+                    if (agentBSelect) {
+                        agentBSelect.innerHTML = '';
+                        data.all_models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.value;
+                            option.textContent = model.label;
+                            if (model.value === 'claude-3-haiku-20240307') option.selected = true; // Default
+                            agentBSelect.appendChild(option);
+                        });
+                    }
+                } else {
+                    // Fallback to old format
+                    if (agentASelect && data.openai) {
+                        data.openai.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.value;
+                            option.textContent = model.label;
+                            agentASelect.appendChild(option);
+                        });
+                    }
+                    if (agentBSelect && data.anthropic) {
+                        data.anthropic.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.value;
+                            option.textContent = model.label;
+                            agentBSelect.appendChild(option);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+        
+        function addChatMessage(roundNum, agent, content, proposals = null, analyses = null, isStreaming = false) {
+            // Remove empty state if it exists
+            const emptyState = debateChat.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${agent}`;
+            if (isStreaming) {
+                messageDiv.classList.add('streaming');
+            }
+            
+            const header = document.createElement('div');
+            header.className = 'message-header';
+            
+            const agentName = document.createElement('span');
+            agentName.className = 'agent-name';
+            if (agent === 'agent-a') {
+                agentName.textContent = '🤖 Agent A (Opportunity Seeker)';
+            } else if (agent === 'agent-b') {
+                agentName.textContent = '🔍 Agent B (Skeptical Builder)';
+            } else {
+                agentName.textContent = '📊 System';
+            }
+            
+            const roundBadge = document.createElement('span');
+            roundBadge.className = 'round-number';
+            roundBadge.textContent = roundNum > 0 ? `Round ${roundNum}` : 'System';
+            
+            header.appendChild(agentName);
+            if (roundNum > 0) {
+                header.appendChild(roundBadge);
+            }
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Format content with line breaks and preserve formatting
+            // Convert markdown-style bold (**text**) to HTML
+            let formattedContent = content
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+            
+            contentDiv.innerHTML = formattedContent;
+            
+            messageDiv.appendChild(header);
+            messageDiv.appendChild(contentDiv);
+            
+            // Don't show proposals/analyses in the main chat - keep it clean like a conversation
+            // They're available in the round data if needed
+            
+            debateChat.appendChild(messageDiv);
+            debateChat.scrollTop = debateChat.scrollHeight;
+        }
+        
+        function formatAgentResponse(response, agent) {
+            // Format the agent's response to be more readable
+            if (!response) return '';
+            
+            let message = response.trim();
+            
+            // Check if it's JSON (might have markdown code blocks)
+            let jsonContent = message;
+            
+            // Remove markdown code blocks if present
+            const jsonBlockMatch = message.match(/```(?:json)?\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/);
+            if (jsonBlockMatch) {
+                jsonContent = jsonBlockMatch[1];
+            } else if (message.startsWith('[') || message.startsWith('{')) {
+                // Try to extract JSON from the start
+                let braceCount = 0;
+                let bracketCount = 0;
+                let inString = false;
+                let escapeNext = false;
+                let endIndex = -1;
+                
+                for (let i = 0; i < message.length; i++) {
+                    const char = message[i];
+                    if (escapeNext) {
+                        escapeNext = false;
+                        continue;
+                    }
+                    if (char === '\\') {
+                        escapeNext = true;
+                        continue;
+                    }
+                    if (char === '"') {
+                        inString = !inString;
+                        continue;
+                    }
+                    if (inString) continue;
+                    
+                    if (char === '[') bracketCount++;
+                    if (char === ']') bracketCount--;
+                    if (char === '{') braceCount++;
+                    if (char === '}') braceCount--;
+                    
+                    if ((bracketCount === 0 && braceCount === 0) && (message[0] === '[' || message[0] === '{')) {
+                        endIndex = i + 1;
+                        break;
+                    }
+                }
+                
+                if (endIndex > 0) {
+                    jsonContent = message.substring(0, endIndex);
+                }
+            }
+            
+            // Try to parse as JSON
+            try {
+                const parsed = JSON.parse(jsonContent);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    if (agent === 'a') {
+                        // Agent A - format as opportunity list with full details
+                        message = `I've identified ${parsed.length} product opportunities:\n\n`;
+                        parsed.forEach((item, idx) => {
+                            message += `${idx + 1}. **${item.name || 'Product'}**\n`;
+                            if (item.description) {
+                                message += `   ${item.description}\n`;
+                            }
+                            if (item.rationale) {
+                                message += `   💡 Rationale: ${item.rationale}\n`;
+                            }
+                            if (item.user_value !== undefined) {
+                                message += `   ⭐ User Value: ${item.user_value}/10\n`;
+                            }
+                            if (item.novelty_sigma !== undefined) {
+                                message += `   🎯 Novelty: ${item.novelty_sigma.toFixed(2)}σ\n`;
+                            }
+                            if (item.complexity !== undefined) {
+                                message += `   ⚙️ Complexity: ${item.complexity}/10\n`;
+                            }
+                            if (item.feature_vector) {
+                                const fv = item.feature_vector;
+                                message += `   📋 Features: `;
+                                const features = [];
+                                if (fv.functional_attributes && fv.functional_attributes.length > 0) {
+                                    features.push(fv.functional_attributes.join(', '));
+                                }
+                                if (fv.target_user) {
+                                    features.push(`Target: ${fv.target_user}`);
+                                }
+                                if (fv.price_band) {
+                                    features.push(`Price: ${fv.price_band}`);
+                                }
+                                if (fv.channel) {
+                                    features.push(`Channel: ${fv.channel}`);
+                                }
+                                message += features.join(' | ') + '\n';
+                            }
+                            message += '\n';
+                        });
+                    } else {
+                        // Agent B - format as analysis with full details
+                        message = `I've analyzed ${parsed.length} proposals. Here's my detailed assessment:\n\n`;
+                        parsed.forEach((item, idx) => {
+                            message += `**Proposal ${idx + 1}${item.proposal_id ? ` (ID: ${item.proposal_id})` : ''}**:\n`;
+                            
+                            if (item.blockers && item.blockers.length > 0) {
+                                message += `   ⚠️ **Blockers:**\n`;
+                                item.blockers.forEach(blocker => {
+                                    message += `      • ${blocker}\n`;
+                                });
+                            } else {
+                                message += `   ✅ No major blockers identified\n`;
+                            }
+                            
+                            if (item.bom_estimate !== undefined) {
+                                message += `   💰 BOM Estimate: $${item.bom_estimate.toFixed(2)}\n`;
+                            }
+                            
+                            if (item.manufacturing_complexity !== undefined) {
+                                message += `   ⚙️ Manufacturing Complexity: ${item.manufacturing_complexity}/10\n`;
+                            }
+                            
+                            if (item.compliance_concerns && item.compliance_concerns.length > 0) {
+                                message += `   📜 Compliance Concerns: ${item.compliance_concerns.join(', ')}\n`;
+                            }
+                            
+                            if (item.suggested_fixes && item.suggested_fixes.length > 0) {
+                                message += `   💡 **Suggested Fixes:**\n`;
+                                item.suggested_fixes.forEach(fix => {
+                                    message += `      • ${fix}\n`;
+                                });
+                            }
+                            
+                            if (item.risk_assessment) {
+                                message += `   ⚠️ Risk Assessment: ${item.risk_assessment}\n`;
+                            }
+                            
+                            message += '\n';
+                        });
+                    }
+                } else if (typeof parsed === 'object' && parsed !== null) {
+                    // Single object, format it
+                    if (agent === 'a') {
+                        message = `**${parsed.name || 'Product'}**\n`;
+                        if (parsed.description) message += `${parsed.description}\n\n`;
+                        if (parsed.rationale) message += `💡 ${parsed.rationale}\n`;
+                    } else {
+                        message = `**Analysis:**\n`;
+                        if (parsed.blockers) message += `⚠️ Blockers: ${parsed.blockers.join(', ')}\n`;
+                        if (parsed.suggested_fixes) message += `💡 Fixes: ${parsed.suggested_fixes.join(', ')}\n`;
+                    }
+                }
+            } catch (e) {
+                // Not valid JSON or parsing failed, check if it's plain text with JSON-like structure
+                // If it looks like it has JSON but we can't parse it, try to extract readable parts
+                if (message.includes('"name"') || message.includes('"blockers"')) {
+                    // Try to extract key information even if not valid JSON
+                    const nameMatch = message.match(/"name"\s*:\s*"([^"]+)"/);
+                    const descMatch = message.match(/"description"\s*:\s*"([^"]+)"/);
+                    if (nameMatch || descMatch) {
+                        message = `I've identified a product opportunity:\n\n`;
+                        if (nameMatch) message += `**${nameMatch[1]}**\n`;
+                        if (descMatch) message += `${descMatch[1]}\n`;
+                    }
+                }
+                // If all else fails, return the original message (might be natural language)
+            }
+            
+            // No truncation - show full message
+            return message;
+        }
+        
+        function updateStatus(status, message) {
+            statusBadge.textContent = message;
+            statusBadge.className = `status-badge ${status}`;
+            statusBadge.style.display = 'inline-block';
+        }
+        
+        async function pollDebateStatus() {
+            if (!currentSessionId) {
+                console.log('No session ID, skipping poll');
+                return;
+            }
+            
+            try {
+                console.log(`Polling status for session: ${currentSessionId.substring(0, 8)}...`);
+                const response = await fetch(`/api/product-debate/sessions/${currentSessionId}/status`);
+                
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        // Session not found yet, wait a bit
+                        console.log('Session not found yet (404), waiting...');
+                        return;
+                    }
+                    console.error(`Poll failed: HTTP ${response.status}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Poll response:', {
+                    status: data.status,
+                    rounds_completed: data.rounds_completed,
+                    max_rounds: data.max_rounds,
+                    has_latest_round: !!data.latest_round,
+                    is_running: data.is_running
+                });
+                
+                // Update status badge
+                if (data.status === 'completed' || data.status === 'stopped') {
+                    updateStatus(data.status === 'stopped' ? 'error' : 'completed', 
+                                data.status === 'stopped' ? 'Stopped' : 'Completed');
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                    startBtn.disabled = false;
+                    stopBtn.style.display = 'none';
+                    loading.style.display = 'none';
+                } else {
+                    updateStatus('in-progress', `Round ${data.rounds_completed}/${data.max_rounds}`);
+                    stopBtn.style.display = 'block';
+                }
+                
+                // Always fetch full session to get all rounds with conversation
+                try {
+                    const sessionResponse = await fetch(`/api/product-debate/sessions/${currentSessionId}`);
+                    if (sessionResponse.ok) {
+                        const sessionData = await sessionResponse.json();
+                        
+                        if (sessionData.rounds && sessionData.rounds.length > 0) {
+                            // Sort rounds by round_number
+                            const sortedRounds = [...sessionData.rounds].sort((a, b) => a.round_number - b.round_number);
+                            
+                            sortedRounds.forEach(round => {
+                                const roundKey = `round-${round.round_number}`;
+                                const displayedAgents = new Set();
+                                
+                                // Check what we've already displayed for this round
+                                const existingMessages = debateChat.querySelectorAll(`.chat-message`);
+                                existingMessages.forEach(msg => {
+                                    const roundBadge = msg.querySelector('.round-number');
+                                    if (roundBadge && roundBadge.textContent.includes(`Round ${round.round_number}`)) {
+                                        if (msg.classList.contains('agent-a')) {
+                                            displayedAgents.add('agent-a');
+                                        } else if (msg.classList.contains('agent-b')) {
+                                            displayedAgents.add('agent-b');
+                                        }
+                                    }
+                                });
+                                
+                                // Add round header if this is a new round
+                                if (!debateRounds.includes(round.round_number)) {
+                                    debateRounds.push(round.round_number);
+                                    addChatMessage(round.round_number, 'system', `=== Round ${round.round_number} Started ===`);
+                                }
+                                
+                                // Show Agent A's conversation (if not already shown)
+                                if (round.agent_a_response && !displayedAgents.has('agent-a')) {
+                                    let agentAMessage = formatAgentResponse(round.agent_a_response, 'a');
+                                    if (agentAMessage) {
+                                        addChatMessage(round.round_number, 'agent-a', agentAMessage);
+                                        displayedAgents.add('agent-a');
+                                    }
+                                }
+                                
+                                // Show Agent B's conversation (if not already shown)
+                                if (round.agent_b_response && !displayedAgents.has('agent-b')) {
+                                    let agentBMessage = formatAgentResponse(round.agent_b_response, 'b');
+                                    if (agentBMessage) {
+                                        addChatMessage(round.round_number, 'agent-b', agentBMessage);
+                                        displayedAgents.add('agent-b');
+                                    }
+                                }
+                                
+                                // Show convergence summary (only once)
+                                if (round.converged_proposals && round.converged_proposals.length > 0) {
+                                    const existingConvergence = Array.from(debateChat.querySelectorAll('.chat-message.system'))
+                                        .some(msg => msg.textContent.includes('Converged on top proposal') && 
+                                              msg.querySelector('.round-number')?.textContent.includes(`Round ${round.round_number}`));
+                                    if (!existingConvergence) {
+                                        const topProposal = round.converged_proposals[0];
+                                        addChatMessage(
+                                            round.round_number,
+                                            'system',
+                                            `✅ Converged on top proposal: "${topProposal.name}" (Score: ${topProposal.composite_score?.toFixed(2) || 'N/A'}/10)`
+                                        );
+                                    }
+                                }
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error fetching session:', err);
+                }
+                
+                // Display final concept
+                if (data.final_concept && (data.status === 'completed' || data.status === 'stopped')) {
+                    displayFinalConcept(data.final_concept);
+                }
+                
+            } catch (error) {
+                console.error('Failed to poll status:', error);
+                // Don't stop polling on error, just log it
+            }
+        }
+        
+        function displayFinalConcept(concept) {
+            finalConcept.style.display = 'block';
+            finalConcept.innerHTML = `
+                <div class="final-concept">
+                    <h3>🎯 Final Concept: ${concept.name}</h3>
+                    <div class="concept-details">
+                        <div class="concept-detail-item">
+                            <strong>Target MSRP:</strong>
+                            $${concept.target_msrp.toFixed(2)}
+                        </div>
+                        <div class="concept-detail-item">
+                            <strong>Gross Margin:</strong>
+                            ${concept.gross_margin.toFixed(1)}%
+                        </div>
+                        <div class="concept-detail-item">
+                            <strong>Unit Cost:</strong>
+                            $${concept.unit_cost.toFixed(2)}
+                        </div>
+                        <div class="concept-detail-item">
+                            <strong>Pilot Channel:</strong>
+                            ${concept.pilot_channel}
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <strong>Top Features:</strong>
+                        <ul style="margin-top: 5px; padding-left: 20px;">
+                            ${concept.top_features.map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+                    </div>
+                    <div style="margin-top: 15px; font-size: 12px; color: #666;">
+                        <strong>User Story:</strong> ${concept.user_story}
+                    </div>
+                </div>
+            `;
+        }
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const csvFile = document.getElementById('csvFile').files[0];
+            
+            startBtn.disabled = true;
+            loading.style.display = 'block';
+            debateChat.innerHTML = ''; // Clear empty state
+            debateRounds = [];
+            finalConcept.style.display = 'none';
+            updateStatus('in-progress', 'Starting...');
+            stopBtn.style.display = 'none'; // Hide stop button initially
+            
+            try {
+                let response;
+                
+                if (csvFile) {
+                    const uploadData = new FormData();
+                    uploadData.append('seed', formData.get('seed'));
+                    uploadData.append('temperature', formData.get('temperature'));
+                    uploadData.append('max_rounds', formData.get('maxRounds'));
+                    uploadData.append('core_market', formData.get('coreMarket') || '');
+                    uploadData.append('category', formData.get('category') || '');
+                    uploadData.append('agent_a_model', formData.get('agentAModel'));
+                    uploadData.append('agent_b_model', formData.get('agentBModel'));
+                    uploadData.append('csv_file', csvFile);
+                    
+                    response = await fetch('/api/product-debate/start-with-csv', {
+                        method: 'POST',
+                        body: uploadData
+                    });
+                } else {
+                    const requestData = {
+                        seed: parseInt(formData.get('seed')),
+                        temperature: parseFloat(formData.get('temperature')),
+                        max_rounds: parseInt(formData.get('maxRounds')),
+                        core_market: formData.get('coreMarket') || null,
+                        category: formData.get('category') || null,
+                        agent_a_model: formData.get('agentAModel'),
+                        agent_b_model: formData.get('agentBModel')
+                    };
+                    
+                    response = await fetch('/api/product-debate/start', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Debate failed');
+                }
+                
+                currentSessionId = data.session_id;
+                
+                // Add initial system message
+                addChatMessage(0, 'system', `Debate session started. Session ID: ${currentSessionId.substring(0, 8)}...`);
+                addChatMessage(0, 'system', 'Waiting for first round to complete...');
+                
+                // Show stop button
+                stopBtn.style.display = 'block';
+                
+                // Start polling for updates - poll more frequently at first
+                pollInterval = setInterval(pollDebateStatus, 1000); // Poll every 1 second
+                
+                // Initial poll after a short delay to let session save
+                setTimeout(() => {
+                    pollDebateStatus();
+                }, 500);
+                
+            } catch (error) {
+                updateStatus('error', 'Error');
+                addChatMessage(0, 'system', `Error: ${error.message}`);
+                startBtn.disabled = false;
+                stopBtn.style.display = 'none';
+                loading.style.display = 'none';
+            }
+        });
+        
+        // Stop debate handler
+        stopBtn.addEventListener('click', async () => {
+            if (!currentSessionId) return;
+            
+            try {
+                const response = await fetch(`/api/product-debate/sessions/${currentSessionId}/stop`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    addChatMessage(0, 'system', 'Debate stopped by user.');
+                    updateStatus('error', 'Stopped');
+                    stopBtn.style.display = 'none';
+                    startBtn.disabled = false;
+                    loading.style.display = 'none';
+                    
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                } else {
+                    const data = await response.json();
+                    alert(`Failed to stop debate: ${data.detail || 'Unknown error'}`);
+                }
+            } catch (error) {
+                alert(`Error stopping debate: ${error.message}`);
+            }
+        });
+        
+        // Load models on page load
+        loadModels();
+    </script>
+</body>
+</html>

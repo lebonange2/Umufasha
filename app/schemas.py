@@ -279,3 +279,83 @@ class TwilioWebhook(BaseModel):
 class GoogleWebhook(BaseModel):
     headers: Dict[str, str]
     body: Dict[str, Any]
+
+
+# Mindmap schemas
+class MindmapNodeBase(BaseModel):
+    id: str
+    parent_id: Optional[str] = None
+    x: int = 0
+    y: int = 0
+    text: str = ""
+    color: str = "#ffffff"
+    text_color: str = "#000000"
+    shape: Literal["rect", "pill"] = "rect"
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+
+class MindmapNodeCreate(BaseModel):
+    parent_id: Optional[str] = None
+    x: int = 0
+    y: int = 0
+    text: str = ""
+    color: str = "#ffffff"
+    text_color: str = "#000000"
+    shape: Literal["rect", "pill"] = "rect"
+
+
+class MindmapNodeUpdate(BaseModel):
+    parent_id: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+    text: Optional[str] = None
+    color: Optional[str] = None
+    text_color: Optional[str] = None
+    shape: Optional[Literal["rect", "pill"]] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+
+class MindmapNodeResponse(MindmapNodeBase):
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class MindmapBase(BaseModel):
+    title: str = "Untitled Mind Map"
+
+
+class MindmapCreate(MindmapBase):
+    nodes: Optional[List[MindmapNodeBase]] = None
+
+
+class MindmapUpdate(BaseModel):
+    title: Optional[str] = None
+    nodes: Optional[List[MindmapNodeBase]] = None
+
+
+class MindmapResponse(MindmapBase):
+    id: str
+    owner_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    nodes: List[MindmapNodeResponse] = []
+    
+    class Config:
+        from_attributes = True
+
+
+class MindmapListResponse(BaseModel):
+    id: str
+    title: str
+    owner_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    node_count: int = 0
+    
+    class Config:
+        from_attributes = True
