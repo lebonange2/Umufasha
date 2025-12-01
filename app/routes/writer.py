@@ -22,7 +22,7 @@ class LLMRequest(BaseModel):
     document_context: Optional[List[str]] = None  # List of document IDs to include
     text_context: Optional[str] = None  # Additional text context
     mode: str  # autocomplete|continue|expand|summarize|outline|rewrite|qa
-    provider: Optional[str] = None  # openai, anthropic - if not provided, uses default from config
+    provider: Optional[str] = None  # Ignored - always uses local (Ollama)
     model: Optional[str] = None  # Model name - if not provided, uses default from config
     params: Optional[Dict[str, Any]] = None
     stream: bool = True
@@ -35,29 +35,15 @@ async def llm_endpoint(request: Request, llm_request: LLMRequest):
     Supports Server-Sent Events (SSE) streaming for real-time token delivery.
     """
     try:
-        # Determine provider and model from request or config
-        provider = llm_request.provider or settings.LLM_PROVIDER
-        if provider == "anthropic":
-            api_key = settings.ANTHROPIC_API_KEY
-            if not api_key:
-                raise HTTPException(
-                    status_code=400,
-                    detail="ANTHROPIC_API_KEY environment variable is not set. Please set it with: export ANTHROPIC_API_KEY=sk-ant-your-key"
-                )
-            model = llm_request.model or (settings.LLM_MODEL if settings.LLM_MODEL.startswith("claude") else "claude-3-5-sonnet-20241022")
-        else:
-            api_key = settings.OPENAI_API_KEY
-            if not api_key:
-                raise HTTPException(
-                    status_code=400,
-                    detail="OPENAI_API_KEY environment variable is not set. Please set it with: export OPENAI_API_KEY=sk-your-key"
-                )
-            model = llm_request.model or settings.LLM_MODEL
+        # Force local provider (Ollama) - no API keys needed
+        provider = "local"
+        model = llm_request.model or settings.LLM_MODEL
+        base_url = getattr(settings, 'LLM_LOCAL_URL', 'http://localhost:11434/v1')
         
-        # Create LLM client with specified provider
+        # Create LLM client with local provider
         llm_client = LLMClient(
-            api_key=api_key,
-            base_url=settings.LLM_BASE_URL,
+            api_key=None,  # No API key needed for local models
+            base_url=base_url,
             model=model,
             provider=provider
         )
@@ -133,20 +119,19 @@ async def llm_endpoint(request: Request, llm_request: LLMRequest):
     
     except HTTPException:
         raise
-    except ValueError as e:
-        # API key missing
-        logger.error("LLM endpoint error - missing API key", error=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("LLM endpoint error", error=str(e), exc_info=True)
-        # Provide more helpful error messages
-        error_msg = str(e)
-        if "401" in error_msg or "Unauthorized" in error_msg:
-            provider = llm_request.provider or settings.LLM_PROVIDER
-            if provider == "anthropic":
-                error_msg = "Invalid or missing ANTHROPIC_API_KEY. Please check your environment variable."
-            else:
-                error_msg = "Invalid or missing OPENAI_API_KEY. Please check your environment variable."
+        # Check if Ollama is running
+        import httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+                if response.status_code != 200:
+                    error_msg = "Ollama service is not responding. Make sure Ollama is running: ollama serve"
+                else:
+                    error_msg = f"LLM error: {str(e)}"
+        except:
+            error_msg = "Ollama service is not running. Start it with: ollama serve"
         raise HTTPException(status_code=500, detail=error_msg)
 
 

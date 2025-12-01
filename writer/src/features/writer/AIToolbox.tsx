@@ -218,57 +218,20 @@ export default function AIToolbox({
           <div className="p-4 border-t space-y-3">
             <h3 className="font-semibold text-sm">Settings</h3>
 
-            {/* Provider Selection */}
+            {/* Model Selection - Local models only (Ollama) */}
             <div>
-              <label className="block text-xs mb-1">AI Provider:</label>
+              <label className="block text-xs mb-1">Model (Local):</label>
               <select
-                value={settings.provider}
-                onChange={(e) => {
-                  const newProvider = e.target.value as 'openai' | 'anthropic';
-                  // Set default model based on provider
-                  const defaultModel = newProvider === 'anthropic' 
-                    ? 'claude-3-5-sonnet-20241022' 
-                    : 'gpt-4o';
-                  onSettingsChange({ 
-                    ...settings, 
-                    provider: newProvider,
-                    model: defaultModel
-                  });
-                }}
+                value={settings.model}
+                onChange={(e) => onSettingsChange({ ...settings, model: e.target.value, provider: 'local' })}
                 className="w-full p-1 border rounded text-sm"
               >
-                <option value="openai">OpenAI (ChatGPT)</option>
-                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="llama3.1">Llama 3.1</option>
+                <option value="llama3.2">Llama 3.2</option>
+                <option value="mistral">Mistral</option>
+                <option value="codellama">CodeLlama</option>
+                <option value="phi3">Phi-3</option>
               </select>
-            </div>
-
-            {/* Model Selection */}
-            <div>
-              <label className="block text-xs mb-1">Model:</label>
-              {settings.provider === 'anthropic' ? (
-                <select
-                  value={settings.model}
-                  onChange={(e) => onSettingsChange({ ...settings, model: e.target.value })}
-                  className="w-full p-1 border rounded text-sm"
-                >
-                  <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Latest)</option>
-                  <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
-                  <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                  <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
-                  <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                </select>
-              ) : (
-                <select
-                  value={settings.model}
-                  onChange={(e) => onSettingsChange({ ...settings, model: e.target.value })}
-                  className="w-full p-1 border rounded text-sm"
-                >
-                  <option value="gpt-4o">GPT-4o</option>
-                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                  <option value="gpt-4">GPT-4</option>
-                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                </select>
-              )}
             </div>
 
             <div>

@@ -50,13 +50,9 @@ class LLMClient:
                     ]
                 }
                 
-                if not self.api_key:
-                    raise ValueError("ANTHROPIC_API_KEY is required but not set")
-                
-                # Validate API key format
-                if not self.api_key.startswith("sk-ant-"):
-                    logger.warning("ANTHROPIC_API_KEY doesn't start with 'sk-ant-', may be invalid")
-                    # Still try the request, as some keys might have different formats
+                # Local provider doesn't need API keys - skip validation
+                if self.provider != "local" and not self.api_key:
+                    raise ValueError("API key required for cloud providers")
                 
                 headers = {
                     "Content-Type": "application/json",
@@ -226,8 +222,9 @@ class LLMClient:
                     "stream": True
                 }
                 
-                if not self.api_key:
-                    raise ValueError("ANTHROPIC_API_KEY is required but not set")
+                # Local provider doesn't need API keys
+                if self.provider != "local" and not self.api_key:
+                    raise ValueError("API key required for cloud providers")
                 
                 headers = {
                     "Content-Type": "application/json",

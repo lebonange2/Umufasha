@@ -22,9 +22,11 @@ pyotp==2.9.0
 # Scheduling
 apscheduler==3.10.4
 
-# LLM
-openai==1.3.7
-anthropic==0.18.1
+# LLM - Local models only (Ollama)
+# openai and anthropic packages not needed for local-only setup
+# Uncomment if you want to add cloud provider support later:
+# openai==1.3.7
+# anthropic==0.18.1
 
 # Scientific computing
 numpy==1.26.3

@@ -33,8 +33,8 @@ class DebateRequest(BaseModel):
     max_rounds: int = 6
     core_market: Optional[str] = None
     category: Optional[str] = None
-    agent_a_model: str = "gpt-4o"  # OpenAI model for Agent A
-    agent_b_model: str = "claude-3-haiku-20240307"  # Anthropic model for Agent B (default)
+    agent_a_model: str = "llama3.1"  # Local model for Agent A
+    agent_b_model: str = "llama3.1"  # Local model for Agent B
 
 
 class DebateResponse(BaseModel):
@@ -47,16 +47,20 @@ class DebateResponse(BaseModel):
 @router.post("/start", response_model=DebateResponse)
 async def start_debate(request: DebateRequest, background_tasks: BackgroundTasks):
     """Start a new debate session."""
-    # Validate API keys
-    if not settings.OPENAI_API_KEY:
+    # Check if Ollama is running (for local models)
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ollama service is not responding. Make sure Ollama is running: ollama serve"
+                )
+    except httpx.RequestError:
         raise HTTPException(
             status_code=400,
-            detail="OPENAI_API_KEY environment variable is not set"
-        )
-    if not settings.ANTHROPIC_API_KEY:
-        raise HTTPException(
-            status_code=400,
-            detail="ANTHROPIC_API_KEY environment variable is not set"
+            detail="Ollama service is not running. Start it with: ollama serve"
         )
     
     # Generate session ID
@@ -135,21 +139,25 @@ async def start_debate_with_csv(
     max_rounds: int = Form(6),
     core_market: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
-    agent_a_model: str = Form("gpt-4o"),
-    agent_b_model: str = Form("claude-3-haiku-20240307"),
+    agent_a_model: str = Form("llama3.1"),
+    agent_b_model: str = Form("llama3.1"),
     csv_file: UploadFile = File(...)
 ):
     """Start a debate session with products from CSV."""
-    # Validate API keys
-    if not settings.OPENAI_API_KEY:
+    # Check if Ollama is running (for local models)
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ollama service is not responding. Make sure Ollama is running: ollama serve"
+                )
+    except httpx.RequestError:
         raise HTTPException(
             status_code=400,
-            detail="OPENAI_API_KEY environment variable is not set"
-        )
-    if not settings.ANTHROPIC_API_KEY:
-        raise HTTPException(
-            status_code=400,
-            detail="ANTHROPIC_API_KEY environment variable is not set"
+            detail="Ollama service is not running. Start it with: ollama serve"
         )
     
     # Save uploaded file temporarily
@@ -367,32 +375,34 @@ async def get_debate_status(session_id: str):
 
 @router.get("/available-models")
 async def get_available_models():
-    """Get list of available models for each provider."""
-    return {
-        "all_models": [
-            # OpenAI models
-            {"value": "gpt-4o", "label": "GPT-4o (OpenAI)", "provider": "openai"},
-            {"value": "gpt-4-turbo", "label": "GPT-4 Turbo (OpenAI)", "provider": "openai"},
-            {"value": "gpt-4", "label": "GPT-4 (OpenAI)", "provider": "openai"},
-            {"value": "gpt-3.5-turbo", "label": "GPT-3.5 Turbo (OpenAI)", "provider": "openai"},
-            # Anthropic models
-            {"value": "claude-3-5-sonnet-20240620", "label": "Claude 3.5 Sonnet (Anthropic)", "provider": "anthropic"},
-            {"value": "claude-3-opus-20240229", "label": "Claude 3 Opus (Anthropic)", "provider": "anthropic"},
-            {"value": "claude-3-sonnet-20240229", "label": "Claude 3 Sonnet (Anthropic)", "provider": "anthropic"},
-            {"value": "claude-3-haiku-20240307", "label": "Claude 3 Haiku (Anthropic)", "provider": "anthropic"}
-        ],
-        "openai": [
-            {"value": "gpt-4o", "label": "GPT-4o"},
-            {"value": "gpt-4-turbo", "label": "GPT-4 Turbo"},
-            {"value": "gpt-4", "label": "GPT-4"},
-            {"value": "gpt-3.5-turbo", "label": "GPT-3.5 Turbo"}
-        ],
-        "anthropic": [
-            {"value": "claude-3-5-sonnet-20240620", "label": "Claude 3.5 Sonnet (Latest)"},
-            {"value": "claude-3-opus-20240229", "label": "Claude 3 Opus"},
-            {"value": "claude-3-sonnet-20240229", "label": "Claude 3 Sonnet"},
-            {"value": "claude-3-haiku-20240307", "label": "Claude 3 Haiku"}
+    """Get list of available local models (Ollama)."""
+    # Try to get list from Ollama
+    import httpx
+    local_models = []
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+            if response.status_code == 200:
+                data = response.json()
+                local_models = [
+                    {"value": model["name"], "label": f"{model['name']} (Local)", "provider": "local"}
+                    for model in data.get("models", [])
+                ]
+    except:
+        pass
+    
+    # Default models if Ollama not available or empty
+    if not local_models:
+        local_models = [
+            {"value": "llama3.1", "label": "Llama 3.1 (Local)", "provider": "local"},
+            {"value": "llama3.2", "label": "Llama 3.2 (Local)", "provider": "local"},
+            {"value": "mistral", "label": "Mistral (Local)", "provider": "local"},
+            {"value": "codellama", "label": "CodeLlama (Local)", "provider": "local"},
         ]
+    
+    return {
+        "all_models": local_models,
+        "local": local_models
     }
 
 

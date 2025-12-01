@@ -12,13 +12,14 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://assistant:assistant@db:5432/assistant"
     REDIS_URL: str = "redis://redis:6379/0"
     
-    # LLM
-    OPENAI_API_KEY: Optional[str] = None
-    ANTHROPIC_API_KEY: Optional[str] = None  # Claude API key
-    LLM_BASE_URL: Optional[str] = None
-    LLM_MODEL: str = "llama3.1"  # Default to local model
-    LLM_PROVIDER: str = "local"  # local, openai, anthropic, or custom
-    LLM_LOCAL_URL: str = "http://localhost:11434"  # Ollama default URL
+    # LLM - Local models only (Ollama)
+    LLM_MODEL: str = "llama3.1"  # Default local model
+    LLM_PROVIDER: str = "local"  # Always local (Ollama) - no API keys needed
+    LLM_LOCAL_URL: str = "http://localhost:11434/v1"  # Ollama default URL
+    # Legacy fields (deprecated, not used - kept for backwards compatibility)
+    OPENAI_API_KEY: Optional[str] = None  # Deprecated - not used
+    ANTHROPIC_API_KEY: Optional[str] = None  # Deprecated - not used
+    LLM_BASE_URL: Optional[str] = None  # Deprecated - not used
     
     # Twilio
     TWILIO_ACCOUNT_SID: Optional[str] = None

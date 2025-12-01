@@ -28,8 +28,8 @@ class DebateOrchestrator:
         core_market: str,
         category: str,
         known_products: List[Dict[str, Any]],
-        agent_a_model: str = "gpt-4o",
-        agent_b_model: str = "claude-3-haiku-20240307"
+        agent_a_model: str = "llama3.1",
+        agent_b_model: str = "llama3.1"
     ):
         """Initialize debate orchestrator.
         
@@ -52,28 +52,27 @@ class DebateOrchestrator:
         self.category = category
         self.known_products = known_products
         
-        # Initialize LLM clients - auto-detect provider from model name
-        from app.product_debate.utils import detect_provider_from_model, get_api_key_for_provider
+        # Initialize LLM clients - always use local (Ollama)
+        from app.product_debate.utils import create_llm_client_for_model
         
-        agent_a_provider = detect_provider_from_model(agent_a_model)
-        agent_a_api_key = get_api_key_for_provider(agent_a_provider)
-        agent_b_provider = detect_provider_from_model(agent_b_model)
-        agent_b_api_key = get_api_key_for_provider(agent_b_provider)
+        # Always use local provider
+        agent_a_api_key, agent_a_provider = create_llm_client_for_model(agent_a_model)
+        agent_b_api_key, agent_b_provider = create_llm_client_for_model(agent_b_model)
         
-        if not agent_a_api_key:
-            logger.warning(f"API key for {agent_a_provider} is not set - Agent A will fail")
-        if not agent_b_api_key:
-            logger.warning(f"API key for {agent_b_provider} is not set - Agent B will fail")
+        # Get local URL from settings
+        local_url = getattr(settings, 'LLM_LOCAL_URL', 'http://localhost:11434/v1')
         
         self.agent_a_client = LLMClient(
-            api_key=agent_a_api_key,
+            api_key=None,  # No API key needed for local
+            base_url=local_url,
             model=agent_a_model,
-            provider=agent_a_provider
+            provider="local"
         )
         self.agent_b_client = LLMClient(
-            api_key=agent_b_api_key,
+            api_key=None,  # No API key needed for local
+            base_url=local_url,
             model=agent_b_model,
-            provider=agent_b_provider
+            provider="local"
         )
         
         # Initialize agents

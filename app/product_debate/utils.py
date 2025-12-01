@@ -4,41 +4,28 @@ from app.core.config import settings
 
 
 def detect_provider_from_model(model_name: str) -> str:
-    """Detect provider (openai/anthropic) from model name.
+    """Detect provider - always returns 'local' for Ollama.
     
     Args:
-        model_name: Model name (e.g., "gpt-4o", "claude-3-5-sonnet-20240620")
+        model_name: Model name (ignored, always uses local)
         
     Returns:
-        Provider name: "openai" or "anthropic"
+        Provider name: always "local"
     """
-    model_lower = model_name.lower()
-    
-    # Check for Anthropic/Claude models
-    if model_lower.startswith("claude") or "claude" in model_lower:
-        return "anthropic"
-    
-    # Check for OpenAI models
-    if model_lower.startswith("gpt") or "gpt" in model_lower:
-        return "openai"
-    
-    # Default to OpenAI if unclear
-    return "openai"
+    # Always use local provider (Ollama)
+    return "local"
 
 
 def get_api_key_for_provider(provider: str) -> Optional[str]:
     """Get API key for the specified provider.
     
     Args:
-        provider: Provider name ("openai" or "anthropic")
+        provider: Provider name (ignored, always returns None for local)
         
     Returns:
-        API key or None if not set
+        Always None (local models don't need API keys)
     """
-    if provider == "anthropic":
-        return settings.ANTHROPIC_API_KEY
-    elif provider == "openai":
-        return settings.OPENAI_API_KEY
+    # Local models don't need API keys
     return None
 
 
@@ -46,12 +33,11 @@ def create_llm_client_for_model(model_name: str) -> Tuple[Optional[str], str]:
     """Create LLM client configuration for a model.
     
     Args:
-        model_name: Model name
+        model_name: Model name (e.g., "llama3.1")
         
     Returns:
-        Tuple of (api_key, provider)
+        Tuple of (api_key=None, provider="local")
     """
-    provider = detect_provider_from_model(model_name)
-    api_key = get_api_key_for_provider(provider)
-    return api_key, provider
+    # Always use local provider
+    return None, "local"
 

@@ -30,30 +30,16 @@ _llm_client: Optional[LLMClient] = None
 
 
 def get_llm_client() -> LLMClient:
-    """Get LLM client."""
+    """Get LLM client - always uses local (Ollama)."""
     global _llm_client
     if _llm_client is None:
-        # Determine provider and API key
-        provider = settings.LLM_PROVIDER.lower() if hasattr(settings, 'LLM_PROVIDER') else "local"
-        
-        if provider == "local":
-            # Local model (Ollama) - no API key needed
-            api_key = None
-            model = settings.LLM_MODEL if hasattr(settings, 'LLM_MODEL') else "llama3.1"
-            base_url = settings.LLM_LOCAL_URL if hasattr(settings, 'LLM_LOCAL_URL') else "http://localhost:11434/v1"
-        elif provider == "anthropic":
-            api_key = settings.ANTHROPIC_API_KEY
-            # Use Claude model if specified, otherwise default to latest
-            model = settings.LLM_MODEL if settings.LLM_MODEL.startswith("claude") else "claude-3-5-sonnet-20241022"
-            base_url = settings.LLM_BASE_URL
-        else:
-            # OpenAI or custom
-            api_key = settings.OPENAI_API_KEY
-            model = settings.LLM_MODEL
-            base_url = settings.LLM_BASE_URL
+        # Always use local provider (Ollama) - no API keys needed
+        provider = "local"
+        model = settings.LLM_MODEL if hasattr(settings, 'LLM_MODEL') else "llama3.1"
+        base_url = settings.LLM_LOCAL_URL if hasattr(settings, 'LLM_LOCAL_URL') else "http://localhost:11434/v1"
         
         _llm_client = LLMClient(
-            api_key=api_key,
+            api_key=None,  # No API key needed for local models
             base_url=base_url,
             model=model,
             provider=provider

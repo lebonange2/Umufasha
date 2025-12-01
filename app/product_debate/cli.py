@@ -30,12 +30,15 @@ async def run_debate(
     """
     import uuid
     
-    # Validate API keys
-    if not settings.OPENAI_API_KEY:
-        print("ERROR: OPENAI_API_KEY environment variable is not set", file=sys.stderr)
-        sys.exit(1)
-    if not settings.ANTHROPIC_API_KEY:
-        print("ERROR: ANTHROPIC_API_KEY environment variable is not set", file=sys.stderr)
+    # Check if Ollama is running (for local models)
+    import httpx
+    try:
+        response = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+        if response.status_code != 200:
+            print("ERROR: Ollama service is not responding. Make sure Ollama is running: ollama serve", file=sys.stderr)
+            sys.exit(1)
+    except httpx.RequestError:
+        print("ERROR: Ollama service is not running. Start it with: ollama serve", file=sys.stderr)
         sys.exit(1)
     
     # Generate session ID

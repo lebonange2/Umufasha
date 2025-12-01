@@ -12,8 +12,8 @@ import { WriterMode, WriterSettings, Version } from '../../lib/types';
 import { structureStorage } from '../../features/structure/storage';
 
 const DEFAULT_SETTINGS: WriterSettings = {
-  provider: 'openai',
-  model: 'gpt-4o',
+  provider: 'local',
+  model: 'llama3.1',
   temperature: 0.7,
   maxTokens: 1000,
   sendFullContext: false,
@@ -246,9 +246,11 @@ export default function WriterPage() {
           }
         } catch (error: any) {
           console.error('Autocomplete error:', error);
-          // Show error message if it's about missing API key
-          if (error?.message?.includes('API key')) {
+          // Show error message if Ollama is not running
+          if (error?.message?.includes('Ollama') || error?.message?.includes('not running')) {
             alert(`Setup Required: ${error.message}`);
+          } else if (error?.message) {
+            console.error('LLM error:', error.message);
           }
         }
       }, 600); // 600ms pause

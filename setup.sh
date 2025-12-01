@@ -138,15 +138,11 @@ MOCK_MODE=true
 MOCK_TWILIO=true
 MOCK_SENDGRID=true
 
-# LLM Configuration - Default to local model (Ollama)
+# LLM Configuration - Local models only (Ollama)
+# No API keys needed - uses local Ollama models
 LLM_PROVIDER=local
 LLM_MODEL=llama3.1
 LLM_LOCAL_URL=http://localhost:11434/v1
-
-# Optional: Cloud providers (uncomment if needed)
-# OPENAI_API_KEY=your_openai_api_key_here
-# ANTHROPIC_API_KEY=your_anthropic_api_key_here
-# LLM_BASE_URL=
 
 # Twilio Configuration (not used in mock mode)
 TWILIO_ACCOUNT_SID=your_twilio_account_sid

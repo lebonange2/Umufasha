@@ -16,10 +16,13 @@ class NotificationWorker:
     """Background worker for processing notifications."""
     
     def __init__(self):
+        # Use local LLM (Ollama) - no API key needed
+        local_url = getattr(settings, 'LLM_LOCAL_URL', 'http://localhost:11434/v1')
         self.llm_client = LLMClient(
-            api_key=settings.OPENAI_API_KEY,
-            base_url=settings.LLM_BASE_URL,
-            model=settings.LLM_MODEL
+            api_key=None,  # No API key needed for local
+            base_url=local_url,
+            model=settings.LLM_MODEL,
+            provider="local"
         )
         self.planner = NotificationPlanner(self.llm_client)
         self.running = False
