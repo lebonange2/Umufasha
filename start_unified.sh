@@ -18,26 +18,6 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
-# Kill any existing processes on port 8000
-echo "🔄 Checking for existing processes on port 8000..."
-if lsof -ti:8000 > /dev/null 2>&1; then
-    echo "🛑 Found existing processes on port 8000. Stopping them..."
-    lsof -ti:8000 | xargs kill -9 2>/dev/null
-    sleep 2
-    echo "✅ Existing processes stopped"
-else
-    echo "✅ Port 8000 is available"
-fi
-
-# Also kill any uvicorn processes
-echo "🔄 Checking for existing uvicorn processes..."
-if pgrep -f uvicorn > /dev/null; then
-    echo "🛑 Found existing uvicorn processes. Stopping them..."
-    pkill -f uvicorn
-    sleep 2
-    echo "✅ Uvicorn processes stopped"
-fi
-
 # Check if database exists
 if [ ! -f "assistant.db" ]; then
     echo "🗄️ Database not found. Initializing..."

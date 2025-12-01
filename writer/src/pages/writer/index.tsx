@@ -525,6 +525,14 @@ export default function WriterPage() {
             >
               Preview Outline
             </button>
+            <button
+              onClick={() => navigate('/book-writer')}
+              className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-blue-50"
+              aria-label="Book Writer"
+              title="AI Book Writer - Generate full outlines and books"
+            >
+              📚 Book Writer
+            </button>
           </div>
         </div>
 

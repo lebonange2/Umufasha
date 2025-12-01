@@ -25,10 +25,11 @@ from app.routes import (
     rsvp,
     testing,
     writer,
+    writer_documents,
+    book_writer,
     product_debate,
     mindmaps
 )
-from app.routes import writer_documents
 from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
@@ -105,6 +106,7 @@ app.include_router(rsvp.router, prefix="/rsvp", tags=["rsvp"])
 app.include_router(testing.router, prefix="/testing", tags=["testing"])
 app.include_router(writer.router, tags=["writer"])
 app.include_router(writer_documents.router, tags=["writer-documents"])
+app.include_router(book_writer.router, tags=["book-writer"])
 app.include_router(product_debate.router, tags=["product-debate"])
 app.include_router(mindmaps.router, tags=["mindmaps"])
 
@@ -184,7 +186,7 @@ async def writer_page(request: Request, path: str = ""):
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="http://localhost:5173/src/main.tsx"></script>
+    <script type="module" src="brahttp://localhost:5173/src/main.tsx"></script>
 </body>
 </html>
         """)

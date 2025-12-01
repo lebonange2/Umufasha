@@ -218,3 +218,71 @@ class MindmapNode(Base):
         Index("idx_nodes_mindmap", "mindmap_id"),
         Index("idx_nodes_parent", "parent_id"),
     )
+
+
+class BookProject(Base):
+    """Book project model."""
+    __tablename__ = "book_projects"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=False, default="Untitled Book")
+    initial_prompt = Column(Text, nullable=True)
+    num_chapters = Column(Integer, default=25)
+    status = Column(String(20), default="draft")  # draft, outline_generating, outline_complete, generating, complete, error
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    outline = relationship("BookOutline", back_populates="project", uselist=False, cascade="all, delete-orphan")
+    chapters = relationship("BookChapter", back_populates="project", cascade="all, delete-orphan", order_by="BookChapter.chapter_number")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_books_status", "status"),
+        Index("idx_books_updated", "updated_at"),
+    )
+
+
+class BookOutline(Base):
+    """Book outline model."""
+    __tablename__ = "book_outlines"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String(36), ForeignKey("book_projects.id"), nullable=False, unique=True)
+    outline_data = Column(JSON, nullable=False)  # List of chapter outlines
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    project = relationship("BookProject", back_populates="outline")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_outline_project", "project_id"),
+    )
+
+
+class BookChapter(Base):
+    """Book chapter model."""
+    __tablename__ = "book_chapters"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String(36), ForeignKey("book_projects.id"), nullable=False)
+    chapter_number = Column(Integer, nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=True)
+    prompt = Column(Text, nullable=True)  # Original chapter prompt from outline
+    status = Column(String(20), default="pending")  # pending, generating, complete, error
+    word_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    project = relationship("BookProject", back_populates="chapters")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_chapters_project", "project_id"),
+        Index("idx_chapters_number", "project_id", "chapter_number"),
+        UniqueConstraint("project_id", "chapter_number", name="uq_project_chapter"),
+    )
