@@ -8,12 +8,19 @@ function App() {
   // When served from /writer, use /writer as basename
   // When served from /writer-static/, use /writer-static/ as basename
   const currentPath = window.location.pathname;
-  let basePath = '/writer-static/';
   
-  // If we're at /writer (not /writer-static), use /writer as basename
-  if (currentPath === '/writer' || (currentPath.startsWith('/writer/') && !currentPath.startsWith('/writer-static'))) {
+  // Default to /writer-static for built assets
+  let basePath = '/writer-static';
+  
+  // If path starts with /writer (but not /writer-static), use /writer as basename
+  if (currentPath.startsWith('/writer/') && !currentPath.startsWith('/writer-static/')) {
+    basePath = '/writer';
+  } else if (currentPath === '/writer') {
     basePath = '/writer';
   }
+  
+  // Debug logging (remove in production if needed)
+  console.log('App basename:', basePath, 'currentPath:', currentPath);
   
   return (
     <BrowserRouter basename={basePath}>
