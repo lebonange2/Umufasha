@@ -67,3 +67,13 @@ htmlcov/
 *.tmp
 *.bak
 .cache/
+node_modules/
+mindmapper/node_modules/
+
+# Database
+*.db
+assistant.db
+
+# Sessions and output
+sessions/
+out/
