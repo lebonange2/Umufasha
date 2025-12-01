@@ -44,9 +44,30 @@ if [ ! -f "assistant.db" ]; then
     python3 scripts/init_db.py
 fi
 
+# Check if Ollama is running (for local AI)
+if command -v ollama &> /dev/null; then
+    if ! pgrep -x "ollama" > /dev/null; then
+        echo "🤖 Starting Ollama server for local AI..."
+        ollama serve > /tmp/ollama.log 2>&1 &
+        sleep 3
+        if pgrep -x "ollama" > /dev/null; then
+            echo "✅ Ollama server started"
+        else
+            echo "⚠️  Warning: Ollama server failed to start. Local AI may not work."
+            echo "   Check /tmp/ollama.log for details"
+        fi
+    else
+        echo "✅ Ollama server is running"
+    fi
+else
+    echo "⚠️  Warning: Ollama not installed. Local AI will not be available."
+    echo "   Install with: curl -fsSL https://ollama.com/install.sh | sh"
+fi
+
 # Start the application
 echo "🌐 Starting Personal Assistant on http://localhost:8000"
 echo "📊 Admin interface: http://localhost:8000/admin"
+echo "🧠 Mindmapper: http://localhost:8000/brainstorm/mindmapper"
 echo "📚 API docs: http://localhost:8000/docs"
 echo "🔧 Health check: http://localhost:8000/health"
 echo ""

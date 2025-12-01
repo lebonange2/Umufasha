@@ -73,6 +73,39 @@ print_status "Installing Python dependencies..."
 pip install -r requirements-app.txt
 print_success "Dependencies installed"
 
+# Verify critical packages
+print_status "Verifying critical packages..."
+MISSING_PACKAGES=()
+
+python3 -c "import numpy; print(f'✓ numpy {numpy.__version__}')" 2>/dev/null || {
+    print_warning "numpy not found, reinstalling..."
+    pip install numpy==1.26.3
+    MISSING_PACKAGES+=("numpy")
+}
+
+python3 -c "import fastapi; print(f'✓ fastapi {fastapi.__version__}')" 2>/dev/null || {
+    print_error "fastapi installation failed"
+    exit 1
+}
+
+python3 -c "import httpx; print(f'✓ httpx {httpx.__version__}')" 2>/dev/null || {
+    print_warning "httpx not found, installing..."
+    pip install httpx==0.25.2
+    MISSING_PACKAGES+=("httpx")
+}
+
+python3 -c "import sqlalchemy; print(f'✓ sqlalchemy {sqlalchemy.__version__}')" 2>/dev/null || {
+    print_warning "sqlalchemy not found, installing..."
+    pip install "sqlalchemy[asyncio]==2.0.23"
+    MISSING_PACKAGES+=("sqlalchemy")
+}
+
+if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+    print_warning "Some packages were missing and have been reinstalled: ${MISSING_PACKAGES[*]}"
+else
+    print_success "All critical packages verified"
+fi
+
 # Install additional SQLite driver
 print_status "Installing SQLite driver..."
 pip install aiosqlite
@@ -105,10 +138,15 @@ MOCK_MODE=true
 MOCK_TWILIO=true
 MOCK_SENDGRID=true
 
-# LLM Configuration (optional for testing)
-OPENAI_API_KEY=your_openai_api_key_here
-LLM_BASE_URL=
-LLM_MODEL=gpt-4o
+# LLM Configuration - Default to local model (Ollama)
+LLM_PROVIDER=local
+LLM_MODEL=llama3.1
+LLM_LOCAL_URL=http://localhost:11434/v1
+
+# Optional: Cloud providers (uncomment if needed)
+# OPENAI_API_KEY=your_openai_api_key_here
+# ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# LLM_BASE_URL=
 
 # Twilio Configuration (not used in mock mode)
 TWILIO_ACCOUNT_SID=your_twilio_account_sid
@@ -242,6 +280,63 @@ EOF
 chmod +x stop.sh
 print_success "Stop script created"
 
+# Setup Ollama for local AI models (optional but recommended)
+print_status "Setting up Ollama for local AI models..."
+if ! command -v ollama &> /dev/null; then
+    print_status "Installing Ollama..."
+    if curl -fsSL https://ollama.com/install.sh | sh; then
+        print_success "Ollama installed"
+    else
+        print_warning "Ollama installation failed. You can install it later with: curl -fsSL https://ollama.com/install.sh | sh"
+        print_warning "The app will work without Ollama, but local AI features won't be available"
+    fi
+else
+    print_success "Ollama is already installed"
+fi
+
+# Start Ollama in background if not running (only if installed)
+if command -v ollama &> /dev/null; then
+    if ! pgrep -x "ollama" > /dev/null; then
+        print_status "Starting Ollama server..."
+        ollama serve > /tmp/ollama.log 2>&1 &
+        OLLAMA_PID=$!
+        sleep 3
+        if kill -0 $OLLAMA_PID 2>/dev/null && curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            print_success "Ollama server started (PID: $OLLAMA_PID)"
+        else
+            print_warning "Ollama server may have failed to start. Check /tmp/ollama.log"
+            print_warning "You can start it manually later with: ollama serve"
+        fi
+    else
+        print_success "Ollama server is already running"
+    fi
+    
+    # Check if llama3.1 model is already installed
+    if ollama list 2>/dev/null | grep -q "llama3.1"; then
+        print_success "llama3.1 model is already installed"
+    else
+        print_status "Downloading llama3.1 model (this may take 5-10 minutes, ~5GB)..."
+        print_warning "You can skip this and download later with: ollama pull llama3.1"
+        print_warning "The app will work, but local AI needs the model to be downloaded"
+        
+        # Try to pull with timeout (10 minutes)
+        if timeout 600 ollama pull llama3.1 2>&1 | tee /tmp/ollama_pull.log; then
+            print_success "llama3.1 model downloaded successfully"
+        else
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+                print_warning "Model download timed out (10 minutes). Download it later with: ollama pull llama3.1"
+            else
+                print_warning "Model download failed. You can try again later with: ollama pull llama3.1"
+            fi
+            print_warning "The app will still work, but local AI features require the model"
+        fi
+    fi
+else
+    print_warning "Ollama not installed. Local AI features will not be available."
+    print_warning "Install with: curl -fsSL https://ollama.com/install.sh | sh"
+fi
+
 # Create test script
 print_status "Creating test script..."
 cat > test.sh << 'EOF'
@@ -271,12 +366,18 @@ echo "🎉 Setup completed successfully!"
 echo "================================"
 echo ""
 echo "📋 Next steps:"
-echo "1. Start unified application: ./start_unified.sh"
+echo "1. Start application: ./start.sh"
 echo "2. Open dashboard: http://localhost:8000"
-echo "3. Or start personal assistant only: ./start.sh"
+echo "3. Mindmapper: http://localhost:8000/brainstorm/mindmapper"
 echo "4. Login with: admin / admin123"
 echo "5. Run tests: ./test.sh"
 echo "6. Stop application: ./stop.sh"
+echo ""
+echo "🤖 Local AI (Ollama):"
+echo "- Model: llama3.1 (default)"
+echo "- Status: Check with: ollama list"
+echo "- If model not downloaded: ollama pull llama3.1"
+echo "- Test: ollama run llama3.1 'Hello'"
 echo ""
 echo "📚 Documentation:"
 echo "- Quick Start Guide: QUICKSTART.md"
