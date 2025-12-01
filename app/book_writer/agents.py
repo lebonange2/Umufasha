@@ -112,35 +112,82 @@ WORLD_ELEMENTS:
         return response
 
     async def outline_creator(self, initial_prompt: str, story_arc: str, world_elements: str, num_chapters: int) -> str:
-        """Outline creator agent - creates detailed chapter outlines."""
-        system_message = f"""Generate a detailed {num_chapters}-chapter outline.
+        """Outline creator agent - creates detailed chapter outlines with fully descriptive text."""
+        system_message = f"""You are an expert story outline creator. Generate a complete, fully-filled {num_chapters}-chapter outline.
 
-YOU MUST USE EXACTLY THIS FORMAT FOR EACH CHAPTER - NO DEVIATIONS:
+CRITICAL: Every element must have REAL, SPECIFIC, DESCRIPTIVE text - NO placeholders, NO generic labels.
 
-Chapter 1: [Title]
-Chapter Title: [Same title as above]
+FORMAT FOR EACH CHAPTER (use this EXACT structure):
+
+Chapter 1: [A specific, descriptive chapter title that captures the chapter's main event]
+Chapter Title: [Same as above]
 Key Events:
-- [Event 1]
-- [Event 2]
-- [Event 3]
-Character Developments: [Specific character moments and changes]
-Setting: [Specific location and atmosphere]
+- [Specific event 1 - a full sentence describing what happens]
+- [Specific event 2 - a full sentence describing what happens]
+- [Specific event 3 - a full sentence describing what happens]
+Character Developments: [Specific description of how characters change or develop in this chapter]
+Setting: [Specific location and atmosphere description]
 Tone: [Specific emotional and narrative tone]
+
+Sections:
+Section 1: [A specific, descriptive section title - NOT "Section 1"]
+- Subsection 1.1: [A specific, descriptive subsection title - NOT "Subsection 1.1"]
+  Main Points:
+  * [A FULL SENTENCE describing what happens in paragraph 1 - like "Introduce Daniel, a tired Earth engineer living in a collapsing megacity, who secretly dreams of the stars."]
+  * [A FULL SENTENCE describing what happens in paragraph 2 - be specific and story-relevant]
+  * [A FULL SENTENCE describing what happens in paragraph 3 - be specific and story-relevant]
+- Subsection 1.2: [A specific, descriptive subsection title - NOT "Subsection 1.2"]
+  Main Points:
+  * [A FULL SENTENCE describing what happens in paragraph 1]
+  * [A FULL SENTENCE describing what happens in paragraph 2]
+  * [A FULL SENTENCE describing what happens in paragraph 3]
+Section 2: [A specific, descriptive section title]
+- Subsection 2.1: [A specific, descriptive subsection title]
+  Main Points:
+  * [A FULL SENTENCE describing what happens in paragraph 1]
+  * [A FULL SENTENCE describing what happens in paragraph 2]
+  * [A FULL SENTENCE describing what happens in paragraph 3]
+- Subsection 2.2: [A specific, descriptive subsection title]
+  Main Points:
+  * [A FULL SENTENCE describing what happens in paragraph 1]
+  * [A FULL SENTENCE describing what happens in paragraph 2]
+  * [A FULL SENTENCE describing what happens in paragraph 3]
+Section 3: [A specific, descriptive section title]
+- Subsection 3.1: [A specific, descriptive subsection title]
+  Main Points:
+  * [A FULL SENTENCE describing what happens in paragraph 1]
+  * [A FULL SENTENCE describing what happens in paragraph 2]
+  * [A FULL SENTENCE describing what happens in paragraph 3]
+- Subsection 3.2: [A specific, descriptive subsection title]
+  Main Points:
+  * [A FULL SENTENCE describing what happens in paragraph 1]
+  * [A FULL SENTENCE describing what happens in paragraph 2]
+  * [A FULL SENTENCE describing what happens in paragraph 3]
 
 [REPEAT THIS EXACT FORMAT FOR ALL {num_chapters} CHAPTERS]
 
-Requirements:
-1. EVERY field must be present for EVERY chapter
-2. EVERY chapter must have AT LEAST 3 specific Key Events
-3. ALL chapters must be detailed - no placeholders
-4. Format must match EXACTLY - including all headings and bullet points
+ABSOLUTE REQUIREMENTS:
+1. Chapter titles: Must be specific and descriptive (e.g., "Exile to the Red World" NOT "Chapter 1")
+2. Section titles: Must be specific and descriptive (e.g., "Leaving Earth" NOT "Section 1")
+3. Subsection titles: Must be specific and descriptive (e.g., "The Offer from Mars" NOT "Subsection 1.1")
+4. Main Points: MUST be FULL SENTENCES describing what happens in that paragraph
+   - Example GOOD: "Introduce Daniel, a tired Earth engineer living in a collapsing megacity, who secretly dreams of the stars."
+   - Example BAD: "Main point for paragraph 1" or "Character introduction"
+5. Every main point must be a complete sentence (10+ words minimum)
+6. All content must be story-specific based on the premise - do NOT use generic examples
+7. NO placeholders, NO brackets, NO generic labels
+8. Every chapter must have exactly 3 Sections
+9. Every section must have exactly 2 Subsections
+10. Every subsection must have exactly 3 Main Points
 
 Initial Premise:
 {initial_prompt}
 
 START WITH 'OUTLINE:' AND END WITH 'END OF OUTLINE'"""
         
-        user_prompt = f"""Create a {num_chapters}-chapter outline.
+        user_prompt = f"""Create a complete {num_chapters}-chapter outline based on this premise.
+
+Story Premise: {initial_prompt}
 
 Story Arc:
 {story_arc}
@@ -148,7 +195,19 @@ Story Arc:
 World Elements:
 {world_elements}
 
-Generate the complete outline now."""
+CRITICAL INSTRUCTIONS:
+1. Generate SPECIFIC, DESCRIPTIVE titles for every chapter, section, and subsection
+2. For each main point, write a FULL SENTENCE (10+ words) describing what happens in that paragraph
+3. Base all content on the story premise - make it relevant to the specific story
+4. Every main point should read like: "Main point for paragraph 1: [full descriptive sentence]"
+5. Do NOT use generic labels like "Section 1" or "Main point for paragraph 1" as the actual content
+6. Make every element story-specific and detailed
+
+Example of what main points should look like:
+* Main point for paragraph 1: Introduce Daniel, a tired Earth engineer living in a collapsing megacity, who secretly dreams of the stars.
+* Main point for paragraph 2: He receives a mysterious encrypted message inviting him to join an advanced Martian civilization that has watched Earth for decades.
+
+Generate the complete outline now with FULLY FILLED content at every level."""
         
         response = await self.llm_client.complete(system=system_message, user=user_prompt)
         return response
@@ -198,18 +257,20 @@ Provide a memory update."""
 Book Context:
 {outline_context}
 
-Your focus:
+            Your focus:
 1. Write according to the outlined plot points
-2. Maintain consistent character voices
-3. Incorporate world-building details
-4. Create engaging prose
-5. Please make sure that you write the complete scene, do not leave it incomplete
-6. Each chapter MUST be at least 5000 words (approximately 30,000 characters). Consider this a hard requirement. If your output is shorter, continue writing until you reach this minimum length
-7. Ensure transitions are smooth and logical
-8. Do not cut off the scene, make sure it has a proper ending
-9. Add a lot of details, and describe the environment and characters where it makes sense
+2. Follow the main points for each subsection/paragraph - write one paragraph for each main point
+3. Maintain consistent character voices
+4. Incorporate world-building details
+5. Create engaging prose
+6. Please make sure that you write the complete scene, do not leave it incomplete
+7. Each chapter MUST be at least 5000 words (approximately 30,000 characters). Consider this a hard requirement. If your output is shorter, continue writing until you reach this minimum length
+8. Ensure transitions are smooth and logical
+9. Do not cut off the scene, make sure it has a proper ending
+10. Add a lot of details, and describe the environment and characters where it makes sense
+11. Structure your writing to follow the sections and subsections, with each main point becoming a paragraph
 
-Always reference the outline and previous content.
+Always reference the outline and previous content, especially the main points for each subsection.
 Mark drafts with 'SCENE:' and final versions with 'SCENE FINAL:'"""
         
         user_prompt = f"""Write Chapter {chapter_number}:

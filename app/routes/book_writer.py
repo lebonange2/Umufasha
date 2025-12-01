@@ -42,6 +42,7 @@ class ChapterOutline(BaseModel):
     chapter_number: int
     title: str
     prompt: str
+    sections: Optional[List[Dict[str, Any]]] = []
 
 
 class BookOutlineResponse(BaseModel):
@@ -171,12 +172,43 @@ async def generate_outline(project_id: str, db: AsyncSession = Depends(get_db)):
             
             outline = await outline_gen.generate_outline(project.initial_prompt, project.num_chapters)
             
+            # Ensure all chapters have sections - add defaults if missing
+            for ch in outline:
+                if not ch.get("sections") or len(ch.get("sections", [])) == 0:
+                    logger.warning(f"Chapter {ch['chapter_number']} missing sections, adding defaults")
+                    ch["sections"] = [
+                        {
+                            "title": f"Section {j+1}",
+                            "subsections": [
+                                {
+                                    "title": f"Subsection {j+1}.{k+1}",
+                                    "main_points": [
+                                        {"text": f"Main point for paragraph {m+1}"} for m in range(3)
+                                    ]
+                                } for k in range(2)
+                            ]
+                        } for j in range(3)
+                    ]
+                    # Update prompt to include sections
+                    if "- Sections:" not in ch.get("prompt", ""):
+                        sections_text = "\n".join([
+                            f"  Section {j+1}: {sec['title']}" + 
+                            "\n    " + "\n    ".join([
+                                f"- Subsection {j+1}.{k+1}: {sub['title']}\n      Main Points:\n        " +
+                                "\n        ".join([f"* {mp.get('text', mp) if isinstance(mp, dict) else mp}" for mp in sub['main_points']])
+                                for k, sub in enumerate(sec['subsections'])
+                            ])
+                            for j, sec in enumerate(ch["sections"])
+                        ])
+                        ch["prompt"] = ch.get("prompt", "") + f"\n- Sections:\n{sections_text}"
+            
             # Save outline
             outline_data = [
                 {
                     "chapter_number": ch["chapter_number"],
                     "title": ch["title"],
-                    "prompt": ch["prompt"]
+                    "prompt": ch["prompt"],
+                    "sections": ch.get("sections", [])
                 }
                 for ch in outline
             ]
@@ -243,7 +275,79 @@ async def get_outline(project_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get outline: {str(e)}")
 
 
-@router.post("/api/book-writer/projects/{project_id}/generate-book")
+@router.put("/api/book-writer/projects/{project_id}/outline", response_model=BookOutlineResponse)
+async def update_outline(
+    project_id: str,
+    outline_data: List[ChapterOutline],
+    db: AsyncSession = Depends(get_db)
+):
+    """Update outline for a book project."""
+    try:
+        result = await db.execute(select(BookOutline).where(BookOutline.project_id == project_id))
+        outline = result.scalar_one_or_none()
+        
+        if not outline:
+            raise HTTPException(status_code=404, detail="Outline not found")
+        
+        # Convert to dict format for storage and regenerate prompt from sections
+        outline_dict = []
+        for ch in outline_data:
+            sections = ch.sections if hasattr(ch, 'sections') and ch.sections else []
+            
+            # Regenerate prompt to include updated sections
+            prompt_parts = [ch.prompt.split('\n- Sections:')[0]] if '- Sections:' in ch.prompt else [ch.prompt]
+            
+            if sections:
+                sections_text_parts = []
+                for sec_idx, sec in enumerate(sections, 1):
+                    section_text = f"  Section {sec_idx}: {sec.get('title', '')}"
+                    if sec.get('subsections'):
+                        for sub_idx, sub in enumerate(sec['subsections'], 1):
+                            section_text += f"\n    - Subsection {sec_idx}.{sub_idx}: {sub.get('title', '')}"
+                            if sub.get('main_points'):
+                                section_text += "\n      Main Points:"
+                                for mp_idx, mp in enumerate(sub['main_points'], 1):
+                                    mp_text = mp.get('text', '') if isinstance(mp, dict) else str(mp)
+                                    section_text += f"\n        * {mp_text}"
+                    sections_text_parts.append(section_text)
+                
+                if sections_text_parts:
+                    prompt_parts.append(f"- Sections:\n" + "\n".join(sections_text_parts))
+            
+            outline_dict.append({
+                "chapter_number": ch.chapter_number,
+                "title": ch.title,
+                "prompt": "\n".join(prompt_parts),
+                "sections": sections
+            })
+        
+        outline.outline_data = outline_dict
+        await db.commit()
+        await db.refresh(outline)
+        
+        return BookOutlineResponse(
+            id=outline.id,
+            project_id=outline.project_id,
+            outline_data=[ChapterOutline(**ch) for ch in outline.outline_data],
+            created_at=outline.created_at.isoformat(),
+            updated_at=outline.updated_at.isoformat()
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to update outline", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to update outline: {str(e)}")
+
+
+class BookGenerationResponse(BaseModel):
+    """Book generation response."""
+    success: bool
+    total_chapters: int
+    completed_chapters: int
+    message: Optional[str] = None
+
+
+@router.post("/api/book-writer/projects/{project_id}/generate-book", response_model=BookGenerationResponse)
 async def generate_book(project_id: str, db: AsyncSession = Depends(get_db)):
     """Generate full book for a project."""
     try:
@@ -307,11 +411,12 @@ async def generate_book(project_id: str, db: AsyncSession = Depends(get_db)):
             project.status = "complete" if book_result["completed_chapters"] == book_result["total_chapters"] else "generating"
             await db.commit()
             
-            return {
-                "success": True,
-                "total_chapters": book_result["total_chapters"],
-                "completed_chapters": book_result["completed_chapters"]
-            }
+            return BookGenerationResponse(
+                success=True,
+                total_chapters=book_result["total_chapters"],
+                completed_chapters=book_result["completed_chapters"],
+                message=f"Generated {book_result['completed_chapters']} out of {book_result['total_chapters']} chapters"
+            )
         except Exception as e:
             project.status = "error"
             await db.commit()
