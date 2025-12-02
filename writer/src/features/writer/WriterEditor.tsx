@@ -140,10 +140,10 @@ export default function WriterEditor({
   const readingTime = Math.ceil(wordCount / 200); // Assuming 200 words per minute
 
   return (
-    <div className={`flex flex-col h-full ${focusMode ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+    <div className={`flex flex-col flex-1 overflow-hidden ${focusMode ? 'fixed inset-0 z-50 bg-white' : ''}`}>
       {/* Header */}
       {!focusMode && (
-        <div className="border-b p-4 bg-white">
+        <div className="border-b p-4 bg-white flex-shrink-0">
           <input
             ref={titleRef}
             type="text"

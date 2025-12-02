@@ -164,6 +164,11 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
         }),
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
+        throw new Error(errorData.detail || errorData.error || `Conversion failed (${response.status})`);
+      }
+
       const data = await response.json();
       
       if (data.success && data.audio) {
@@ -177,11 +182,20 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
           }
         }, 500);
       } else {
-        throw new Error(data.error || 'Conversion failed');
+        throw new Error(data.error || data.detail || 'Conversion failed');
       }
     } catch (error: any) {
       console.error('Conversion error:', error);
-      setError(error.message || 'Failed to convert PDF to audio. Make sure TTS models are installed.');
+      let errorMessage = error.message || 'Failed to convert PDF to audio.';
+      
+      // Provide more specific error messages
+      if (errorMessage.includes('TTS model not available') || errorMessage.includes('No TTS model')) {
+        errorMessage = 'TTS models are not installed. Install with: pip install TTS (or pip install piper-tts for Python 3.12+)';
+      } else if (errorMessage.includes('Python')) {
+        errorMessage = 'TTS installation issue detected. For Python 3.12+, use: pip install piper-tts';
+      }
+      
+      setError(errorMessage);
     } finally {
       setConverting(false);
       setProgress('');
@@ -232,17 +246,17 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-3">
+    <div className="space-y-2">
+      <div className="space-y-2">
         {/* Upload Section */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <label className="block text-xs font-medium">PDF Source</label>
           <button
             onClick={() => setShowUpload(!showUpload)}
             disabled={uploading}
-            className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+            className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
           >
-            {uploading ? 'Uploading...' : '📁 Upload PDF'}
+            {uploading ? '⏳' : '📁'}
           </button>
         </div>
 
@@ -263,11 +277,11 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
         )}
 
         {/* PDF Selection */}
-        <div>
-          <label className="block text-xs font-medium mb-1">Select PDF Document</label>
+        <div className="mb-2">
+          <label className="block text-xs font-medium mb-1">Select PDF</label>
           {allPDFs.length === 0 ? (
-            <p className="text-xs text-gray-500 py-2">
-              No PDF documents available. Upload a PDF or generate one using Ferrari Company or Book Writer.
+            <p className="text-xs text-gray-500 py-1">
+              No PDFs available. Upload or generate one.
             </p>
           ) : (
             <select
@@ -277,7 +291,7 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
                 setSelectedSource(selected || null);
               }}
               disabled={converting}
-              className="w-full p-2 border rounded text-sm disabled:opacity-50"
+              className="w-full p-1.5 border rounded text-xs disabled:opacity-50"
             >
               <option value="">-- Select a PDF document --</option>
               {uploadedDocs.length > 0 && (
@@ -312,9 +326,9 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
         </div>
 
         {selectedSource && (
-          <div className="p-2 bg-gray-50 border border-gray-200 rounded text-xs">
-            <p className="font-medium">Selected:</p>
-            <p className="text-gray-600">
+          <div className="p-1.5 bg-gray-50 border border-gray-200 rounded text-xs mb-2">
+            <p className="font-medium text-xs">Selected:</p>
+            <p className="text-gray-600 text-xs truncate">
               {getSourceLabel(selectedSource.source)} - {selectedSource.name}
             </p>
           </div>
@@ -324,7 +338,7 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
         <button
           onClick={handleConvertToAudio}
           disabled={!selectedSource || converting}
-          className="w-full px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 text-xs"
         >
           {converting ? (
             <>
@@ -341,22 +355,22 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
 
         {/* Progress Message */}
         {progress && (
-          <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+          <div className="p-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800 mb-2">
             {progress}
           </div>
         )}
 
         {/* Error Message */}
         {error && (
-          <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+          <div className="p-1.5 bg-red-50 border border-red-200 rounded text-xs text-red-800 mb-2">
             <strong>Error:</strong> {error}
-            <div className="mt-2 text-xs">
-              <p>To install TTS models, run:</p>
-              <code className="block bg-red-100 p-1 rounded mt-1">
+            <div className="mt-1 text-xs">
+              <p className="font-medium mt-1">Install TTS:</p>
+              <code className="block bg-red-100 p-0.5 rounded mt-0.5 text-xs">
                 pip install TTS
               </code>
-              <p className="mt-2">Or for lighter option:</p>
-              <code className="block bg-red-100 p-1 rounded mt-1">
+              <p className="mt-1">Or lighter option:</p>
+              <code className="block bg-red-100 p-0.5 rounded mt-0.5 text-xs">
                 pip install piper-tts
               </code>
             </div>
@@ -365,7 +379,7 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
 
         {/* Audio Player */}
         {audioFile && (
-          <div className="space-y-2 p-3 bg-green-50 border border-green-200 rounded">
+          <div className="space-y-1.5 p-2 bg-green-50 border border-green-200 rounded mb-2">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-green-800">
@@ -386,7 +400,7 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
             <audio
               ref={audioRef}
               controls
-              className="w-full"
+              className="w-full h-8"
               src={audioFile.file_path}
             >
               Your browser does not support the audio element.
@@ -394,17 +408,17 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
           </div>
         )}
 
-        {/* Info Box */}
-        <div className="p-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600">
-          <p className="font-medium mb-1">ℹ️ About this feature:</p>
-          <ul className="list-disc list-inside space-y-1 text-xs">
-            <li>Upload PDFs directly or use PDFs from Ferrari Company / Book Writer</li>
-            <li>Uses high-quality local TTS models (Coqui XTTS v2 or Piper TTS)</li>
-            <li>Converts entire PDF books to audio</li>
-            <li>No API keys required - runs completely locally</li>
-            <li>Large documents may take several minutes to process</li>
-          </ul>
-        </div>
+        {/* Info Box - Compact */}
+        <details className="text-xs">
+          <summary className="cursor-pointer text-gray-600 font-medium mb-1">ℹ️ About</summary>
+          <div className="p-1.5 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 mt-1">
+            <ul className="list-disc list-inside space-y-0.5 text-xs">
+              <li>Upload PDFs or use from Ferrari/Book Writer</li>
+              <li>Uses local TTS (Coqui XTTS v2 or Piper TTS)</li>
+              <li>No API keys needed</li>
+            </ul>
+          </div>
+        </details>
       </div>
     </div>
   );

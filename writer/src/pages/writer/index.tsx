@@ -460,9 +460,9 @@ export default function WriterPage() {
   }
 
   return (
-    <div className="flex h-screen bg-white">
+    <div className="flex h-screen bg-white overflow-hidden">
       {/* Main Editor */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <div className="border-b p-2 bg-gray-50">
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -606,8 +606,8 @@ export default function WriterPage() {
         />
       </div>
 
-      {/* AI Toolbox */}
-      <div className="flex flex-col h-full">
+      {/* AI Toolbox - Right Sidebar */}
+      <div className="flex flex-col h-full overflow-hidden" style={{ width: toolboxCollapsed ? '3rem' : '20rem', minWidth: toolboxCollapsed ? '3rem' : '20rem' }}>
         <AIToolbox
           settings={settings}
           onSettingsChange={setSettings}
@@ -623,34 +623,37 @@ export default function WriterPage() {
           selectedDocumentsCount={selectedDocuments.length}
         />
 
-        {/* Document Manager Panel */}
-        {showDocumentManager && !toolboxCollapsed && (
-          <div className="border-t bg-white p-4 overflow-y-auto max-h-96">
-            <DocumentManager
-              selectedDocuments={selectedDocuments}
-              onDocumentsChange={setSelectedDocuments}
-              textContext={textContext}
-              onTextContextChange={setTextContext}
-            />
-          </div>
-        )}
-
-        {/* PDF to Audio Panel - Show independently of toolbox collapse */}
-        {showPDFToAudio && (
-          <div className="border-t bg-white p-4 overflow-y-auto" style={{ maxHeight: toolboxCollapsed ? 'calc(100vh - 3rem)' : '400px' }}>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-sm">PDF to Audio Converter</h3>
-              <button
-                onClick={() => setShowPDFToAudio(false)}
-                className="text-gray-500 hover:text-gray-700 text-xs px-2 py-1"
-                title="Close PDF to Audio"
-              >
-                ✕
-              </button>
+        {/* Scrollable Panels Container */}
+        <div className="flex-1 overflow-y-auto border-t bg-white">
+          {/* Document Manager Panel */}
+          {showDocumentManager && !toolboxCollapsed && (
+            <div className="p-3 border-b">
+              <DocumentManager
+                selectedDocuments={selectedDocuments}
+                onDocumentsChange={setSelectedDocuments}
+                textContext={textContext}
+                onTextContextChange={setTextContext}
+              />
             </div>
-            <PDFToAudio />
-          </div>
-        )}
+          )}
+
+          {/* PDF to Audio Panel */}
+          {showPDFToAudio && (
+            <div className="p-3 border-b">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-xs">PDF to Audio</h3>
+                <button
+                  onClick={() => setShowPDFToAudio(false)}
+                  className="text-gray-500 hover:text-gray-700 text-xs px-1 py-0.5"
+                  title="Close PDF to Audio"
+                >
+                  ✕
+                </button>
+              </div>
+              <PDFToAudio />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

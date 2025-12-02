@@ -395,7 +395,20 @@ def get_tts_model():
 def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str] = None):
     """Convert text to speech synchronously (runs in thread pool)."""
     try:
-        tts, tts_type = get_tts_model()
+        # Try to get TTS model, with better error handling
+        try:
+            tts, tts_type = get_tts_model()
+        except HTTPException as e:
+            # Re-raise HTTP exceptions (they have proper error messages)
+            raise
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"TTS model initialization failed: {error_msg}")
+            raise Exception(
+                f"TTS model not available: {error_msg}. "
+                f"Install with: pip install TTS (for Coqui TTS) or pip install piper-tts (for Piper TTS). "
+                f"Note: Coqui TTS requires Python <3.12. For Python 3.12+, use Piper TTS."
+            )
         
         # Clean and prepare text
         # Split into chunks if too long (TTS models have limits)
@@ -568,14 +581,35 @@ async def convert_pdf_to_audio(
         # Run TTS conversion in thread pool (it's CPU/GPU intensive)
         logger.info("Starting TTS conversion", doc_id=doc_id, text_length=len(text))
         
-        loop = asyncio.get_event_loop()
-        audio_file_path = await loop.run_in_executor(
-            tts_executor,
-            text_to_speech_sync,
-            text,
-            audio_path,
-            speaker_path
-        )
+        try:
+            loop = asyncio.get_event_loop()
+            audio_file_path = await loop.run_in_executor(
+                tts_executor,
+                text_to_speech_sync,
+                text,
+                audio_path,
+                speaker_path
+            )
+        except Exception as e:
+            error_msg = str(e)
+            logger.error("TTS conversion failed", error=error_msg, exc_info=True)
+            
+            # Provide helpful error messages
+            if "TTS model not available" in error_msg or "No TTS model" in error_msg:
+                raise HTTPException(
+                    status_code=500,
+                    detail="TTS models are not installed. Install with: pip install TTS (or pip install piper-tts for Python 3.12+)"
+                )
+            elif "ImportError" in error_msg or "ModuleNotFoundError" in error_msg:
+                raise HTTPException(
+                    status_code=500,
+                    detail="TTS library not found. Install with: pip install TTS (or pip install piper-tts for Python 3.12+)"
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"TTS conversion failed: {error_msg}"
+                )
         
         # Get audio file size
         audio_size = audio_path.stat().st_size if audio_path.exists() else 0
