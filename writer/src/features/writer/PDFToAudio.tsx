@@ -48,16 +48,20 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
       const data = await response.json();
       
       if (!data.available) {
-        setError(data.message || 'Bark TTS is not available. ' + (data.install_command || ''));
+        // Show error with install instructions
+        const errorMsg = data.message || 'Bark TTS is not available.';
+        const installCmd = data.install_command || 'pip install git+https://github.com/suno-ai/bark.git';
+        const note = data.note || 'After installation, restart the server';
+        setError(`${errorMsg}\n\nTo install Bark TTS, run:\n\n${installCmd}\n\n${note}`);
       } else {
         // Clear any previous errors if TTS is available
-        if (error && error.includes('Bark TTS')) {
-          setError(null);
-        }
+        setError(null);
+        console.log('✅ Bark TTS is available:', data.message);
       }
     } catch (error) {
       console.error('Failed to check TTS availability:', error);
       // Don't set error here - let the conversion attempt show the real error
+      // This prevents false errors if the endpoint is temporarily unavailable
     }
   };
 
