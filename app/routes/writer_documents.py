@@ -4,9 +4,11 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 import structlog
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 logger = structlog.get_logger(__name__)
 
@@ -16,8 +18,15 @@ router = APIRouter()
 UPLOADS_DIR = Path("app/static/writer/uploads")
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Create audio output directory
+AUDIO_DIR = Path("app/static/writer/audio")
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
 # Maximum file size (50MB)
 MAX_FILE_SIZE = 50 * 1024 * 1024
+
+# Thread pool for TTS operations
+tts_executor = ThreadPoolExecutor(max_workers=1)
 
 
 class DocumentInfo(BaseModel):
@@ -308,5 +317,287 @@ async def add_text_context(doc_id: str, request: Request):
         raise
     except Exception as e:
         logger.error("Add text context error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _init_tts_model():
+    """Initialize TTS model (lazy loading)."""
+    try:
+        # Try Coqui TTS XTTS v2 first (best quality)
+        try:
+            from TTS.api import TTS
+            import torch
+            
+            tts = TTS(
+                model_name="tts_models/multilingual/multi-dataset/xtts_v2",
+                progress_bar=False,
+                gpu=torch.cuda.is_available()
+            )
+            logger.info("Initialized Coqui TTS XTTS v2 model")
+            return tts, "coqui_xtts"
+        except ImportError:
+            logger.warning("Coqui TTS not installed, trying Piper TTS")
+        except Exception as e:
+            logger.warning(f"Coqui TTS initialization failed: {e}, trying Piper TTS")
+        
+        # Fallback to Piper TTS (lighter, faster)
+        try:
+            from piper import PiperVoice
+            from piper.download import ensure_voice_exists, find_voice
+            import json
+            
+            # Download and use Piper voice
+            voice_name = "en_US-lessac-medium"
+            voice_path = ensure_voice_exists(voice_name, [])
+            config_path = find_voice(voice_name, [])
+            
+            tts = PiperVoice.load(voice_path, config_path=config_path)
+            logger.info("Initialized Piper TTS model")
+            return tts, "piper"
+        except ImportError:
+            logger.error("Piper TTS not installed")
+        except Exception as e2:
+            logger.error(f"Piper TTS initialization failed: {e2}")
+        
+        # If both fail, raise exception
+        raise Exception(
+            "No TTS model available. Install Coqui TTS: pip install TTS, or Piper TTS: pip install piper-tts"
+        )
+    except Exception as e:
+        logger.error(f"TTS model initialization error: {e}")
+        raise
+
+
+# Global TTS model instance (lazy loaded)
+_tts_model = None
+_tts_type = None
+
+
+def get_tts_model():
+    """Get or initialize TTS model."""
+    global _tts_model, _tts_type
+    if _tts_model is None:
+        try:
+            _tts_model, _tts_type = _init_tts_model()
+        except Exception as e:
+            logger.error(f"Failed to initialize TTS model: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"TTS model not available: {str(e)}. Install with: pip install TTS or pip install piper-tts"
+            )
+    return _tts_model, _tts_type
+
+
+def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str] = None):
+    """Convert text to speech synchronously (runs in thread pool)."""
+    try:
+        tts, tts_type = get_tts_model()
+        
+        # Clean and prepare text
+        # Split into chunks if too long (TTS models have limits)
+        max_chunk_length = 500  # characters per chunk
+        chunks = []
+        current_chunk = ""
+        
+        sentences = text.split('. ')
+        for sentence in sentences:
+            if len(current_chunk) + len(sentence) < max_chunk_length:
+                current_chunk += sentence + '. '
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence + '. '
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        if not chunks:
+            chunks = [text[:max_chunk_length]]
+        
+        # Generate audio for each chunk and concatenate
+        import soundfile as sf
+        import numpy as np
+        
+        audio_segments = []
+        
+        for i, chunk in enumerate(chunks):
+            if not chunk.strip():
+                continue
+                
+            chunk_output = output_path.parent / f"{output_path.stem}_chunk_{i}.wav"
+            
+            if tts_type == "coqui_xtts":
+                # Coqui XTTS v2
+                if speaker_wav and os.path.exists(speaker_wav):
+                    tts.tts_to_file(
+                        text=chunk,
+                        file_path=str(chunk_output),
+                        speaker_wav=speaker_wav,
+                        language="en"
+                    )
+                else:
+                    # Use default speaker
+                    tts.tts_to_file(
+                        text=chunk,
+                        file_path=str(chunk_output),
+                        language="en"
+                    )
+            elif tts_type == "piper":
+                # Piper TTS
+                with open(chunk_output, "wb") as f:
+                    tts.synthesize(chunk, f)
+            
+            # Load and append audio
+            if chunk_output.exists():
+                data, sample_rate = sf.read(str(chunk_output))
+                audio_segments.append(data)
+                # Clean up chunk file
+                chunk_output.unlink()
+        
+        if not audio_segments:
+            raise ValueError("No audio generated")
+        
+        # Concatenate all audio segments
+        final_audio = np.concatenate(audio_segments)
+        
+        # Save final audio file
+        sf.write(str(output_path), final_audio, sample_rate)
+        
+        logger.info("TTS conversion completed", output_path=str(output_path), chunks=len(chunks))
+        return str(output_path)
+        
+    except Exception as e:
+        logger.error("TTS conversion error", error=str(e), exc_info=True)
+        raise
+
+
+@router.post("/api/writer/documents/{doc_id}/convert-to-audio")
+async def convert_pdf_to_audio(
+    doc_id: str,
+    speaker_wav: Optional[str] = None,
+    language: str = "en"
+):
+    """Convert PDF document to audio using local TTS model.
+    
+    Args:
+        doc_id: Document ID
+        speaker_wav: Optional path to speaker reference audio (for voice cloning with XTTS)
+        language: Language code (default: en)
+    """
+    try:
+        # Get document text
+        text_path = UPLOADS_DIR / f"{doc_id}.txt"
+        if not text_path.exists():
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        with open(text_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Document has no text content")
+        
+        # Get metadata
+        metadata_path = UPLOADS_DIR / f"{doc_id}.meta.json"
+        metadata = {}
+        if metadata_path.exists():
+            import json
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+        
+        doc_name = metadata.get("name", "document")
+        safe_name = "".join(c for c in doc_name if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+        safe_name = safe_name.replace(' ', '_')
+        
+        # Generate audio file path
+        audio_id = str(uuid.uuid4())
+        audio_path = AUDIO_DIR / f"{audio_id}.wav"
+        
+        # Check if speaker reference file exists
+        speaker_path = None
+        if speaker_wav:
+            speaker_path_obj = Path(speaker_wav)
+            if speaker_path_obj.exists():
+                speaker_path = str(speaker_path_obj)
+            else:
+                logger.warning(f"Speaker reference file not found: {speaker_wav}")
+        
+        # Run TTS conversion in thread pool (it's CPU/GPU intensive)
+        logger.info("Starting TTS conversion", doc_id=doc_id, text_length=len(text))
+        
+        loop = asyncio.get_event_loop()
+        audio_file_path = await loop.run_in_executor(
+            tts_executor,
+            text_to_speech_sync,
+            text,
+            audio_path,
+            speaker_path
+        )
+        
+        # Get audio file size
+        audio_size = audio_path.stat().st_size if audio_path.exists() else 0
+        
+        logger.info("TTS conversion completed", audio_path=audio_file_path, size=audio_size)
+        
+        return {
+            "success": True,
+            "audio": {
+                "id": audio_id,
+                "file_path": f"/api/writer/audio/{audio_id}",
+                "filename": f"{safe_name}.wav",
+                "size": audio_size,
+                "document_id": doc_id,
+                "document_name": doc_name
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("PDF to audio conversion error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Conversion failed: {str(e)}")
+
+
+@router.get("/api/writer/audio/{audio_id}")
+async def get_audio_file(audio_id: str):
+    """Get generated audio file."""
+    try:
+        audio_path = AUDIO_DIR / f"{audio_id}.wav"
+        if not audio_path.exists():
+            raise HTTPException(status_code=404, detail="Audio file not found")
+        
+        return FileResponse(
+            path=str(audio_path),
+            filename=f"{audio_id}.wav",
+            media_type="audio/wav"
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Get audio file error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/writer/audio")
+async def list_audio_files():
+    """List all generated audio files."""
+    try:
+        audio_files = []
+        for audio_file in AUDIO_DIR.glob("*.wav"):
+            audio_id = audio_file.stem
+            audio_files.append({
+                "id": audio_id,
+                "filename": audio_file.name,
+                "size": audio_file.stat().st_size,
+                "file_path": f"/api/writer/audio/{audio_id}"
+            })
+        
+        # Sort by modification time (newest first)
+        audio_files.sort(key=lambda x: (AUDIO_DIR / f"{x['id']}.wav").stat().st_mtime, reverse=True)
+        
+        return {"success": True, "audio_files": audio_files}
+    
+    except Exception as e:
+        logger.error("List audio files error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 

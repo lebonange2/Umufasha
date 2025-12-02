@@ -70,6 +70,7 @@ pip install --upgrade pip
 
 # Install requirements
 print_status "Installing Python dependencies..."
+pip install -r requirements.txt
 pip install -r requirements-app.txt
 print_success "Dependencies installed"
 
@@ -100,6 +101,20 @@ python3 -c "import sqlalchemy; print(f'✓ sqlalchemy {sqlalchemy.__version__}')
     MISSING_PACKAGES+=("sqlalchemy")
 }
 
+# Check TTS dependencies (optional but recommended)
+print_status "Checking TTS dependencies..."
+TTS_AVAILABLE=false
+if python3 -c "from TTS.api import TTS" 2>/dev/null; then
+    print_success "Coqui TTS found"
+    TTS_AVAILABLE=true
+elif python3 -c "from piper import PiperVoice" 2>/dev/null; then
+    print_success "Piper TTS found"
+    TTS_AVAILABLE=true
+else
+    print_warning "TTS libraries not found. PDF to Audio feature will not work."
+    print_warning "Install with: pip install TTS (or pip install piper-tts for lighter option)"
+fi
+
 if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
     print_warning "Some packages were missing and have been reinstalled: ${MISSING_PACKAGES[*]}"
 else
@@ -114,6 +129,8 @@ print_success "SQLite driver installed"
 # Create necessary directories
 print_status "Creating necessary directories..."
 mkdir -p app/static
+mkdir -p app/static/writer/uploads
+mkdir -p app/static/writer/audio
 mkdir -p logs
 print_success "Directories created"
 
@@ -199,11 +216,62 @@ print_status "Creating start script..."
 cat > start.sh << 'EOF'
 #!/bin/bash
 
-# Start Personal Assistant
+# Start Personal Assistant with all services
 echo "🚀 Starting Personal Assistant..."
+
+# Check if virtual environment exists
+if [ ! -d "venv" ]; then
+    echo "❌ Virtual environment not found. Please run ./setup.sh first."
+    exit 1
+fi
 
 # Activate virtual environment
 source venv/bin/activate
+
+# Check if .env exists
+if [ ! -f ".env" ]; then
+    echo "❌ Environment file not found. Please run ./setup.sh first."
+    exit 1
+fi
+
+# Check if database exists
+if [ ! -f "assistant.db" ]; then
+    echo "🗄️ Database not found. Initializing..."
+    python3 scripts/init_db.py
+fi
+
+# Start Ollama if installed and not running
+if command -v ollama &> /dev/null; then
+    if ! pgrep -x "ollama" > /dev/null; then
+        echo "🤖 Starting Ollama server..."
+        ollama serve > /tmp/ollama.log 2>&1 &
+        OLLAMA_PID=$!
+        sleep 3
+        if kill -0 $OLLAMA_PID 2>/dev/null && curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+            echo "✅ Ollama server started (PID: $OLLAMA_PID)"
+        else
+            echo "⚠️ Ollama server may have failed to start. Check /tmp/ollama.log"
+            echo "⚠️ You can start it manually later with: ollama serve"
+        fi
+    else
+        echo "✅ Ollama server is already running"
+    fi
+else
+    echo "⚠️ Ollama not installed. Local AI features will not be available."
+    echo "⚠️ Install with: curl -fsSL https://ollama.com/install.sh | sh"
+fi
+
+# Display startup information
+echo ""
+echo "🌐 Starting Personal Assistant on http://localhost:8000"
+echo "📊 Dashboard: http://localhost:8000"
+echo "✍️ Writer: http://localhost:8000/writer"
+echo "📚 Book Writer: http://localhost:8000/writer/book-writer"
+echo "📚 API Docs: http://localhost:8000/docs"
+echo "🔧 Health Check: http://localhost:8000/health"
+echo ""
+echo "Press Ctrl+C to stop the server"
+echo ""
 
 # Start the application
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -381,6 +449,16 @@ echo "- Model: llama3:latest (default)"
 echo "- Status: Check with: ollama list"
 echo "- If model not downloaded: ollama pull llama3:latest"
 echo "- Test: ollama run llama3:latest 'Hello'"
+echo ""
+echo "🎙️ Text-to-Speech (TTS):"
+if [ "$TTS_AVAILABLE" = true ]; then
+    echo "- Status: ✅ TTS libraries installed"
+    echo "- PDF to Audio: Available on /writer page"
+else
+    echo "- Status: ⚠️ TTS libraries not installed"
+    echo "- Install with: pip install TTS (or pip install piper-tts)"
+    echo "- PDF to Audio: Will not work until TTS is installed"
+fi
 echo ""
 echo "📚 Documentation:"
 echo "- Quick Start Guide: QUICKSTART.md"
