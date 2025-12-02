@@ -231,8 +231,18 @@ print_status "Python $PYTHON_VERSION detected - Bark supports Python >=3.8"
 # Disable hf_transfer requirement (optional, not needed for downloads)
 export HF_HUB_ENABLE_HF_TRANSFER=0
 
-if pip install git+https://github.com/suno-ai/bark.git >/dev/null 2>&1; then
-    print_success "Bark TTS installed successfully"
+# We're already in the venv (activated earlier), so pip and python3 point to venv
+# Check if Bark is already installed
+if python3 -c "from bark import generate_audio" 2>/dev/null; then
+    print_success "Bark TTS already installed in virtual environment"
+    # Try to install hf_transfer if not already installed
+    if ! python3 -c "import hf_transfer" 2>/dev/null; then
+        if pip install hf_transfer >/dev/null 2>&1; then
+            print_success "hf_transfer installed (optional, speeds up model downloads)"
+        fi
+    fi
+elif pip install git+https://github.com/suno-ai/bark.git >/dev/null 2>&1; then
+    print_success "Bark TTS installed successfully in virtual environment"
     print_warning "Note: First run will download models (~2GB), which may take time"
     # Try to install hf_transfer (optional, speeds up downloads but not required)
     if pip install hf_transfer >/dev/null 2>&1; then
@@ -240,17 +250,10 @@ if pip install git+https://github.com/suno-ai/bark.git >/dev/null 2>&1; then
     else
         print_warning "hf_transfer not installed (optional, downloads will use standard method)"
     fi
-elif python3 -c "from bark import generate_audio" 2>/dev/null; then
-    print_success "Bark TTS already installed"
-    # Try to install hf_transfer if not already installed
-    if ! python3 -c "import hf_transfer" 2>/dev/null; then
-        if pip install hf_transfer >/dev/null 2>&1; then
-            print_success "hf_transfer installed (optional, speeds up model downloads)"
-        fi
-    fi
 else
     print_warning "Bark TTS installation failed. TTS features will not be available."
-    print_warning "You can install manually later: pip install git+https://github.com/suno-ai/bark.git"
+    print_warning "You can install manually later:"
+    print_warning "  source venv/bin/activate && pip install git+https://github.com/suno-ai/bark.git"
     print_warning "Note: Bark requires torch and other dependencies. First run downloads ~2GB of models."
 fi
 

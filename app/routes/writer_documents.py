@@ -943,6 +943,56 @@ async def convert_pdf_to_audio(
         raise HTTPException(status_code=500, detail=f"Conversion failed: {str(e)}")
 
 
+@router.get("/api/writer/tts-check")
+async def check_tts_availability():
+    """Check if Bark TTS is available without initializing models.
+    
+    This endpoint allows the UI to verify Bark installation before attempting conversion.
+    """
+    try:
+        import sys
+        python_path = sys.executable
+        
+        # Try to import Bark (lightweight check)
+        try:
+            from bark import generate_audio, SAMPLE_RATE
+            return {
+                "success": True,
+                "available": True,
+                "message": "Bark TTS is installed and ready",
+                "python_path": python_path,
+                "sample_rate": SAMPLE_RATE
+            }
+        except ImportError as e:
+            return {
+                "success": False,
+                "available": False,
+                "message": "Bark TTS is not installed",
+                "error": str(e),
+                "python_path": python_path,
+                "install_command": "pip install git+https://github.com/suno-ai/bark.git",
+                "note": "After installation, restart the server"
+            }
+        except Exception as e:
+            # Bark is installed but might have initialization issues
+            return {
+                "success": False,
+                "available": False,
+                "message": "Bark TTS is installed but has issues",
+                "error": str(e)[:200],
+                "python_path": python_path,
+                "note": "Try restarting the server or check logs for details"
+            }
+    except Exception as e:
+        logger.error(f"TTS check error: {e}", exc_info=True)
+        return {
+            "success": False,
+            "available": False,
+            "message": "Error checking TTS availability",
+            "error": str(e)
+        }
+
+
 @router.get("/api/writer/tts-status/{task_id}")
 async def get_tts_status(task_id: str):
     """Get status of TTS conversion task.

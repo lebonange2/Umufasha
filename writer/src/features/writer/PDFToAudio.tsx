@@ -36,10 +36,30 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Load all PDF sources on mount
+  // Load all PDF sources on mount and check TTS availability
   useEffect(() => {
     loadAllPDFs();
+    checkTTSAvailability();
   }, []);
+
+  const checkTTSAvailability = async () => {
+    try {
+      const response = await fetch('/api/writer/tts-check');
+      const data = await response.json();
+      
+      if (!data.available) {
+        setError(data.message || 'Bark TTS is not available. ' + (data.install_command || ''));
+      } else {
+        // Clear any previous errors if TTS is available
+        if (error && error.includes('Bark TTS')) {
+          setError(null);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check TTS availability:', error);
+      // Don't set error here - let the conversion attempt show the real error
+    }
+  };
 
   const loadAllPDFs = async () => {
     await Promise.all([
