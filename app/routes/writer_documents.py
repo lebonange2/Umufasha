@@ -61,6 +61,19 @@ try:
         # Apply the patch
         torch.load = patched_load
         logger.info("Patched torch.load for Bark compatibility (module level)")
+        
+        # Fix torch.cuda.amp.autocast deprecation warning in Bark
+        # Bark uses torch.cuda.amp.autocast() which is deprecated in favor of torch.amp.autocast('cuda')
+        if hasattr(torch.cuda.amp, 'autocast'):
+            original_cuda_autocast = torch.cuda.amp.autocast
+            
+            def patched_cuda_autocast(*args, **kwargs):
+                # Redirect to new API: torch.amp.autocast('cuda', ...)
+                return torch.amp.autocast('cuda', *args, **kwargs)
+            
+            # Replace the deprecated function
+            torch.cuda.amp.autocast = patched_cuda_autocast
+            logger.info("Patched torch.cuda.amp.autocast for Bark compatibility (module level)")
 except ImportError:
     # torch/numpy not installed yet, will patch later in _init_tts_model
     pass
@@ -416,6 +429,19 @@ def _init_tts_model():
             # Apply the patch
             torch.load = patched_load
             logger.info("Patched torch.load for Bark compatibility")
+            
+            # Fix torch.cuda.amp.autocast deprecation warning in Bark
+            # Bark uses torch.cuda.amp.autocast() which is deprecated in favor of torch.amp.autocast('cuda')
+            if hasattr(torch.cuda.amp, 'autocast'):
+                original_cuda_autocast = torch.cuda.amp.autocast
+                
+                def patched_cuda_autocast(*args, **kwargs):
+                    # Redirect to new API: torch.amp.autocast('cuda', ...)
+                    return torch.amp.autocast('cuda', *args, **kwargs)
+                
+                # Replace the deprecated function
+                torch.cuda.amp.autocast = patched_cuda_autocast
+                logger.info("Patched torch.cuda.amp.autocast for Bark compatibility")
         else:
             logger.info("PyTorch patch already applied")
         

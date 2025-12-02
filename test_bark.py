@@ -40,6 +40,19 @@ try:
     torch.load = patched_load
     print("✅ Patched torch.load for Bark compatibility")
     
+    # Fix torch.cuda.amp.autocast deprecation warning in Bark
+    # Bark uses torch.cuda.amp.autocast() which is deprecated in favor of torch.amp.autocast('cuda')
+    if hasattr(torch.cuda.amp, 'autocast'):
+        original_cuda_autocast = torch.cuda.amp.autocast
+        
+        def patched_cuda_autocast(*args, **kwargs):
+            # Redirect to new API: torch.amp.autocast('cuda', ...)
+            return torch.amp.autocast('cuda', *args, **kwargs)
+        
+        # Replace the deprecated function
+        torch.cuda.amp.autocast = patched_cuda_autocast
+        print("✅ Patched torch.cuda.amp.autocast for Bark compatibility")
+    
 except ImportError as e:
     print(f"❌ Error: {e}")
     print("Make sure torch and numpy are installed: pip install torch numpy")
