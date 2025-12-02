@@ -6,11 +6,11 @@ This script applies the necessary patches before using Bark.
 import sys
 import os
 
-# Disable hf_transfer requirement (optional, speeds up downloads but not required)
-# This prevents errors if hf_transfer is not installed
-if 'HF_HUB_ENABLE_HF_TRANSFER' not in os.environ:
-    os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
-    print("✅ Disabled hf_transfer requirement (using standard download)")
+# CRITICAL: Disable hf_transfer requirement BEFORE any imports
+# This must be set before any huggingface_hub imports happen
+# Force it to 0 even if it was set to 1 elsewhere
+os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
+print("✅ Disabled hf_transfer requirement (using standard download)")
 
 # Apply PyTorch 2.6+ compatibility fix BEFORE importing Bark
 try:

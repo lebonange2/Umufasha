@@ -20,10 +20,10 @@ logger = structlog.get_logger(__name__)
 # This ensures the patch is applied before any Bark imports
 try:
     import os
-    # Disable hf_transfer requirement (optional, speeds up downloads but not required)
+    # CRITICAL: Force disable hf_transfer requirement BEFORE any huggingface imports
+    # This must be set to 0 even if it was set to 1 elsewhere (e.g., in Docker/system env)
     # This prevents errors if hf_transfer is not installed
-    if 'HF_HUB_ENABLE_HF_TRANSFER' not in os.environ:
-        os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
+    os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
     
     import torch
     import numpy
