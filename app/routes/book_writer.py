@@ -123,6 +123,38 @@ async def list_projects(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to list projects: {str(e)}")
 
 
+@router.get("/api/book-writer/projects-with-pdfs")
+async def list_projects_with_pdfs(db: AsyncSession = Depends(get_db)):
+    """List all book projects with PDF availability info."""
+    try:
+        result = await db.execute(select(BookProject).order_by(BookProject.updated_at.desc()))
+        projects = result.scalars().all()
+        
+        projects_with_pdfs = []
+        for p in projects:
+            # Check if project has chapters (PDF can be generated)
+            chapters_result = await db.execute(
+                select(BookChapter).where(BookChapter.project_id == p.id)
+            )
+            chapters = chapters_result.scalars().all()
+            has_chapters = len(chapters) > 0
+            
+            projects_with_pdfs.append({
+                "id": p.id,
+                "title": p.title,
+                "status": p.status,
+                "has_pdf": has_chapters,  # Can generate PDF if has chapters
+                "pdf_url": f"/api/book-writer/projects/{p.id}/download/pdf" if has_chapters else None,
+                "created_at": p.created_at.isoformat(),
+                "updated_at": p.updated_at.isoformat()
+            })
+        
+        return {"success": True, "projects": projects_with_pdfs}
+    except Exception as e:
+        logger.error("Failed to list projects with PDFs", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/book-writer/projects/{project_id}", response_model=BookProjectResponse)
 async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Get a book project."""

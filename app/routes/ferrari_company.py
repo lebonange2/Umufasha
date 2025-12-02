@@ -623,6 +623,31 @@ async def download_file(project_id: str, file_type: str):
         raise HTTPException(status_code=400, detail=f"Invalid file type: {file_type}")
 
 
+@router.get("/api/ferrari-company/projects")
+async def list_ferrari_projects():
+    """List all Ferrari company projects with their PDF files."""
+    try:
+        projects = []
+        for project_id, project_data in active_projects.items():
+            files = project_data.get("files", {})
+            pdf_path = files.get("pdf")
+            
+            projects.append({
+                "project_id": project_id,
+                "title": project_data.get("title", "Untitled"),
+                "status": project_data.get("status", "unknown"),
+                "has_pdf": pdf_path is not None and os.path.exists(pdf_path) if pdf_path else False,
+                "pdf_path": pdf_path,
+                "pdf_filename": Path(pdf_path).name if pdf_path and os.path.exists(pdf_path) else None,
+                "created_at": project_data.get("created_at", "")
+            })
+        
+        return {"success": True, "projects": projects}
+    except Exception as e:
+        logger.error("Failed to list Ferrari projects", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/ferrari-company/projects/{project_id}/files")
 async def get_file_info(project_id: str):
     """Get information about generated files."""

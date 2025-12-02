@@ -3,12 +3,16 @@ import os
 import uuid
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 import structlog
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.database import get_db, AsyncSessionLocal
+from app.models import BookProject, BookChapter
 
 logger = structlog.get_logger(__name__)
 
@@ -480,31 +484,71 @@ async def convert_pdf_to_audio(
     """Convert PDF document to audio using local TTS model.
     
     Args:
-        doc_id: Document ID
+        doc_id: Document ID (can be uploaded doc ID, ferrari project ID, or book-writer project ID)
         speaker_wav: Optional path to speaker reference audio (for voice cloning with XTTS)
         language: Language code (default: en)
     """
     try:
-        # Get document text
-        text_path = UPLOADS_DIR / f"{doc_id}.txt"
-        if not text_path.exists():
-            raise HTTPException(status_code=404, detail="Document not found")
+        text = None
+        doc_name = "document"
         
-        with open(text_path, 'r', encoding='utf-8') as f:
-            text = f.read()
+        # Check if it's an uploaded document
+        text_path = UPLOADS_DIR / f"{doc_id}.txt"
+        if text_path.exists():
+            with open(text_path, 'r', encoding='utf-8') as f:
+                text = f.read()
+            # Get metadata
+            metadata_path = UPLOADS_DIR / f"{doc_id}.meta.json"
+            if metadata_path.exists():
+                import json
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                    doc_name = metadata.get("name", "document")
+        else:
+            # Check if it's a ferrari-company project
+            from app.routes.ferrari_company import active_projects
+            if doc_id in active_projects:
+                project_data = active_projects[doc_id]
+                files = project_data.get("files", {})
+                pdf_path = files.get("pdf")
+                if pdf_path and os.path.exists(pdf_path):
+                    # Extract text from PDF
+                    text = extract_text_from_pdf(Path(pdf_path))
+                    doc_name = project_data.get("title", "Ferrari Book")
+            else:
+                # Check if it's a book-writer project - fetch text directly from database
+                try:
+                    async with AsyncSessionLocal() as db:
+                        result = await db.execute(select(BookProject).where(BookProject.id == doc_id))
+                        project = result.scalar_one_or_none()
+                        
+                        if project:
+                            # Get chapters
+                            chapters_result = await db.execute(
+                                select(BookChapter).where(BookChapter.project_id == doc_id).order_by(BookChapter.chapter_number)
+                            )
+                            chapters = chapters_result.scalars().all()
+                            
+                            if chapters:
+                                # Create formatted text
+                                text = f"# {project.title}\n\n"
+                                if project.initial_prompt:
+                                    text += f"**Premise:** {project.initial_prompt}\n\n"
+                                
+                                for chapter in chapters:
+                                    text += f"## Chapter {chapter.chapter_number}: {chapter.title}\n\n"
+                                    if chapter.content:
+                                        text += f"{chapter.content}\n\n"
+                                
+                                doc_name = project.title or "Book"
+                except Exception as e:
+                    logger.warning(f"Could not process as book-writer project: {e}")
+        
+        if not text:
+            raise HTTPException(status_code=404, detail="Document not found or has no text content")
         
         if not text.strip():
             raise HTTPException(status_code=400, detail="Document has no text content")
-        
-        # Get metadata
-        metadata_path = UPLOADS_DIR / f"{doc_id}.meta.json"
-        metadata = {}
-        if metadata_path.exists():
-            import json
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-        
-        doc_name = metadata.get("name", "document")
         safe_name = "".join(c for c in doc_name if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
         safe_name = safe_name.replace(' ', '_')
         
@@ -537,6 +581,9 @@ async def convert_pdf_to_audio(
         audio_size = audio_path.stat().st_size if audio_path.exists() else 0
         
         logger.info("TTS conversion completed", audio_path=audio_file_path, size=audio_size)
+        
+        safe_name = "".join(c for c in doc_name if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+        safe_name = safe_name.replace(' ', '_')
         
         return {
             "success": True,
@@ -575,6 +622,52 @@ async def get_audio_file(audio_id: str):
         raise
     except Exception as e:
         logger.error("Get audio file error", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/writer/projects/{project_id}/text")
+async def get_project_text(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Get text content from a book-writer project for TTS conversion."""
+    try:
+        from app.models import BookProject, BookChapter
+        from sqlalchemy import select
+        
+        # Get project
+        result = await db.execute(select(BookProject).where(BookProject.id == project_id))
+        project = result.scalar_one_or_none()
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get chapters
+        chapters_result = await db.execute(
+            select(BookChapter).where(BookChapter.project_id == project_id).order_by(BookChapter.chapter_number)
+        )
+        chapters = chapters_result.scalars().all()
+        
+        if not chapters:
+            raise HTTPException(status_code=404, detail="No chapters found. Generate the book first.")
+        
+        # Create formatted text
+        text = f"# {project.title}\n\n"
+        if project.initial_prompt:
+            text += f"**Premise:** {project.initial_prompt}\n\n"
+        
+        for chapter in chapters:
+            text += f"## Chapter {chapter.chapter_number}: {chapter.title}\n\n"
+            if chapter.content:
+                text += f"{chapter.content}\n\n"
+        
+        return {
+            "success": True,
+            "text": text,
+            "title": project.title,
+            "text_length": len(text)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get project text", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
