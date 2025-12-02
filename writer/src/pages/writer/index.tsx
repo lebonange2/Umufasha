@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import WriterEditor from '../../features/writer/WriterEditor';
 import AIToolbox from '../../features/writer/AIToolbox';
 import DocumentManager from '../../features/writer/DocumentManager';
-import PDFToAudio from '../../features/writer/PDFToAudio';
 import StructureView from '../../features/structure/StructureView';
 import { LLMAdapter } from '../../lib/llmAdapter';
 import { storage } from '../../lib/storage';
@@ -80,7 +79,6 @@ export default function WriterPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [textContext, setTextContext] = useState('');
   const [showDocumentManager, setShowDocumentManager] = useState(false);
-  const [showPDFToAudio, setShowPDFToAudio] = useState(false);
   const [structureMode, setStructureMode] = useState(
     location.state?.structureMode || false
   );
@@ -545,14 +543,12 @@ export default function WriterPage() {
                 🏎️ Ferrari Company
               </button>
               <button
-                onClick={() => setShowPDFToAudio(!showPDFToAudio)}
-                className={`px-3 py-1 text-sm border rounded hover:bg-gray-100 ${
-                  showPDFToAudio ? 'bg-green-200 border-green-400' : 'bg-green-50'
-                }`}
+                onClick={() => navigate('/pdf-to-audio')}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-green-50"
                 aria-label="PDF to Audio"
                 title="Convert PDF books to audio using local TTS"
               >
-                🎙️ {showPDFToAudio ? 'Hide' : 'PDF to'} Audio
+                🎙️ PDF to Audio
               </button>
             </div>
           </div>
@@ -634,23 +630,6 @@ export default function WriterPage() {
                 textContext={textContext}
                 onTextContextChange={setTextContext}
               />
-            </div>
-          )}
-
-          {/* PDF to Audio Panel */}
-          {showPDFToAudio && (
-            <div className="p-3 border-b">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-xs">PDF to Audio</h3>
-                <button
-                  onClick={() => setShowPDFToAudio(false)}
-                  className="text-gray-500 hover:text-gray-700 text-xs px-1 py-0.5"
-                  title="Close PDF to Audio"
-                >
-                  ✕
-                </button>
-              </div>
-              <PDFToAudio />
             </div>
           )}
         </div>
