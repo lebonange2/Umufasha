@@ -50,6 +50,121 @@ if ! command -v pip3 &> /dev/null; then
 fi
 print_success "pip3 found"
 
+# Install system dependencies for building Python packages
+print_status "Installing system dependencies (for faster-whisper/av package)..."
+INSTALLED_DEPS=false
+
+if command -v apt-get &> /dev/null; then
+    # Debian/Ubuntu
+    print_status "Detected Debian/Ubuntu - installing build dependencies..."
+    if command -v sudo &> /dev/null; then
+        if sudo apt-get update -qq > /dev/null 2>&1 && \
+           sudo apt-get install -y -qq \
+               pkg-config \
+               libavformat-dev \
+               libavcodec-dev \
+               libavdevice-dev \
+               libavutil-dev \
+               libswscale-dev \
+               libswresample-dev \
+               libavfilter-dev \
+               build-essential \
+               > /dev/null 2>&1; then
+            print_success "System dependencies installed"
+            INSTALLED_DEPS=true
+        else
+            print_warning "Failed to install system dependencies (may need root/sudo)"
+        fi
+    else
+        # Try without sudo (for Docker containers running as root)
+        if apt-get update -qq > /dev/null 2>&1 && \
+           apt-get install -y -qq \
+               pkg-config \
+               libavformat-dev \
+               libavcodec-dev \
+               libavdevice-dev \
+               libavutil-dev \
+               libswscale-dev \
+               libswresample-dev \
+               libavfilter-dev \
+               build-essential \
+               > /dev/null 2>&1; then
+            print_success "System dependencies installed"
+            INSTALLED_DEPS=true
+        else
+            print_warning "Failed to install system dependencies"
+        fi
+    fi
+elif command -v yum &> /dev/null; then
+    # RHEL/CentOS
+    print_status "Detected RHEL/CentOS - installing build dependencies..."
+    if command -v sudo &> /dev/null; then
+        if sudo yum install -y -q \
+               pkgconfig \
+               ffmpeg-devel \
+               gcc \
+               gcc-c++ \
+               make \
+               > /dev/null 2>&1; then
+            print_success "System dependencies installed"
+            INSTALLED_DEPS=true
+        else
+            print_warning "Failed to install system dependencies"
+        fi
+    else
+        if yum install -y -q \
+               pkgconfig \
+               ffmpeg-devel \
+               gcc \
+               gcc-c++ \
+               make \
+               > /dev/null 2>&1; then
+            print_success "System dependencies installed"
+            INSTALLED_DEPS=true
+        else
+            print_warning "Failed to install system dependencies"
+        fi
+    fi
+elif command -v apk &> /dev/null; then
+    # Alpine
+    print_status "Detected Alpine - installing build dependencies..."
+    if command -v sudo &> /dev/null; then
+        if sudo apk add --quiet \
+               pkgconfig \
+               ffmpeg-dev \
+               gcc \
+               musl-dev \
+               > /dev/null 2>&1; then
+            print_success "System dependencies installed"
+            INSTALLED_DEPS=true
+        else
+            print_warning "Failed to install system dependencies"
+        fi
+    else
+        if apk add --quiet \
+               pkgconfig \
+               ffmpeg-dev \
+               gcc \
+               musl-dev \
+               > /dev/null 2>&1; then
+            print_success "System dependencies installed"
+            INSTALLED_DEPS=true
+        else
+            print_warning "Failed to install system dependencies"
+        fi
+    fi
+else
+    print_warning "Unknown package manager - system dependencies may need manual installation"
+    print_warning "Required: pkg-config, ffmpeg development libraries, build tools"
+fi
+
+if [ "$INSTALLED_DEPS" = false ]; then
+    print_warning "System dependencies not installed. faster-whisper may fail to build."
+    print_warning "Install manually:"
+    print_warning "  Debian/Ubuntu: sudo apt-get install pkg-config libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev build-essential"
+    print_warning "  Or make faster-whisper optional by removing it from requirements.txt"
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     print_status "Creating virtual environment..."
@@ -70,9 +185,43 @@ pip install --upgrade pip
 
 # Install requirements
 print_status "Installing Python dependencies..."
-pip install -r requirements.txt
-pip install -r requirements-app.txt
-print_success "Dependencies installed"
+print_status "This may take several minutes, especially for packages with native extensions..."
+
+# Try to install requirements, with better error handling
+# First, try to install without faster-whisper if it's problematic
+if pip install -r requirements.txt 2>&1 | tee /tmp/pip_install.log; then
+    print_success "Core dependencies installed"
+else
+    # Check if faster-whisper was the problem
+    if grep -q "pkg-config is required\|Failed to build.*av" /tmp/pip_install.log 2>/dev/null; then
+        print_warning "faster-whisper failed to build (missing system dependencies)"
+        print_warning "Installing dependencies without faster-whisper..."
+        # Create temporary requirements without faster-whisper
+        grep -v "faster-whisper" requirements.txt > /tmp/requirements_no_whisper.txt
+        if pip install -r /tmp/requirements_no_whisper.txt; then
+            print_success "Core dependencies installed (without faster-whisper)"
+            print_warning "faster-whisper not installed - STT features using Whisper will not work"
+            print_warning "Install system deps and retry, or use vosk for STT instead"
+        else
+            print_warning "Some dependencies failed. Continuing with available packages..."
+            # Try to install critical packages individually
+            print_status "Attempting to install critical packages..."
+            pip install fastapi uvicorn sqlalchemy httpx pydantic || print_warning "Some critical packages may be missing"
+        fi
+        rm -f /tmp/requirements_no_whisper.txt
+    else
+        print_warning "Some dependencies failed. Continuing with available packages..."
+        # Try to install critical packages individually
+        print_status "Attempting to install critical packages..."
+        pip install fastapi uvicorn sqlalchemy httpx pydantic || print_warning "Some critical packages may be missing"
+    fi
+fi
+
+if pip install -r requirements-app.txt; then
+    print_success "App dependencies installed"
+else
+    print_warning "Some app dependencies failed to install. Continuing..."
+fi
 
 # Try to install TTS libraries (optional, may fail on Python 3.12+)
 print_status "Attempting to install TTS libraries (optional)..."
