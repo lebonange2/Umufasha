@@ -545,11 +545,13 @@ export default function WriterPage() {
         </button>
         <button
           onClick={() => setShowPDFToAudio(!showPDFToAudio)}
-          className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-green-50"
+          className={`px-3 py-1 text-sm border rounded hover:bg-gray-100 ${
+            showPDFToAudio ? 'bg-green-200 border-green-400' : 'bg-green-50'
+          }`}
           aria-label="PDF to Audio"
           title="Convert PDF books to audio using local TTS"
         >
-          🎙️ PDF to Audio
+          🎙️ {showPDFToAudio ? 'Hide' : 'PDF to'} Audio
         </button>
           </div>
         </div>
@@ -631,9 +633,19 @@ export default function WriterPage() {
           </div>
         )}
 
-        {/* PDF to Audio Panel */}
-        {showPDFToAudio && !toolboxCollapsed && (
-          <div className="border-t bg-white p-4 overflow-y-auto max-h-96">
+        {/* PDF to Audio Panel - Show independently of toolbox collapse */}
+        {showPDFToAudio && (
+          <div className="border-t bg-white p-4 overflow-y-auto" style={{ maxHeight: toolboxCollapsed ? 'calc(100vh - 3rem)' : '400px' }}>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-sm">PDF to Audio Converter</h3>
+              <button
+                onClick={() => setShowPDFToAudio(false)}
+                className="text-gray-500 hover:text-gray-700 text-xs px-2 py-1"
+                title="Close PDF to Audio"
+              >
+                ✕
+              </button>
+            </div>
             <PDFToAudio />
           </div>
         )}

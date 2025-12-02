@@ -105,12 +105,7 @@ export default function PDFToAudio({ documentId, documentName }: PDFToAudioProps
   };
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg bg-white">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          🎙️ PDF to Audio Converter
-        </h3>
-      </div>
+    <div className="space-y-4">
 
       <div className="space-y-3">
         {/* Document Selection */}
