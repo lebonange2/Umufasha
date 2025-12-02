@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import WriterPage from './pages/writer';
 import OutlinePreviewPage from './pages/outline-preview';
 import BookWriterPage from './pages/book-writer';
+import FerrariCompanyPage from './pages/ferrari-company';
 
 function App() {
   // Determine base path based on current location
@@ -28,6 +29,7 @@ function App() {
         <Route path="/" element={<WriterPage />} />
         <Route path="outline-preview" element={<OutlinePreviewPage />} />
         <Route path="book-writer" element={<BookWriterPage />} />
+        <Route path="ferrari-company" element={<FerrariCompanyPage />} />
       </Routes>
     </BrowserRouter>
   );

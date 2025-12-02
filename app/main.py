@@ -27,6 +27,7 @@ from app.routes import (
     writer,
     writer_documents,
     book_writer,
+    ferrari_company,
     product_debate,
     mindmaps
 )
@@ -107,6 +108,7 @@ app.include_router(testing.router, prefix="/testing", tags=["testing"])
 app.include_router(writer.router, tags=["writer"])
 app.include_router(writer_documents.router, tags=["writer-documents"])
 app.include_router(book_writer.router, tags=["book-writer"])
+app.include_router(ferrari_company.router, tags=["ferrari-company"])
 app.include_router(product_debate.router, tags=["product-debate"])
 app.include_router(mindmaps.router, tags=["mindmaps"])
 

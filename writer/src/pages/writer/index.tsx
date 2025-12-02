@@ -525,14 +525,22 @@ export default function WriterPage() {
             >
               Preview Outline
             </button>
-            <button
-              onClick={() => navigate('/book-writer')}
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-blue-50"
-              aria-label="Book Writer"
-              title="AI Book Writer - Generate full outlines and books"
-            >
-              📚 Book Writer
-            </button>
+        <button
+          onClick={() => navigate('/book-writer')}
+          className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-blue-50"
+          aria-label="Book Writer"
+          title="AI Book Writer - Generate full outlines and books"
+        >
+          📚 Book Writer
+        </button>
+        <button
+          onClick={() => navigate('/ferrari-company')}
+          className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-purple-50"
+          aria-label="Ferrari Company"
+          title="Ferrari-Style Book Creation Company - Multi-agent pipeline"
+        >
+          🏎️ Ferrari Company
+        </button>
           </div>
         </div>
 
