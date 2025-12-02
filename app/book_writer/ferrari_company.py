@@ -789,7 +789,7 @@ class ExportAgent(BaseAgent):
     def __init__(self, llm_client: LLMClient, message_bus: MessageBus):
         super().__init__("ExportAgent", "Export Agent", llm_client, message_bus)
     
-    async def prepare_exports(self, project: BookProject) -> Dict[str, str]:
+    async def prepare_exports(self, project: BookProject) -> Dict[str, Any]:
         """Prepare exports in multiple formats."""
         exports = {}
         
@@ -799,6 +799,11 @@ class ExportAgent(BaseAgent):
             
             # EPUB-ready text
             exports['epub_ready'] = self._prepare_epub_text(project.formatted_manuscript)
+            
+            # PDF export
+            pdf_path = await self._generate_pdf(project)
+            if pdf_path:
+                exports['pdf_path'] = pdf_path
         
         await self.send_message("CEO", Phase.INDUSTRIALIZATION_PACKAGING, 
                               f"Exports prepared: {list(exports.keys())}")
@@ -809,6 +814,216 @@ class ExportAgent(BaseAgent):
         """Prepare text for EPUB conversion."""
         # Basic EPUB formatting
         return text.replace('# ', '## ').replace('\n\n', '\n')
+    
+    async def _generate_pdf(self, project: BookProject) -> Optional[str]:
+        """Generate PDF file from formatted manuscript."""
+        try:
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+            from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            from reportlab.lib import colors
+        except ImportError:
+            print("Warning: reportlab not installed. PDF export disabled.")
+            print("Install with: pip install reportlab")
+            return None
+        
+        if not project.formatted_manuscript:
+            return None
+        
+        # Generate filename
+        safe_title = "".join(c for c in (project.title or "Untitled") if c.isalnum() or c in (' ', '-', '_')).strip()
+        safe_title = safe_title.replace(' ', '_')[:50]  # Limit length
+        pdf_path = f"{safe_title}_book.pdf"
+        
+        try:
+            # Create PDF document
+            doc = SimpleDocTemplate(
+                pdf_path,
+                pagesize=letter,
+                rightMargin=72,
+                leftMargin=72,
+                topMargin=72,
+                bottomMargin=18
+            )
+            
+            # Container for the 'Flowable' objects
+            story = []
+            
+            # Define styles
+            styles = getSampleStyleSheet()
+            
+            # Custom styles
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#1a1a1a'),
+                spaceAfter=30,
+                alignment=TA_CENTER,
+                fontName='Helvetica-Bold'
+            )
+            
+            chapter_style = ParagraphStyle(
+                'CustomChapter',
+                parent=styles['Heading1'],
+                fontSize=18,
+                textColor=colors.HexColor('#2c3e50'),
+                spaceAfter=12,
+                spaceBefore=20,
+                fontName='Helvetica-Bold'
+            )
+            
+            section_style = ParagraphStyle(
+                'CustomSection',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.HexColor('#34495e'),
+                spaceAfter=10,
+                spaceBefore=15,
+                fontName='Helvetica-Bold'
+            )
+            
+            subsection_style = ParagraphStyle(
+                'CustomSubsection',
+                parent=styles['Heading3'],
+                fontSize=12,
+                textColor=colors.HexColor('#34495e'),
+                spaceAfter=8,
+                spaceBefore=12,
+                fontName='Helvetica'
+            )
+            
+            body_style = ParagraphStyle(
+                'CustomBody',
+                parent=styles['Normal'],
+                fontSize=11,
+                textColor=colors.HexColor('#2c3e50'),
+                spaceAfter=12,
+                alignment=TA_JUSTIFY,
+                fontName='Helvetica',
+                leading=14
+            )
+            
+            # Title page
+            if project.title:
+                story.append(Spacer(1, 2*inch))
+                story.append(Paragraph(project.title, title_style))
+                story.append(Spacer(1, 0.5*inch))
+            
+            if project.launch_package and project.launch_package.get('subtitle'):
+                subtitle_style = ParagraphStyle(
+                    'Subtitle',
+                    parent=styles['Normal'],
+                    fontSize=14,
+                    textColor=colors.HexColor('#7f8c8d'),
+                    alignment=TA_CENTER,
+                    fontName='Helvetica-Italic'
+                )
+                story.append(Paragraph(project.launch_package['subtitle'], subtitle_style))
+            
+            story.append(Spacer(1, 1*inch))
+            
+            if project.premise:
+                premise_style = ParagraphStyle(
+                    'Premise',
+                    parent=styles['Normal'],
+                    fontSize=10,
+                    textColor=colors.HexColor('#7f8c8d'),
+                    alignment=TA_CENTER,
+                    fontName='Helvetica',
+                    leftIndent=50,
+                    rightIndent=50
+                )
+                story.append(Paragraph(f"<i>{project.premise}</i>", premise_style))
+            
+            story.append(PageBreak())
+            
+            # Parse and add content
+            lines = project.formatted_manuscript.split('\n')
+            current_paragraph = []
+            
+            for line in lines:
+                line = line.strip()
+                
+                if not line:
+                    if current_paragraph:
+                        # Add accumulated paragraph
+                        text = ' '.join(current_paragraph)
+                        story.append(Paragraph(text, body_style))
+                        current_paragraph = []
+                    continue
+                
+                # Check for headings
+                if line.startswith('# '):
+                    # Title/Chapter
+                    if current_paragraph:
+                        text = ' '.join(current_paragraph)
+                        story.append(Paragraph(text, body_style))
+                        current_paragraph = []
+                    title_text = line[2:].strip()
+                    if 'Chapter' in title_text or 'Table of Contents' in title_text:
+                        story.append(PageBreak())
+                    story.append(Paragraph(title_text, chapter_style))
+                
+                elif line.startswith('## '):
+                    # Section
+                    if current_paragraph:
+                        text = ' '.join(current_paragraph)
+                        story.append(Paragraph(text, body_style))
+                        current_paragraph = []
+                    story.append(Paragraph(line[3:].strip(), section_style))
+                
+                elif line.startswith('### '):
+                    # Subsection
+                    if current_paragraph:
+                        text = ' '.join(current_paragraph)
+                        story.append(Paragraph(text, body_style))
+                        current_paragraph = []
+                    story.append(Paragraph(line[4:].strip(), subsection_style))
+                
+                elif line.startswith('#### '):
+                    # Sub-subsection
+                    if current_paragraph:
+                        text = ' '.join(current_paragraph)
+                        story.append(Paragraph(text, body_style))
+                        current_paragraph = []
+                    story.append(Paragraph(line[5:].strip(), subsection_style))
+                
+                elif line.startswith('- ') or line.startswith('* '):
+                    # List item
+                    if current_paragraph:
+                        text = ' '.join(current_paragraph)
+                        story.append(Paragraph(text, body_style))
+                        current_paragraph = []
+                    list_text = line[2:].strip()
+                    story.append(Paragraph(f"• {list_text}", body_style))
+                
+                else:
+                    # Regular text
+                    current_paragraph.append(line)
+            
+            # Add any remaining paragraph
+            if current_paragraph:
+                text = ' '.join(current_paragraph)
+                story.append(Paragraph(text, body_style))
+            
+            # Build PDF
+            doc.build(story)
+            
+            await self.send_message("CEO", Phase.INDUSTRIALIZATION_PACKAGING, 
+                                  f"PDF generated: {pdf_path}")
+            
+            return pdf_path
+            
+        except Exception as e:
+            print(f"Error generating PDF: {e}")
+            await self.send_message("CEO", Phase.INDUSTRIALIZATION_PACKAGING, 
+                                  f"PDF generation failed: {str(e)}")
+            return None
 
 
 class LaunchDirectorAgent(BaseAgent):
@@ -1117,7 +1332,7 @@ class FerrariBookCompany:
     
     def _assemble_final_package(self) -> Dict[str, Any]:
         """Assemble the final book package."""
-        return {
+        package = {
             "title": self.project.title,
             "premise": self.project.premise,
             "book_brief": self.project.book_brief,
@@ -1132,6 +1347,13 @@ class FerrariBookCompany:
             "exports": self.project.owner_edits.get('exports', {}),
             "status": self.project.status
         }
+        
+        # Add PDF path if available
+        exports = self.project.owner_edits.get('exports', {})
+        if 'pdf_path' in exports:
+            package['pdf_path'] = exports['pdf_path']
+        
+        return package
     
     def get_chat_log(self, phase: Optional[Phase] = None) -> List[Dict[str, Any]]:
         """Get the chat log, optionally filtered by phase."""
@@ -1193,6 +1415,12 @@ async def main():
     print(f"  Package saved to: book_package.json")
     print(f"  Chat log saved to: chat_log.json")
     print(f"  Total messages: {len(chat_log)}")
+    
+    # Show PDF path if available
+    if 'pdf_path' in final_package:
+        print(f"  PDF saved to: {final_package['pdf_path']}")
+    elif 'exports' in final_package and 'pdf_path' in final_package.get('exports', {}):
+        print(f"  PDF saved to: {final_package['exports']['pdf_path']}")
 
 
 if __name__ == "__main__":

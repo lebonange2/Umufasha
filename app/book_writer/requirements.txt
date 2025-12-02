@@ -5,6 +5,9 @@
 structlog>=23.2.0
 httpx>=0.25.0
 
+# PDF generation
+reportlab>=4.0.0
+
 # Note: If running standalone, also ensure:
 # - app.core.config is available (or provide config manually)
 # - LLM service is accessible (Ollama, OpenAI, etc.)

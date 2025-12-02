@@ -39,6 +39,15 @@ pip install structlog
 pip install httpx
 ```
 
+### Issue: `ModuleNotFoundError: No module named 'reportlab'`
+
+**Solution:**
+```bash
+pip install reportlab
+```
+
+Note: PDF export will be disabled if reportlab is not installed, but other exports will still work.
+
 ### Issue: Import errors from app modules
 
 **Solution:**
@@ -75,6 +84,7 @@ python3 -m app.book_writer.ferrari_company
 ### Required
 - `structlog>=23.2.0` - Structured logging
 - `httpx>=0.25.0` - HTTP client for LLM API calls
+- `reportlab>=4.0.0` - PDF generation (for PDF export)
 
 ### Optional (for full app)
 - See `requirements-app.txt` for complete list
