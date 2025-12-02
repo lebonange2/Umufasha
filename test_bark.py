@@ -4,6 +4,13 @@ Standalone test script for Bark TTS with PyTorch 2.6+ compatibility fix.
 This script applies the necessary patches before using Bark.
 """
 import sys
+import os
+
+# Disable hf_transfer requirement (optional, speeds up downloads but not required)
+# This prevents errors if hf_transfer is not installed
+if 'HF_HUB_ENABLE_HF_TRANSFER' not in os.environ:
+    os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
+    print("✅ Disabled hf_transfer requirement (using standard download)")
 
 # Apply PyTorch 2.6+ compatibility fix BEFORE importing Bark
 try:
@@ -12,8 +19,16 @@ try:
     
     # Add safe globals for numpy objects
     if hasattr(torch.serialization, 'add_safe_globals'):
-        torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
-        print("✅ Added numpy.core.multiarray.scalar to torch safe globals")
+        # Handle numpy.core deprecation - try both old and new paths
+        try:
+            # Try new path first (numpy._core)
+            scalar_class = numpy._core.multiarray.scalar
+        except (AttributeError, ImportError):
+            # Fallback to old path (numpy.core) for older numpy versions
+            scalar_class = numpy.core.multiarray.scalar
+        
+        torch.serialization.add_safe_globals([scalar_class])
+        print("✅ Added numpy multiarray.scalar to torch safe globals")
     
     # Patch torch.load to use weights_only=False for Bark compatibility
     original_load = torch.load

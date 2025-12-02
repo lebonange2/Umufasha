@@ -19,6 +19,12 @@ logger = structlog.get_logger(__name__)
 # Apply PyTorch 2.6+ compatibility fix for Bark at module level
 # This ensures the patch is applied before any Bark imports
 try:
+    import os
+    # Disable hf_transfer requirement (optional, speeds up downloads but not required)
+    # This prevents errors if hf_transfer is not installed
+    if 'HF_HUB_ENABLE_HF_TRANSFER' not in os.environ:
+        os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
+    
     import torch
     import numpy
     
@@ -27,8 +33,16 @@ try:
         # Try to add safe globals for numpy objects (PyTorch 2.6+)
         try:
             if hasattr(torch.serialization, 'add_safe_globals'):
-                torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
-                logger.info("Added numpy.core.multiarray.scalar to torch safe globals (module level)")
+                # Handle numpy.core deprecation - try both old and new paths
+                try:
+                    # Try new path first (numpy._core)
+                    scalar_class = numpy._core.multiarray.scalar
+                except (AttributeError, ImportError):
+                    # Fallback to old path (numpy.core) for older numpy versions
+                    scalar_class = numpy.core.multiarray.scalar
+                
+                torch.serialization.add_safe_globals([scalar_class])
+                logger.info("Added numpy multiarray.scalar to torch safe globals (module level)")
         except Exception as e:
             logger.warning(f"Could not add safe globals at module level: {e}")
         
@@ -374,8 +388,16 @@ def _init_tts_model():
             try:
                 # Try to add safe globals for numpy objects (PyTorch 2.6+)
                 if hasattr(torch.serialization, 'add_safe_globals'):
-                    torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
-                    logger.info("Added numpy.core.multiarray.scalar to torch safe globals")
+                    # Handle numpy.core deprecation - try both old and new paths
+                    try:
+                        # Try new path first (numpy._core)
+                        scalar_class = numpy._core.multiarray.scalar
+                    except (AttributeError, ImportError):
+                        # Fallback to old path (numpy.core) for older numpy versions
+                        scalar_class = numpy.core.multiarray.scalar
+                    
+                    torch.serialization.add_safe_globals([scalar_class])
+                    logger.info("Added numpy multiarray.scalar to torch safe globals")
             except Exception as e:
                 logger.warning(f"Could not add safe globals (may not be needed): {e}")
             
