@@ -233,21 +233,23 @@ PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
 if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 12 ]; then
     # Python < 3.12 - can install Coqui TTS
     print_status "Python $PYTHON_VERSION detected - attempting to install Coqui TTS..."
-    if pip install "TTS>=0.22.0" 2>&1 | grep -q "Successfully installed" || python3 -c "from TTS.api import TTS" 2>/dev/null; then
+    # Suppress stderr to avoid version compatibility warnings
+    if pip install "TTS>=0.22.0" >/dev/null 2>&1 || python3 -c "from TTS.api import TTS" 2>/dev/null; then
         print_success "Coqui TTS installed successfully"
     else
         print_warning "Coqui TTS installation failed, trying Piper TTS..."
-        if pip install piper-tts 2>&1 | grep -q "Successfully installed" || python3 -c "from piper import PiperVoice" 2>/dev/null; then
+        if pip install piper-tts >/dev/null 2>&1 || python3 -c "from piper import PiperVoice" 2>/dev/null; then
             print_success "Piper TTS installed"
         else
             print_warning "Piper TTS installation also failed"
         fi
     fi
 else
-    # Python 3.12+ - use Piper TTS or skip
-    print_status "Python $PYTHON_VERSION detected - Coqui TTS not compatible (<3.12 required)"
+    # Python 3.12+ - skip Coqui TTS completely, only try Piper TTS
+    print_status "Python $PYTHON_VERSION detected - Coqui TTS not compatible (requires <3.12)"
+    print_status "Skipping Coqui TTS installation (not compatible with Python 3.12+)..."
     print_status "Attempting to install Piper TTS (Python 3.12 compatible)..."
-    if pip install piper-tts 2>&1 | grep -q "Successfully installed" || python3 -c "from piper import PiperVoice" 2>/dev/null; then
+    if pip install piper-tts >/dev/null 2>&1 || python3 -c "from piper import PiperVoice" 2>/dev/null; then
         print_success "Piper TTS installed successfully"
     else
         print_warning "Piper TTS installation failed. TTS features will not be available."
