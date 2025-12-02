@@ -1363,6 +1363,8 @@ class FerrariBookCompany:
 # Main function for CLI usage
 async def main():
     """CLI entry point."""
+    import os
+    
     print("=" * 60)
     print("Ferrari-Style Book Creation Company")
     print("=" * 60)
@@ -1372,10 +1374,18 @@ async def main():
     title = input("Working title (optional, press Enter to skip): ").strip() or None
     premise = input("Short idea/premise (1-3 sentences): ").strip()
     
+    if not premise:
+        print("Error: Premise is required!")
+        return
+    
     word_count_input = input("Target word count (optional, press Enter to skip): ").strip()
     target_word_count = int(word_count_input) if word_count_input else None
     
     audience = input("Target audience (optional, press Enter to skip): ").strip() or None
+    
+    # Ask about output directory
+    output_dir_input = input("Output directory (press Enter for 'book_outputs'): ").strip()
+    output_directory = output_dir_input if output_dir_input else "book_outputs"
     
     # Owner callback for decisions
     def owner_decision_callback(phase, summary, artifacts):
@@ -1403,24 +1413,84 @@ async def main():
         owner_callback=owner_decision_callback
     )
     
-    # Save results
+    # Save results to output directory
     import json
-    with open("book_package.json", "w") as f:
-        json.dump(final_package, f, indent=2)
+    from pathlib import Path
+    import shutil
     
-    with open("chat_log.json", "w") as f:
-        json.dump(chat_log, f, indent=2)
+    # Create output directory (use the one specified by user)
+    output_dir = Path(output_directory)
+    output_dir.mkdir(exist_ok=True)
     
-    print(f"\n✓ Book creation complete!")
-    print(f"  Package saved to: book_package.json")
-    print(f"  Chat log saved to: chat_log.json")
-    print(f"  Total messages: {len(chat_log)}")
+    # Generate safe filename from title
+    safe_title = "".join(c for c in (title or "Untitled") if c.isalnum() or c in (' ', '-', '_')).strip()
+    safe_title = safe_title.replace(' ', '_')[:50] if safe_title else "Untitled"
     
-    # Show PDF path if available
-    if 'pdf_path' in final_package:
-        print(f"  PDF saved to: {final_package['pdf_path']}")
+    # Save JSON package
+    json_filename = output_dir / f"{safe_title}_package.json"
+    with open(json_filename, "w", encoding="utf-8") as f:
+        json.dump(final_package, f, indent=2, ensure_ascii=False)
+    
+    # Save chat log
+    chat_log_filename = output_dir / f"{safe_title}_chat_log.json"
+    with open(chat_log_filename, "w", encoding="utf-8") as f:
+        json.dump(chat_log, f, indent=2, ensure_ascii=False)
+    
+    # Copy PDF if it exists
+    pdf_source_path = None
+    pdf_dest_path = None
+    
+    if 'pdf_path' in final_package and final_package['pdf_path']:
+        pdf_source_path = Path(final_package['pdf_path'])
+        if pdf_source_path.exists():
+            pdf_dest_path = output_dir / f"{safe_title}_book.pdf"
+            import shutil
+            shutil.copy2(pdf_source_path, pdf_dest_path)
     elif 'exports' in final_package and 'pdf_path' in final_package.get('exports', {}):
-        print(f"  PDF saved to: {final_package['exports']['pdf_path']}")
+        pdf_source_path = Path(final_package['exports']['pdf_path'])
+        if pdf_source_path.exists():
+            pdf_dest_path = output_dir / f"{safe_title}_book.pdf"
+            import shutil
+            shutil.copy2(pdf_source_path, pdf_dest_path)
+    
+    # Print summary
+    print(f"\n{'='*60}")
+    print(f"✓ Book creation complete!")
+    print(f"{'='*60}")
+    print(f"\n📁 All files saved to: {output_dir.absolute()}/")
+    print(f"\n📄 Generated Files:")
+    print(f"  • JSON Package: {json_filename}")
+    print(f"  • Chat Log: {chat_log_filename}")
+    
+    if pdf_dest_path and pdf_dest_path.exists():
+        print(f"  • PDF Book: {pdf_dest_path}")
+    else:
+        print(f"  • PDF: Not generated (install reportlab for PDF export)")
+    
+    print(f"\n📊 Statistics:")
+    print(f"  • Total messages: {len(chat_log)}")
+    print(f"  • Chapters: {len(final_package.get('outline', []))}")
+    if final_package.get('full_draft'):
+        word_count = len(final_package['full_draft'].split())
+        print(f"  • Word count: {word_count:,}")
+    
+    print(f"\n💡 To download files:")
+    print(f"  • JSON: {json_filename.absolute()}")
+    if pdf_dest_path and pdf_dest_path.exists():
+        print(f"  • PDF: {pdf_dest_path.absolute()}")
+    
+    # Offer to open directory
+    try:
+        import platform
+        if platform.system() == "Windows":
+            os.startfile(output_dir.absolute())
+        elif platform.system() == "Darwin":  # macOS
+            os.system(f"open {output_dir.absolute()}")
+        else:  # Linux
+            os.system(f"xdg-open {output_dir.absolute()}")
+        print(f"\n📂 Opened output directory in file manager")
+    except:
+        pass
 
 
 if __name__ == "__main__":
