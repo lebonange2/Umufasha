@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
@@ -50,18 +51,30 @@ class FerrariProjectResponse(BaseModel):
 async def create_ferrari_project(project: FerrariProjectCreate):
     """Create a new Ferrari company project."""
     try:
+        # Validate input
+        if not project.premise or not project.premise.strip():
+            raise HTTPException(status_code=400, detail="Premise is required")
+        
         project_id = str(uuid.uuid4())
         
         # Create company instance
-        company = FerrariBookCompany()
+        try:
+            company = FerrariBookCompany()
+        except Exception as e:
+            logger.error("Failed to initialize FerrariBookCompany", error=str(e), exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to initialize book company: {str(e)}")
         
         # Initialize project
-        company.project = BookProject(
-            title=project.title,
-            premise=project.premise,
-            target_word_count=project.target_word_count,
-            audience=project.audience
-        )
+        try:
+            company.project = BookProject(
+                title=project.title,
+                premise=project.premise,
+                target_word_count=project.target_word_count,
+                audience=project.audience
+            )
+        except Exception as e:
+            logger.error("Failed to create BookProject", error=str(e), exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
         
         # Store project
         active_projects[project_id] = {
@@ -75,8 +88,11 @@ async def create_ferrari_project(project: FerrariProjectCreate):
             "status": "in_progress",
             "owner_decisions": {},
             "artifacts": {},
-            "chat_log": []
+            "chat_log": [],
+            "created_at": datetime.utcnow().isoformat()
         }
+        
+        logger.info(f"Created Ferrari project {project_id}")
         
         return FerrariProjectResponse(
             project_id=project_id,
@@ -86,8 +102,10 @@ async def create_ferrari_project(project: FerrariProjectCreate):
             status="in_progress",
             output_directory=project.output_directory
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Failed to create Ferrari project", error=str(e))
+        logger.error("Failed to create Ferrari project", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
 
 
@@ -116,25 +134,48 @@ async def execute_phase(project_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
     
     project_data = active_projects[project_id]
+    
+    # Validate project state
+    if project_data["status"] == "complete":
+        raise HTTPException(status_code=400, detail="Project is already complete")
+    if project_data["status"] == "stopped":
+        raise HTTPException(status_code=400, detail="Project has been stopped")
+    
     company = project_data["company"]
     
     try:
         # Get current phase
-        current_phase = Phase(project_data["current_phase"])
+        try:
+            current_phase = Phase(project_data["current_phase"])
+        except (ValueError, KeyError) as e:
+            logger.error(f"Invalid phase: {project_data.get('current_phase')}", error=str(e))
+            raise HTTPException(status_code=400, detail=f"Invalid phase: {project_data.get('current_phase')}")
         
         logger.info(f"Executing phase {current_phase.value} for project {project_id}")
         
-        # Execute phase (same as CLI)
+        # Execute phase (same as CLI) - with timeout protection
         try:
-            await company._execute_phase(current_phase)
+            # Set a reasonable timeout (30 minutes for long phases)
+            await asyncio.wait_for(
+                company._execute_phase(current_phase),
+                timeout=1800.0  # 30 minutes
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"Phase execution timed out for project {project_id}")
+            raise HTTPException(
+                status_code=504, 
+                detail="Phase execution timed out. The LLM may be slow or unavailable. Please try again."
+            )
         except Exception as phase_error:
             logger.error(f"Phase execution error: {str(phase_error)}", error=str(phase_error), exc_info=True)
             # Provide more detailed error message
             error_msg = str(phase_error)
-            if "timeout" in error_msg.lower():
+            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
                 error_msg = "Phase execution timed out. The LLM may be slow or unavailable. Please try again."
-            elif "connection" in error_msg.lower():
-                error_msg = "Cannot connect to LLM service. Make sure Ollama is running."
+            elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
+                error_msg = "Cannot connect to LLM service. Make sure Ollama is running and accessible."
+            elif "json" in error_msg.lower() and "decode" in error_msg.lower():
+                error_msg = "LLM returned invalid response. The model may need to be restarted."
             raise HTTPException(status_code=500, detail=f"Phase execution failed: {error_msg}")
         
         # Update project state
@@ -157,11 +198,15 @@ async def execute_phase(project_id: str):
                 }
                 summary_parts.append("Story Design Director has completed world and character design.")
             elif current_phase == Phase.DETAILED_ENGINEERING:
-                artifacts = {"outline": company.project.outline or []}
+                # Ensure outline is a list
+                outline = company.project.outline or []
+                if not isinstance(outline, list):
+                    outline = []
+                artifacts = {"outline": outline}
                 summary_parts.append("Narrative Engineering Director has created the full hierarchical outline.")
             elif current_phase == Phase.PROTOTYPES_TESTING:
                 artifacts = {
-                    "draft_chapters": company.project.draft_chapters,
+                    "draft_chapters": company.project.draft_chapters or {},
                     "revision_report": company.project.revision_report or {}
                 }
                 summary_parts.append("Production and QA teams have completed draft and testing.")
@@ -172,7 +217,7 @@ async def execute_phase(project_id: str):
                 artifacts = {"launch_package": company.project.launch_package or {}}
                 summary_parts.append("Launch Director has created the complete launch package.")
         except Exception as artifact_error:
-            logger.warning(f"Error getting artifacts: {str(artifact_error)}")
+            logger.warning(f"Error getting artifacts: {str(artifact_error)}", exc_info=True)
             # Continue with empty artifacts rather than failing
         
         summary = " ".join(summary_parts) if summary_parts else f"Phase {current_phase.value.replace('_', ' ').title()} completed."
@@ -180,8 +225,10 @@ async def execute_phase(project_id: str):
         # Get chat log for this phase
         try:
             phase_chat_log = company.message_bus.get_chat_log(current_phase)
+            if not isinstance(phase_chat_log, list):
+                phase_chat_log = []
         except Exception as log_error:
-            logger.warning(f"Error getting chat log: {str(log_error)}")
+            logger.warning(f"Error getting chat log: {str(log_error)}", exc_info=True)
             phase_chat_log = []
         
         return {
@@ -206,17 +253,35 @@ async def make_decision(project_id: str, decision: PhaseDecision):
         raise HTTPException(status_code=404, detail="Project not found")
     
     project_data = active_projects[project_id]
+    
+    # Validate project state
+    if project_data["status"] == "complete":
+        raise HTTPException(status_code=400, detail="Project is already complete")
+    if project_data["status"] == "stopped":
+        raise HTTPException(status_code=400, detail="Project has been stopped")
+    
     company = project_data["company"]
     
     try:
-        current_phase = Phase(project_data["current_phase"])
-        owner_decision = OwnerDecision(decision.decision)
+        # Validate decision
+        try:
+            owner_decision = OwnerDecision(decision.decision)
+        except (ValueError, KeyError) as e:
+            raise HTTPException(status_code=400, detail=f"Invalid decision: {decision.decision}")
+        
+        # Get current phase
+        try:
+            current_phase = Phase(project_data["current_phase"])
+        except (ValueError, KeyError) as e:
+            logger.error(f"Invalid phase: {project_data.get('current_phase')}", error=str(e))
+            raise HTTPException(status_code=400, detail=f"Invalid phase: {project_data.get('current_phase')}")
         
         # Store decision
         project_data["owner_decisions"][current_phase.value] = decision.decision
         
         if owner_decision == OwnerDecision.STOP:
             project_data["status"] = "stopped"
+            logger.info(f"Project {project_id} stopped by owner")
             return {
                 "success": True,
                 "decision": decision.decision,
@@ -225,7 +290,23 @@ async def make_decision(project_id: str, decision: PhaseDecision):
             }
         elif owner_decision == OwnerDecision.REQUEST_CHANGES:
             # Re-run phase
-            await company._execute_phase(current_phase)
+            try:
+                await asyncio.wait_for(
+                    company._execute_phase(current_phase),
+                    timeout=1800.0  # 30 minutes
+                )
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=504,
+                    detail="Phase re-execution timed out. Please try again."
+                )
+            except Exception as e:
+                logger.error(f"Error re-executing phase: {str(e)}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to re-execute phase: {str(e)}"
+                )
+            
             project_data["company"] = company
             return {
                 "success": True,
@@ -244,17 +325,28 @@ async def make_decision(project_id: str, decision: PhaseDecision):
                 Phase.MARKETING_LAUNCH
             ]
             
-            current_index = phases.index(current_phase)
+            try:
+                current_index = phases.index(current_phase)
+            except ValueError:
+                logger.error(f"Current phase {current_phase.value} not in phases list")
+                raise HTTPException(status_code=500, detail="Invalid phase state")
+            
             if current_index < len(phases) - 1:
                 next_phase = phases[current_index + 1]
                 project_data["current_phase"] = next_phase.value
+                logger.info(f"Project {project_id} approved phase {current_phase.value}, moving to {next_phase.value}")
             else:
                 # All phases complete
                 project_data["status"] = "complete"
                 project_data["current_phase"] = Phase.COMPLETE.value
                 
                 # Save final files
-                await save_final_files(project_id, company, project_data)
+                try:
+                    await save_final_files(project_id, company, project_data)
+                except Exception as save_error:
+                    logger.error(f"Error saving final files: {str(save_error)}", exc_info=True)
+                    # Don't fail the request, but log the error
+                    # Files can be regenerated if needed
             
             return {
                 "success": True,
@@ -263,8 +355,10 @@ async def make_decision(project_id: str, decision: PhaseDecision):
                 "status": project_data["status"],
                 "message": f"Phase approved. Moving to {project_data['current_phase']}"
             }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Failed to process decision", error=str(e))
+        logger.error("Failed to process decision", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to process decision: {str(e)}")
 
 
@@ -274,40 +368,69 @@ async def save_final_files(project_id: str, company: FerrariBookCompany, project
         from pathlib import Path
         import shutil
         
-        output_dir = Path(project_data["output_directory"])
-        output_dir.mkdir(exist_ok=True, parents=True)
+        output_dir = Path(project_data.get("output_directory", "book_outputs"))
+        try:
+            output_dir.mkdir(exist_ok=True, parents=True)
+        except Exception as e:
+            logger.error(f"Failed to create output directory {output_dir}: {str(e)}")
+            raise
         
         # Generate safe filename
-        title = project_data["title"] or "Untitled"
+        title = project_data.get("title") or "Untitled"
         safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_title = safe_title.replace(' ', '_')[:50] if safe_title else "Untitled"
         
         # Assemble final package
-        final_package = company._assemble_final_package()
-        chat_log = company.message_bus.get_chat_log()
+        try:
+            final_package = company._assemble_final_package()
+        except Exception as e:
+            logger.error(f"Failed to assemble final package: {str(e)}", exc_info=True)
+            final_package = {}
+        
+        try:
+            chat_log = company.message_bus.get_chat_log()
+            if not isinstance(chat_log, list):
+                chat_log = []
+        except Exception as e:
+            logger.error(f"Failed to get chat log: {str(e)}", exc_info=True)
+            chat_log = []
         
         # Save JSON package
         json_filename = output_dir / f"{safe_title}_package.json"
-        with open(json_filename, "w", encoding="utf-8") as f:
-            json.dump(final_package, f, indent=2, ensure_ascii=False)
+        try:
+            with open(json_filename, "w", encoding="utf-8") as f:
+                json.dump(final_package, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Failed to save JSON package: {str(e)}", exc_info=True)
+            raise
         
         # Save chat log
         chat_log_filename = output_dir / f"{safe_title}_chat_log.json"
-        with open(chat_log_filename, "w", encoding="utf-8") as f:
-            json.dump(chat_log, f, indent=2, ensure_ascii=False)
+        try:
+            with open(chat_log_filename, "w", encoding="utf-8") as f:
+                json.dump(chat_log, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Failed to save chat log: {str(e)}", exc_info=True)
+            raise
         
         # Copy PDF if exists
         pdf_dest_path = None
-        if 'pdf_path' in final_package and final_package['pdf_path']:
-            pdf_source_path = Path(final_package['pdf_path'])
-            if pdf_source_path.exists():
-                pdf_dest_path = output_dir / f"{safe_title}_book.pdf"
-                shutil.copy2(pdf_source_path, pdf_dest_path)
-        elif 'exports' in final_package and 'pdf_path' in final_package.get('exports', {}):
-            pdf_source_path = Path(final_package['exports']['pdf_path'])
-            if pdf_source_path.exists():
-                pdf_dest_path = output_dir / f"{safe_title}_book.pdf"
-                shutil.copy2(pdf_source_path, pdf_dest_path)
+        try:
+            if isinstance(final_package, dict):
+                if 'pdf_path' in final_package and final_package['pdf_path']:
+                    pdf_source_path = Path(final_package['pdf_path'])
+                    if pdf_source_path.exists():
+                        pdf_dest_path = output_dir / f"{safe_title}_book.pdf"
+                        shutil.copy2(pdf_source_path, pdf_dest_path)
+                elif 'exports' in final_package and isinstance(final_package.get('exports'), dict):
+                    if 'pdf_path' in final_package['exports'] and final_package['exports']['pdf_path']:
+                        pdf_source_path = Path(final_package['exports']['pdf_path'])
+                        if pdf_source_path.exists():
+                            pdf_dest_path = output_dir / f"{safe_title}_book.pdf"
+                            shutil.copy2(pdf_source_path, pdf_dest_path)
+        except Exception as e:
+            logger.warning(f"Could not copy PDF: {str(e)}", exc_info=True)
+            # Continue without PDF
         
         # Create ZIP archive
         zip_filename = None
@@ -320,21 +443,25 @@ async def save_final_files(project_id: str, company: FerrariBookCompany, project
                 if pdf_dest_path and pdf_dest_path.exists():
                     zipf.write(pdf_dest_path, pdf_dest_path.name)
         except Exception as e:
-            logger.warning("Could not create zip archive", error=str(e))
+            logger.warning(f"Could not create zip archive: {str(e)}", exc_info=True)
+            # Continue without ZIP
         
         # Store file paths in project data
         project_data["files"] = {
             "json": str(json_filename.absolute()),
             "chat_log": str(chat_log_filename.absolute()),
             "pdf": str(pdf_dest_path.absolute()) if pdf_dest_path and pdf_dest_path.exists() else None,
-            "zip": str(zip_filename.absolute()) if zip_filename else None
+            "zip": str(zip_filename.absolute()) if zip_filename and zip_filename.exists() else None
         }
         
         project_data["final_package"] = final_package
         project_data["chat_log"] = chat_log
         
+        logger.info(f"Saved final files for project {project_id} to {output_dir}")
+        
     except Exception as e:
-        logger.error("Failed to save final files", error=str(e))
+        logger.error(f"Failed to save final files for project {project_id}: {str(e)}", exc_info=True)
+        raise
 
 
 @router.get("/api/ferrari-company/projects/{project_id}/chat-log")
