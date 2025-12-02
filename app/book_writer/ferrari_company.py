@@ -1453,19 +1453,40 @@ async def main():
             import shutil
             shutil.copy2(pdf_source_path, pdf_dest_path)
     
+    # Create downloadable zip archive
+    zip_filename = None
+    try:
+        import zipfile
+        zip_filename = output_dir / f"{safe_title}_complete.zip"
+        with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Add JSON package
+            zipf.write(json_filename, json_filename.name)
+            # Add chat log
+            zipf.write(chat_log_filename, chat_log_filename.name)
+            # Add PDF if exists
+            if pdf_dest_path and pdf_dest_path.exists():
+                zipf.write(pdf_dest_path, pdf_dest_path.name)
+        
+        print(f"\n📦 Created downloadable archive: {zip_filename.name}")
+    except Exception as e:
+        print(f"\n⚠️  Warning: Could not create zip archive: {e}")
+    
     # Print summary
     print(f"\n{'='*60}")
     print(f"✓ Book creation complete!")
     print(f"{'='*60}")
     print(f"\n📁 All files saved to: {output_dir.absolute()}/")
     print(f"\n📄 Generated Files:")
-    print(f"  • JSON Package: {json_filename}")
-    print(f"  • Chat Log: {chat_log_filename}")
+    print(f"  • JSON Package: {json_filename.name}")
+    print(f"  • Chat Log: {chat_log_filename.name}")
     
     if pdf_dest_path and pdf_dest_path.exists():
-        print(f"  • PDF Book: {pdf_dest_path}")
+        print(f"  • PDF Book: {pdf_dest_path.name}")
     else:
         print(f"  • PDF: Not generated (install reportlab for PDF export)")
+    
+    if zip_filename:
+        print(f"  • 📦 Complete Archive: {zip_filename.name}")
     
     print(f"\n📊 Statistics:")
     print(f"  • Total messages: {len(chat_log)}")
@@ -1474,21 +1495,43 @@ async def main():
         word_count = len(final_package['full_draft'].split())
         print(f"  • Word count: {word_count:,}")
     
-    print(f"\n💡 To download files:")
-    print(f"  • JSON: {json_filename.absolute()}")
+    # Cloud download instructions
+    print(f"\n{'='*60}")
+    print(f"☁️  CLOUD DOWNLOAD INSTRUCTIONS")
+    print(f"{'='*60}")
+    print(f"\nTo download files to your local computer:")
+    print(f"\n1. Using SCP (Secure Copy):")
+    print(f"   scp user@cloud-host:{output_dir.absolute()}/{zip_filename.name if zip_filename else safe_title + '_package.json'} ./")
+    print(f"\n2. Using SFTP:")
+    print(f"   sftp user@cloud-host")
+    print(f"   cd {output_dir.absolute()}")
+    print(f"   get {zip_filename.name if zip_filename else '*.*'}")
+    print(f"   quit")
+    print(f"\n3. Using rsync:")
+    print(f"   rsync -avz user@cloud-host:{output_dir.absolute()}/ ./book_downloads/")
+    print(f"\n4. Direct file paths (for cloud file managers):")
+    print(f"   {json_filename.absolute()}")
     if pdf_dest_path and pdf_dest_path.exists():
-        print(f"  • PDF: {pdf_dest_path.absolute()}")
+        print(f"   {pdf_dest_path.absolute()}")
+    if zip_filename:
+        print(f"   {zip_filename.absolute()}")
     
-    # Offer to open directory
+    print(f"\n💡 RECOMMENDED: Download the zip archive for easiest transfer:")
+    if zip_filename:
+        print(f"   {zip_filename.absolute()}")
+    
+    # Offer to open directory (only if not in cloud/headless)
     try:
         import platform
-        if platform.system() == "Windows":
-            os.startfile(output_dir.absolute())
-        elif platform.system() == "Darwin":  # macOS
-            os.system(f"open {output_dir.absolute()}")
-        else:  # Linux
-            os.system(f"xdg-open {output_dir.absolute()}")
-        print(f"\n📂 Opened output directory in file manager")
+        # Check if we're in a headless environment
+        if os.getenv('DISPLAY') or platform.system() == "Windows":
+            if platform.system() == "Windows":
+                os.startfile(output_dir.absolute())
+            elif platform.system() == "Darwin":  # macOS
+                os.system(f"open {output_dir.absolute()}")
+            else:  # Linux
+                os.system(f"xdg-open {output_dir.absolute()}")
+            print(f"\n📂 Opened output directory in file manager")
     except:
         pass
 
