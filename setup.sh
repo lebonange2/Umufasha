@@ -224,7 +224,9 @@ else
 fi
 
 # Install Bark TTS (Suno AI) - works with Python >=3.8
-print_status "Attempting to install Bark TTS (Suno AI)..."
+# Note: Bark is now included in requirements.txt as a git dependency
+# This section ensures it's installed and checks for hf_transfer
+print_status "Checking Bark TTS installation..."
 PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 print_status "Python $PYTHON_VERSION detected - Bark supports Python >=3.8"
 
@@ -232,29 +234,33 @@ print_status "Python $PYTHON_VERSION detected - Bark supports Python >=3.8"
 export HF_HUB_ENABLE_HF_TRANSFER=0
 
 # We're already in the venv (activated earlier), so pip and python3 point to venv
-# Check if Bark is already installed
+# Check if Bark is already installed (it should be from requirements.txt)
 if python3 -c "from bark import generate_audio" 2>/dev/null; then
-    print_success "Bark TTS already installed in virtual environment"
-    # Try to install hf_transfer if not already installed
+    print_success "Bark TTS is installed in virtual environment"
+    # Try to install hf_transfer if not already installed (optional)
     if ! python3 -c "import hf_transfer" 2>/dev/null; then
         if pip install hf_transfer >/dev/null 2>&1; then
             print_success "hf_transfer installed (optional, speeds up model downloads)"
         fi
     fi
-elif pip install git+https://github.com/suno-ai/bark.git >/dev/null 2>&1; then
-    print_success "Bark TTS installed successfully in virtual environment"
-    print_warning "Note: First run will download models (~2GB), which may take time"
-    # Try to install hf_transfer (optional, speeds up downloads but not required)
-    if pip install hf_transfer >/dev/null 2>&1; then
-        print_success "hf_transfer installed (optional, speeds up model downloads)"
-    else
-        print_warning "hf_transfer not installed (optional, downloads will use standard method)"
-    fi
 else
-    print_warning "Bark TTS installation failed. TTS features will not be available."
-    print_warning "You can install manually later:"
-    print_warning "  source venv/bin/activate && pip install git+https://github.com/suno-ai/bark.git"
-    print_warning "Note: Bark requires torch and other dependencies. First run downloads ~2GB of models."
+    # Bark should have been installed from requirements.txt, but if not, install it now
+    print_warning "Bark TTS not found, installing from requirements.txt..."
+    if pip install git+https://github.com/suno-ai/bark.git >/dev/null 2>&1; then
+        print_success "Bark TTS installed successfully"
+        print_warning "Note: First run will download models (~2GB), which may take time"
+        # Try to install hf_transfer (optional, speeds up downloads but not required)
+        if pip install hf_transfer >/dev/null 2>&1; then
+            print_success "hf_transfer installed (optional, speeds up model downloads)"
+        else
+            print_warning "hf_transfer not installed (optional, downloads will use standard method)"
+        fi
+    else
+        print_warning "Bark TTS installation failed. TTS features will not be available."
+        print_warning "You can install manually later:"
+        print_warning "  source venv/bin/activate && pip install git+https://github.com/suno-ai/bark.git"
+        print_warning "Note: Bark requires torch and other dependencies. First run downloads ~2GB of models."
+    fi
 fi
 
 # Verify critical packages
