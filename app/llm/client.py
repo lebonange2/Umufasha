@@ -2,9 +2,14 @@
 import json
 from typing import Dict, Any, Optional, List, AsyncIterator
 import httpx
-import structlog
 
-logger = structlog.get_logger(__name__)
+# Try to import structlog, fallback to standard logging if not available
+try:
+    import structlog
+    logger = structlog.get_logger(__name__)
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
 
 
 class LLMClient:

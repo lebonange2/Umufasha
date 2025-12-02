@@ -1191,5 +1191,41 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
+    import sys
+    
+    # Check for required dependencies before importing
+    missing_deps = []
+    
+    try:
+        import structlog
+    except ImportError:
+        missing_deps.append("structlog")
+    
+    try:
+        import httpx
+    except ImportError:
+        missing_deps.append("httpx")
+    
+    if missing_deps:
+        print("=" * 60)
+        print("ERROR: Missing required dependencies")
+        print("=" * 60)
+        print(f"\nPlease install the following packages:")
+        print(f"  pip install {' '.join(missing_deps)}")
+        print(f"\nOr install all requirements:")
+        print(f"  pip install -r requirements-app.txt")
+        print(f"\nOr for book writer specifically:")
+        print(f"  pip install -r app/book_writer/requirements.txt")
+        sys.exit(1)
+    
+    # Now safe to import
+    try:
+        from app.llm.client import LLMClient
+        from app.book_writer.config import get_config
+    except ImportError as e:
+        print(f"Error importing modules: {e}")
+        print("\nMake sure you're running from the project root directory.")
+        sys.exit(1)
+    
     asyncio.run(main())
 

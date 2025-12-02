@@ -1,0 +1,11 @@
+# Requirements for book writer modules
+# These are also in requirements-app.txt, but listed here for standalone use
+
+# Core dependencies
+structlog>=23.2.0
+httpx>=0.25.0
+
+# Note: If running standalone, also ensure:
+# - app.core.config is available (or provide config manually)
+# - LLM service is accessible (Ollama, OpenAI, etc.)
+
