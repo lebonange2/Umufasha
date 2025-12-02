@@ -325,106 +325,29 @@ async def add_text_context(doc_id: str, request: Request):
 
 
 def _init_tts_model():
-    """Initialize TTS model (lazy loading) with multiple fallback options."""
-    import sys
-    
-    python_version = sys.version_info
-    logger.info(f"Python version: {python_version.major}.{python_version.minor}.{python_version.micro}")
-    
-    # Try Coqui TTS XTTS v2 first (best quality, but requires Python <3.12)
-    if python_version.major == 3 and python_version.minor < 12:
-        try:
-            from TTS.api import TTS
-            import torch
-            
-            tts = TTS(
-                model_name="tts_models/multilingual/multi-dataset/xtts_v2",
-                progress_bar=False,
-                gpu=torch.cuda.is_available()
-            )
-            logger.info("Initialized Coqui TTS XTTS v2 model")
-            return tts, "coqui_xtts"
-        except ImportError:
-            logger.warning("Coqui TTS not installed, trying alternatives")
-        except Exception as e:
-            logger.warning(f"Coqui TTS initialization failed: {e}, trying alternatives")
-    else:
-        logger.info("Python 3.12+ detected, skipping Coqui TTS (not compatible)")
-    
-    # Try Piper TTS (works with Python 3.12+)
+    """Initialize Bark TTS model (lazy loading)."""
     try:
-        from piper import PiperVoice
-        from piper.download import ensure_voice_exists, find_voice
+        from bark import generate_audio, preload_models, SAMPLE_RATE
         
-        # Download and use Piper voice
-        voice_name = "en_US-lessac-medium"
-        voice_path = ensure_voice_exists(voice_name, [])
-        config_path = find_voice(voice_name, [])
+        # Preload models on first initialization (this downloads models if needed)
+        logger.info("Preloading Bark models (this may take a while on first run)...")
+        preload_models()
         
-        tts = PiperVoice.load(voice_path, config_path=config_path)
-        logger.info("Initialized Piper TTS model")
-        return tts, "piper"
-    except ImportError:
-        logger.warning("Piper TTS not installed, trying edge-tts")
-    except Exception as e:
-        logger.warning(f"Piper TTS initialization failed: {e}, trying edge-tts")
-    
-    # Try edge-tts (Microsoft Edge TTS - works with Python 3.12+, requires internet)
-    try:
-        import edge_tts
-        logger.info("Initialized edge-tts (Microsoft Edge TTS)")
-        return edge_tts, "edge_tts"
-    except ImportError:
-        logger.warning("edge-tts not installed, trying gTTS")
-    except Exception as e:
-        logger.warning(f"edge-tts initialization failed: {e}, trying gTTS")
-    
-    # Try gTTS (Google Text-to-Speech - works with Python 3.12+, requires internet)
-    try:
-        from gtts import gTTS
-        import io
-        logger.info("Initialized gTTS (Google Text-to-Speech)")
-        return {"gTTS": gTTS, "io": io}, "gtts"
-    except ImportError:
-        logger.warning("gTTS not installed, trying pyttsx3")
-    except Exception as e:
-        logger.warning(f"gTTS initialization failed: {e}, trying pyttsx3")
-    
-    # Try pyttsx3 (system TTS - works with Python 3.12+, offline but quality varies)
-    try:
-        import pyttsx3
-        engine = pyttsx3.init()
-        # Set properties for better quality
-        engine.setProperty('rate', 150)  # Speed of speech
-        engine.setProperty('volume', 0.9)  # Volume level
-        # Try to set a better voice if available
-        voices = engine.getProperty('voices')
-        if voices:
-            # Prefer female voice if available
-            for voice in voices:
-                if 'female' in voice.name.lower() or 'zira' in voice.name.lower():
-                    engine.setProperty('voice', voice.id)
-                    break
-        logger.info("Initialized pyttsx3 (system TTS)")
-        return engine, "pyttsx3"
-    except ImportError:
-        logger.warning("pyttsx3 not installed")
-    except Exception as e:
-        logger.warning(f"pyttsx3 initialization failed: {e}")
-    
-    # If all fail, raise exception with helpful message
-    python_version_str = f"{python_version.major}.{python_version.minor}"
-    if python_version.minor >= 12:
+        logger.info("Initialized Bark TTS model")
+        return {
+            "generate_audio": generate_audio,
+            "SAMPLE_RATE": SAMPLE_RATE
+        }, "bark"
+    except ImportError as e:
+        logger.error(f"Bark not installed: {e}")
         raise Exception(
-            f"No TTS model available for Python {python_version_str}. "
-            f"Install one of: pip install edge-tts (recommended), pip install gtts, or pip install pyttsx3. "
-            f"Note: Coqui TTS requires Python <3.12."
+            "Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
         )
-    else:
+    except Exception as e:
+        logger.error(f"Bark initialization failed: {e}")
         raise Exception(
-            f"No TTS model available. Install one of: "
-            f"pip install TTS (Coqui TTS), pip install piper-tts, "
-            f"pip install edge-tts, pip install gtts, or pip install pyttsx3"
+            f"Failed to initialize Bark TTS: {str(e)}. "
+            f"Install with: pip install git+https://github.com/suno-ai/bark.git"
         )
 
 
@@ -434,64 +357,66 @@ _tts_type = None
 
 
 def get_tts_model():
-    """Get or initialize TTS model."""
+    """Get or initialize Bark TTS model."""
     global _tts_model, _tts_type
     if _tts_model is None:
         try:
             _tts_model, _tts_type = _init_tts_model()
         except Exception as e:
-            logger.error(f"Failed to initialize TTS model: {e}")
-            import sys
-            python_version = sys.version_info
-            if python_version.minor >= 12:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"TTS model not available: {str(e)}. "
-                    f"For Python 3.12+, install one of: pip install edge-tts (recommended), "
-                    f"pip install gtts, or pip install pyttsx3"
-                )
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"TTS model not available: {str(e)}. "
-                    f"Install one of: pip install TTS, pip install piper-tts, "
-                    f"pip install edge-tts, pip install gtts, or pip install pyttsx3"
-                )
+            logger.error(f"Failed to initialize Bark TTS model: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Bark TTS not available: {str(e)}. "
+                f"Install with: pip install git+https://github.com/suno-ai/bark.git"
+            )
     return _tts_model, _tts_type
 
 
 def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str] = None):
-    """Convert text to speech synchronously (runs in thread pool)."""
+    """Convert text to speech synchronously using Bark (runs in thread pool)."""
     try:
-        # Try to get TTS model, with better error handling
+        # Get Bark TTS model
         try:
-            tts, tts_type = get_tts_model()
+            bark_model, tts_type = get_tts_model()
+            if tts_type != "bark":
+                raise Exception("Expected Bark TTS model")
         except HTTPException as e:
-            # Re-raise HTTP exceptions (they have proper error messages)
             raise
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"TTS model initialization failed: {error_msg}")
+            logger.error(f"Bark TTS model initialization failed: {error_msg}")
             raise Exception(
-                f"TTS model not available: {error_msg}. "
-                f"Install with: pip install TTS (for Coqui TTS) or pip install piper-tts (for Piper TTS). "
-                f"Note: Coqui TTS requires Python <3.12. For Python 3.12+, use Piper TTS."
+                f"Bark TTS not available: {error_msg}. "
+                f"Install with: pip install git+https://github.com/suno-ai/bark.git"
             )
         
+        generate_audio = bark_model["generate_audio"]
+        sample_rate = bark_model["SAMPLE_RATE"]
+        
         # Clean and prepare text
-        # Split into chunks if too long (TTS models have limits)
-        max_chunk_length = 500  # characters per chunk
+        # Bark works well with ~13 seconds of spoken text per chunk
+        # Split text into sentences and group them into reasonable chunks
+        max_chunk_length = 250  # characters per chunk (conservative for Bark)
         chunks = []
         current_chunk = ""
         
-        sentences = text.split('. ')
+        # Split by sentences first
+        sentences = text.replace('!', '.').replace('?', '.').split('. ')
         for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+                
+            # Add period back if it was removed
+            if not sentence.endswith('.'):
+                sentence += '.'
+            
             if len(current_chunk) + len(sentence) < max_chunk_length:
-                current_chunk += sentence + '. '
+                current_chunk += sentence + ' '
             else:
                 if current_chunk:
                     chunks.append(current_chunk.strip())
-                current_chunk = sentence + '. '
+                current_chunk = sentence + ' '
         
         if current_chunk:
             chunks.append(current_chunk.strip())
@@ -504,140 +429,41 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         import numpy as np
         
         audio_segments = []
-        sample_rate = 22050  # Default sample rate
         
         for i, chunk in enumerate(chunks):
             if not chunk.strip():
                 continue
-                
-            chunk_output = output_path.parent / f"{output_path.stem}_chunk_{i}.wav"
             
-            if tts_type == "coqui_xtts":
-                # Coqui XTTS v2
-                if speaker_wav and os.path.exists(speaker_wav):
-                    tts.tts_to_file(
-                        text=chunk,
-                        file_path=str(chunk_output),
-                        speaker_wav=speaker_wav,
-                        language="en"
-                    )
+            try:
+                logger.info(f"Generating audio for chunk {i+1}/{len(chunks)} (length: {len(chunk)})")
+                
+                # Use voice preset if speaker_wav is provided (Bark supports history_prompt)
+                # Otherwise use default voice
+                history_prompt = None
+                if speaker_wav:
+                    # Bark can use history prompts for voice cloning, but we'll use a default for now
+                    # You can extend this to support custom voice prompts
+                    history_prompt = "v2/en_speaker_1"  # Default English speaker
+                
+                # Generate audio with Bark
+                audio_array = generate_audio(
+                    chunk,
+                    history_prompt=history_prompt,
+                    text_temp=0.7,
+                    waveform_temp=0.7,
+                    silent=True  # Disable progress bar
+                )
+                
+                # Bark returns numpy array at 24kHz sample rate
+                if audio_array is not None and len(audio_array) > 0:
+                    audio_segments.append(audio_array)
+                    logger.info(f"Generated audio chunk {i+1}, length: {len(audio_array)} samples")
                 else:
-                    # Use default speaker
-                    tts.tts_to_file(
-                        text=chunk,
-                        file_path=str(chunk_output),
-                        language="en"
-                    )
-                # Load audio to get sample rate
-                if chunk_output.exists():
-                    data, sample_rate = sf.read(str(chunk_output))
-                    audio_segments.append(data)
-                    chunk_output.unlink()
+                    logger.warning(f"Empty audio generated for chunk {i+1}")
                     
-            elif tts_type == "piper":
-                # Piper TTS
-                with open(chunk_output, "wb") as f:
-                    tts.synthesize(chunk, f)
-                # Load audio to get sample rate
-                if chunk_output.exists():
-                    data, sample_rate = sf.read(str(chunk_output))
-                    audio_segments.append(data)
-                    chunk_output.unlink()
-                    
-            elif tts_type == "edge_tts":
-                # Microsoft Edge TTS (requires internet)
-                import asyncio
-                import edge_tts
-                
-                async def generate_edge_tts():
-                    communicate = edge_tts.Communicate(chunk, "en-US-AriaNeural")
-                    await communicate.save(str(chunk_output))
-                
-                # Run async function
-                try:
-                    # Try to get existing event loop, or create new one
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_closed():
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    loop.run_until_complete(generate_edge_tts())
-                except Exception as e:
-                    logger.warning(f"edge-tts chunk {i} failed: {e}, trying next chunk")
-                    continue
-                
-                # Load audio
-                if chunk_output.exists():
-                    data, sample_rate = sf.read(str(chunk_output))
-                    audio_segments.append(data)
-                    chunk_output.unlink()
-                    
-            elif tts_type == "gtts":
-                # Google Text-to-Speech (requires internet)
-                import io
-                
-                try:
-                    # Generate speech
-                    gTTS_class = tts["gTTS"]
-                    tts_obj = gTTS_class(text=chunk, lang='en', slow=False)
-                    mp3_buffer = io.BytesIO()
-                    tts_obj.write_to_fp(mp3_buffer)
-                    mp3_buffer.seek(0)
-                    
-                    # Convert MP3 to WAV using pydub
-                    try:
-                        from pydub import AudioSegment
-                        audio = AudioSegment.from_mp3(mp3_buffer)
-                        audio.export(str(chunk_output), format="wav")
-                    except ImportError:
-                        # Fallback: save as MP3 and let soundfile handle it (may not work)
-                        logger.warning("pydub not available, trying direct MP3 save")
-                        with open(str(chunk_output).replace('.wav', '.mp3'), 'wb') as f:
-                            f.write(mp3_buffer.getvalue())
-                        # Try to read MP3 directly (may fail)
-                        chunk_output = Path(str(chunk_output).replace('.wav', '.mp3'))
-                    
-                    # Load audio
-                    if chunk_output.exists():
-                        data, sample_rate = sf.read(str(chunk_output))
-                        audio_segments.append(data)
-                        chunk_output.unlink()
-                except Exception as e:
-                    logger.warning(f"gTTS chunk {i} failed: {e}, trying next chunk")
-                    continue
-                    
-            elif tts_type == "pyttsx3":
-                # System TTS (offline, quality varies)
-                import tempfile
-                import wave
-                
-                try:
-                    # Save to temporary WAV file
-                    temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
-                    temp_wav_path = temp_wav.name
-                    temp_wav.close()
-                    
-                    tts.save_to_file(chunk, temp_wav_path)
-                    tts.runAndWait()
-                    
-                    # Load and convert to proper format
-                    if os.path.exists(temp_wav_path):
-                        # Read WAV file
-                        with wave.open(temp_wav_path, 'rb') as wav_file:
-                            sample_rate = wav_file.getframerate()
-                            frames = wav_file.readframes(wav_file.getnframes())
-                            # Convert to numpy array
-                            import struct
-                            audio_data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
-                            audio_segments.append(audio_data)
-                        os.unlink(temp_wav_path)
-                except Exception as e:
-                    logger.warning(f"pyttsx3 chunk {i} failed: {e}, trying next chunk")
-                    continue
+            except Exception as e:
+                logger.warning(f"Bark chunk {i+1} failed: {e}, trying next chunk")
+                continue
         
         if not audio_segments:
             raise ValueError("No audio generated from any chunks")
@@ -648,11 +474,12 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         # Save final audio file
         sf.write(str(output_path), final_audio, sample_rate)
         
-        logger.info("TTS conversion completed", output_path=str(output_path), chunks=len(chunks))
+        logger.info("Bark TTS conversion completed", output_path=str(output_path), chunks=len(chunks), 
+                   audio_length=len(final_audio), sample_rate=sample_rate)
         return str(output_path)
         
     except Exception as e:
-        logger.error("TTS conversion error", error=str(e), exc_info=True)
+        logger.error("Bark TTS conversion error", error=str(e), exc_info=True)
         raise
 
 
@@ -737,14 +564,8 @@ async def convert_pdf_to_audio(
         audio_id = str(uuid.uuid4())
         audio_path = AUDIO_DIR / f"{audio_id}.wav"
         
-        # Check if speaker reference file exists
-        speaker_path = None
-        if speaker_wav:
-            speaker_path_obj = Path(speaker_wav)
-            if speaker_path_obj.exists():
-                speaker_path = str(speaker_path_obj)
-            else:
-                logger.warning(f"Speaker reference file not found: {speaker_wav}")
+        # Note: Bark supports history_prompt for voice cloning, but we use default for now
+        # speaker_wav parameter is kept for API compatibility but not used with Bark
         
         # Run TTS conversion in thread pool (it's CPU/GPU intensive)
         logger.info("Starting TTS conversion", doc_id=doc_id, text_length=len(text))

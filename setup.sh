@@ -223,73 +223,20 @@ else
     print_warning "Some app dependencies failed to install. Continuing..."
 fi
 
-# Try to install TTS libraries (optional, may fail on Python 3.12+)
-print_status "Attempting to install TTS libraries (optional)..."
+# Install Bark TTS (Suno AI) - works with Python >=3.8
+print_status "Attempting to install Bark TTS (Suno AI)..."
 PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-PYTHON_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
-PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+print_status "Python $PYTHON_VERSION detected - Bark supports Python >=3.8"
 
-# Check Python version for TTS compatibility
-if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 12 ]; then
-    # Python < 3.12 - can install Coqui TTS
-    print_status "Python $PYTHON_VERSION detected - attempting to install Coqui TTS..."
-    # Suppress stderr to avoid version compatibility warnings
-    if pip install "TTS>=0.22.0" >/dev/null 2>&1 || python3 -c "from TTS.api import TTS" 2>/dev/null; then
-        print_success "Coqui TTS installed successfully"
-    else
-        print_warning "Coqui TTS installation failed, trying Piper TTS..."
-        if pip install piper-tts >/dev/null 2>&1 || python3 -c "from piper import PiperVoice" 2>/dev/null; then
-            print_success "Piper TTS installed"
-        else
-            print_warning "Piper TTS installation also failed"
-        fi
-    fi
+if pip install git+https://github.com/suno-ai/bark.git >/dev/null 2>&1; then
+    print_success "Bark TTS installed successfully"
+    print_warning "Note: First run will download models (~2GB), which may take time"
+elif python3 -c "from bark import generate_audio" 2>/dev/null; then
+    print_success "Bark TTS already installed"
 else
-    # Python 3.12+ - skip Coqui TTS completely, try alternatives
-    print_status "Python $PYTHON_VERSION detected - Coqui TTS not compatible (requires <3.12)"
-    print_status "Skipping Coqui TTS installation (not compatible with Python 3.12+)..."
-    
-    # Try Piper TTS first
-    print_status "Attempting to install Piper TTS..."
-    PIPER_INSTALLED=false
-    if pip install piper-tts >/dev/null 2>&1 || python3 -c "from piper import PiperVoice" 2>/dev/null; then
-        print_success "Piper TTS installed successfully"
-        PIPER_INSTALLED=true
-    else
-        print_warning "Piper TTS installation failed, trying edge-tts..."
-    fi
-    
-    # Try edge-tts (Microsoft Edge TTS - recommended for Python 3.12+)
-    if [ "$PIPER_INSTALLED" = false ]; then
-        print_status "Attempting to install edge-tts (Microsoft Edge TTS)..."
-        if pip install edge-tts >/dev/null 2>&1 || python3 -c "import edge_tts" 2>/dev/null; then
-            print_success "edge-tts installed successfully"
-        else
-            print_warning "edge-tts installation failed, trying gTTS..."
-            
-            # Try gTTS (Google Text-to-Speech)
-            print_status "Attempting to install gTTS..."
-            if pip install gtts >/dev/null 2>&1 || python3 -c "from gtts import gTTS" 2>/dev/null; then
-                print_success "gTTS installed successfully"
-                # gTTS requires pydub for audio conversion
-                pip install pydub >/dev/null 2>&1 || print_warning "pydub installation failed (needed for gTTS)"
-            else
-                print_warning "gTTS installation failed, trying pyttsx3..."
-                
-                # Try pyttsx3 (system TTS - offline)
-                print_status "Attempting to install pyttsx3 (system TTS)..."
-                if pip install pyttsx3 >/dev/null 2>&1 || python3 -c "import pyttsx3" 2>/dev/null; then
-                    print_success "pyttsx3 installed successfully"
-                else
-                    print_warning "All TTS libraries failed to install. TTS features will not be available."
-                    print_warning "You can install manually later:"
-                    print_warning "  pip install edge-tts (recommended for Python 3.12+)"
-                    print_warning "  pip install gtts (requires internet)"
-                    print_warning "  pip install pyttsx3 (system TTS, offline)"
-                fi
-            fi
-        fi
-    fi
+    print_warning "Bark TTS installation failed. TTS features will not be available."
+    print_warning "You can install manually later: pip install git+https://github.com/suno-ai/bark.git"
+    print_warning "Note: Bark requires torch and other dependencies. First run downloads ~2GB of models."
 fi
 
 # Verify critical packages
@@ -319,39 +266,18 @@ python3 -c "import sqlalchemy; print(f'✓ sqlalchemy {sqlalchemy.__version__}')
     MISSING_PACKAGES+=("sqlalchemy")
 }
 
-# Check TTS dependencies (optional but recommended)
+# Check TTS dependencies (Bark)
 print_status "Checking TTS dependencies..."
 TTS_AVAILABLE=false
 TTS_TYPE="none"
-if python3 -c "from TTS.api import TTS" 2>/dev/null; then
-    print_success "Coqui TTS found"
+if python3 -c "from bark import generate_audio" 2>/dev/null; then
+    print_success "Bark TTS found"
     TTS_AVAILABLE=true
-    TTS_TYPE="coqui"
-elif python3 -c "from piper import PiperVoice" 2>/dev/null; then
-    print_success "Piper TTS found"
-    TTS_AVAILABLE=true
-    TTS_TYPE="piper"
-elif python3 -c "import edge_tts" 2>/dev/null; then
-    print_success "edge-tts found (Microsoft Edge TTS)"
-    TTS_AVAILABLE=true
-    TTS_TYPE="edge-tts"
-elif python3 -c "from gtts import gTTS" 2>/dev/null; then
-    print_success "gTTS found (Google Text-to-Speech)"
-    TTS_AVAILABLE=true
-    TTS_TYPE="gtts"
-elif python3 -c "import pyttsx3" 2>/dev/null; then
-    print_success "pyttsx3 found (system TTS)"
-    TTS_AVAILABLE=true
-    TTS_TYPE="pyttsx3"
+    TTS_TYPE="bark"
 else
-    print_warning "TTS libraries not found. PDF to Audio feature will not work."
-    PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
-    if [ "$PYTHON_MINOR" -ge 12 ]; then
-        print_warning "Python 3.12+ detected - Coqui TTS not compatible."
-        print_warning "Install one of: pip install edge-tts (recommended), pip install gtts, or pip install pyttsx3"
-    else
-        print_warning "Install with: pip install TTS, pip install piper-tts, pip install edge-tts, pip install gtts, or pip install pyttsx3"
-    fi
+    print_warning "Bark TTS not found. PDF to Audio feature will not work."
+    print_warning "Install with: pip install git+https://github.com/suno-ai/bark.git"
+    print_warning "Note: First run will download models (~2GB), which may take time"
 fi
 
 if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
@@ -691,31 +617,18 @@ echo "- Test: ollama run llama3:latest 'Hello'"
 echo ""
 echo "🎙️ Text-to-Speech (TTS):"
 if [ "$TTS_AVAILABLE" = true ]; then
-    if [ "$TTS_TYPE" = "coqui" ]; then
-        echo "- Status: ✅ Coqui TTS installed"
-    elif [ "$TTS_TYPE" = "piper" ]; then
-        echo "- Status: ✅ Piper TTS installed"
-    elif [ "$TTS_TYPE" = "edge-tts" ]; then
-        echo "- Status: ✅ edge-tts installed (Microsoft Edge TTS)"
-    elif [ "$TTS_TYPE" = "gtts" ]; then
-        echo "- Status: ✅ gTTS installed (Google Text-to-Speech)"
-    elif [ "$TTS_TYPE" = "pyttsx3" ]; then
-        echo "- Status: ✅ pyttsx3 installed (system TTS)"
+    if [ "$TTS_TYPE" = "bark" ]; then
+        echo "- Status: ✅ Bark TTS installed (Suno AI)"
+        echo "- Model: Bark text-to-audio model"
+        echo "- Note: First run will download models (~2GB)"
     fi
     echo "- PDF to Audio: Available on /writer/pdf-to-audio page"
 else
-    echo "- Status: ⚠️ TTS libraries not installed"
-    PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
-    if [ "$PYTHON_MINOR" -ge 12 ]; then
-        echo "- Python 3.12+ detected - Coqui TTS not compatible"
-        echo "- Install one of:"
-        echo "  pip install edge-tts (recommended, requires internet)"
-        echo "  pip install gtts (requires internet)"
-        echo "  pip install pyttsx3 (system TTS, offline)"
-    else
-        echo "- Install with: pip install TTS, pip install piper-tts, pip install edge-tts, pip install gtts, or pip install pyttsx3"
-    fi
-    echo "- PDF to Audio: Will not work until TTS is installed"
+    echo "- Status: ⚠️ Bark TTS not installed"
+    echo "- Install with: pip install git+https://github.com/suno-ai/bark.git"
+    echo "- Note: Works with Python >=3.8, supports CPU and GPU"
+    echo "- First run downloads ~2GB of models"
+    echo "- PDF to Audio: Will not work until Bark is installed"
 fi
 echo ""
 echo "📚 Documentation:"
