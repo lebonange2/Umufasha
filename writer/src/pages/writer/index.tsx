@@ -464,95 +464,97 @@ export default function WriterPage() {
       {/* Main Editor */}
       <div className="flex-1 flex flex-col">
         {/* Top bar */}
-        <div className="border-b p-2 flex items-center justify-between bg-gray-50">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleOpen}
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              aria-label="Open file"
-            >
-              Open
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              aria-label="Save file"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setShowVersions(!showVersions)}
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              aria-label="Version history"
-            >
-              History
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={monospace}
-                onChange={(e) => setMonospace(e.target.checked)}
-              />
-              Monospace
-            </label>
-            <button
-              onClick={() => setFocusMode(!focusMode)}
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              aria-label="Focus mode"
-            >
-              Focus
-            </button>
-            <button
-              onClick={() => setStructureMode(!structureMode)}
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              aria-label="Structure mode"
-            >
-              {structureMode ? 'Simple' : 'Structure'}
-            </button>
-            <button
-              onClick={() => {
-                // Test outline preview - check if there's a pending outline
-                const pendingOutline = localStorage.getItem('pending_outline');
-                if (pendingOutline) {
-                  navigate('/outline-preview');
-                } else {
-                  alert('No outline found. Generate an outline first using the AI "Outline" feature, or paste outline JSON into localStorage with key "pending_outline"');
-                }
-              }}
-              className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
-              aria-label="Preview outline"
-              title="Preview outline (if available)"
-            >
-              Preview Outline
-            </button>
-        <button
-          onClick={() => navigate('/book-writer')}
-          className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-blue-50"
-          aria-label="Book Writer"
-          title="AI Book Writer - Generate full outlines and books"
-        >
-          📚 Book Writer
-        </button>
-        <button
-          onClick={() => navigate('/ferrari-company')}
-          className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-purple-50"
-          aria-label="Ferrari Company"
-          title="Ferrari-Style Book Creation Company - Multi-agent pipeline"
-        >
-          🏎️ Ferrari Company
-        </button>
-        <button
-          onClick={() => setShowPDFToAudio(!showPDFToAudio)}
-          className={`px-3 py-1 text-sm border rounded hover:bg-gray-100 ${
-            showPDFToAudio ? 'bg-green-200 border-green-400' : 'bg-green-50'
-          }`}
-          aria-label="PDF to Audio"
-          title="Convert PDF books to audio using local TTS"
-        >
-          🎙️ {showPDFToAudio ? 'Hide' : 'PDF to'} Audio
-        </button>
+        <div className="border-b p-2 bg-gray-50">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleOpen}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                aria-label="Open file"
+              >
+                Open
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                aria-label="Save file"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setShowVersions(!showVersions)}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                aria-label="Version history"
+              >
+                History
+              </button>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={monospace}
+                  onChange={(e) => setMonospace(e.target.checked)}
+                />
+                Monospace
+              </label>
+              <button
+                onClick={() => setFocusMode(!focusMode)}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                aria-label="Focus mode"
+              >
+                Focus
+              </button>
+              <button
+                onClick={() => setStructureMode(!structureMode)}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                aria-label="Structure mode"
+              >
+                {structureMode ? 'Simple' : 'Structure'}
+              </button>
+              <button
+                onClick={() => {
+                  // Test outline preview - check if there's a pending outline
+                  const pendingOutline = localStorage.getItem('pending_outline');
+                  if (pendingOutline) {
+                    navigate('/outline-preview');
+                  } else {
+                    alert('No outline found. Generate an outline first using the AI "Outline" feature, or paste outline JSON into localStorage with key "pending_outline"');
+                  }
+                }}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100"
+                aria-label="Preview outline"
+                title="Preview outline (if available)"
+              >
+                Preview Outline
+              </button>
+              <button
+                onClick={() => navigate('/book-writer')}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-blue-50"
+                aria-label="Book Writer"
+                title="AI Book Writer - Generate full outlines and books"
+              >
+                📚 Book Writer
+              </button>
+              <button
+                onClick={() => navigate('/ferrari-company')}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-purple-50"
+                aria-label="Ferrari Company"
+                title="Ferrari-Style Book Creation Company - Multi-agent pipeline"
+              >
+                🏎️ Ferrari Company
+              </button>
+              <button
+                onClick={() => setShowPDFToAudio(!showPDFToAudio)}
+                className={`px-3 py-1 text-sm border rounded hover:bg-gray-100 ${
+                  showPDFToAudio ? 'bg-green-200 border-green-400' : 'bg-green-50'
+                }`}
+                aria-label="PDF to Audio"
+                title="Convert PDF books to audio using local TTS"
+              >
+                🎙️ {showPDFToAudio ? 'Hide' : 'PDF to'} Audio
+              </button>
+            </div>
           </div>
         </div>
 
