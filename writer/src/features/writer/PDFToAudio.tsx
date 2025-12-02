@@ -148,13 +148,12 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
 
     setConverting(true);
     setError(null);
-    setProgress('Extracting text from PDF...');
+    setProgress('Starting conversion...');
     setAudioFile(null);
 
     try {
-      setProgress('Converting text to speech... This may take a few minutes for large documents.');
-      
-      const response = await fetch(`/api/writer/documents/${selectedSource.id}/convert-to-audio`, {
+      // Start conversion (returns task ID immediately)
+      const startResponse = await fetch(`/api/writer/documents/${selectedSource.id}/convert-to-audio`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -164,41 +163,93 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
-        throw new Error(errorData.detail || errorData.error || `Conversion failed (${response.status})`);
+      if (!startResponse.ok) {
+        const errorData = await startResponse.json().catch(() => ({ detail: `HTTP ${startResponse.status}` }));
+        throw new Error(errorData.detail || errorData.error || `Conversion failed (${startResponse.status})`);
       }
 
-      const data = await response.json();
+      const startData = await startResponse.json();
       
-      if (data.success && data.audio) {
-        setAudioFile(data.audio);
-        setProgress('Conversion completed!');
-        
-        // Auto-play audio when ready
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.load();
-          }
-        }, 500);
-      } else {
-        throw new Error(data.error || data.detail || 'Conversion failed');
+      if (!startData.success || !startData.task_id) {
+        throw new Error(startData.error || startData.detail || 'Failed to start conversion');
       }
+
+      const taskId = startData.task_id;
+      setProgress('Conversion started. Processing... This may take several minutes for large documents.');
+
+      // Poll for status
+      const pollInterval = 2000; // Poll every 2 seconds
+      const maxAttempts = 600; // Max 20 minutes (600 * 2s)
+      let attempts = 0;
+
+      const pollStatus = async (): Promise<void> => {
+        try {
+          const statusResponse = await fetch(`/api/writer/tts-status/${taskId}`);
+          
+          if (!statusResponse.ok) {
+            throw new Error(`Status check failed (${statusResponse.status})`);
+          }
+
+          const statusData = await statusResponse.json();
+          
+          if (statusData.status === 'completed' && statusData.audio) {
+            setAudioFile(statusData.audio);
+            setProgress('Conversion completed!');
+            
+            // Auto-play audio when ready
+            setTimeout(() => {
+              if (audioRef.current) {
+                audioRef.current.load();
+              }
+            }, 500);
+            return;
+          } else if (statusData.status === 'failed') {
+            throw new Error(statusData.error || statusData.progress || 'Conversion failed');
+          } else if (statusData.status === 'processing' || statusData.status === 'pending') {
+            // Update progress message
+            if (statusData.progress) {
+              setProgress(statusData.progress);
+            }
+            
+            // Continue polling
+            attempts++;
+            if (attempts >= maxAttempts) {
+              throw new Error('Conversion timed out. Please try again or use a smaller document.');
+            }
+            
+            setTimeout(pollStatus, pollInterval);
+          }
+        } catch (error: any) {
+          if (error.message && !error.message.includes('timed out')) {
+            // Only throw if it's not a polling continuation
+            throw error;
+          }
+          throw error;
+        }
+      };
+
+      // Start polling
+      await pollStatus();
+      
     } catch (error: any) {
       console.error('Conversion error:', error);
       let errorMessage = error.message || 'Failed to convert PDF to audio.';
       
       // Provide more specific error messages
       if (errorMessage.includes('TTS model not available') || errorMessage.includes('No TTS model')) {
-        errorMessage = 'TTS models are not installed. Install with: pip install TTS (or pip install piper-tts for Python 3.12+)';
-      } else if (errorMessage.includes('Python')) {
-        errorMessage = 'TTS installation issue detected. For Python 3.12+, use: pip install piper-tts';
+        errorMessage = 'Bark TTS not installed. Install with: pip install git+https://github.com/suno-ai/bark.git';
+      } else if (errorMessage.includes('Bark')) {
+        errorMessage = 'Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git';
       }
       
       setError(errorMessage);
     } finally {
       setConverting(false);
-      setProgress('');
+      // Don't clear progress if conversion completed successfully (audioFile is set)
+      if (!audioFile) {
+        // Only clear progress if conversion failed
+        setTimeout(() => setProgress(''), 3000);
+      }
     }
   };
 

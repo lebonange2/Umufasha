@@ -96,6 +96,10 @@ MAX_FILE_SIZE = 50 * 1024 * 1024
 # Thread pool for TTS operations
 tts_executor = ThreadPoolExecutor(max_workers=1)
 
+# Task status tracking for async TTS conversions
+# Format: {task_id: {"status": "pending|processing|completed|failed", "progress": str, "result": dict, "error": str}}
+tts_tasks: dict[str, dict] = {}
+
 
 class DocumentInfo(BaseModel):
     """Document information model."""
@@ -522,9 +526,18 @@ def get_tts_model():
     return _tts_model, _tts_type
 
 
-def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str] = None):
-    """Convert text to speech synchronously using Bark (runs in thread pool)."""
+def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str] = None, progress_callback=None):
+    """Convert text to speech synchronously using Bark (runs in thread pool).
+    
+    Args:
+        text: Text to convert
+        output_path: Output audio file path
+        speaker_wav: Optional speaker reference (not used with Bark)
+        progress_callback: Optional callback function(message: str) for progress updates
+    """
     try:
+        if progress_callback:
+            progress_callback("Initializing Bark TTS model...")
         # Get Bark TTS model
         try:
             bark_model, tts_type = get_tts_model()
@@ -580,12 +593,20 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         
         audio_segments = []
         
+        # Check if we're running in a task context (for progress updates)
+        task_id = None
+        # Try to get task_id from thread-local storage or global context
+        # For now, we'll pass it through a different mechanism
+        
         for i, chunk in enumerate(chunks):
             if not chunk.strip():
                 continue
             
             try:
+                chunk_progress = f"Generating audio chunk {i+1}/{len(chunks)}..."
                 logger.info(f"Generating audio for chunk {i+1}/{len(chunks)} (length: {len(chunk)})")
+                if progress_callback:
+                    progress_callback(chunk_progress)
                 
                 # Use voice preset if speaker_wav is provided (Bark supports history_prompt)
                 # Otherwise use default voice
@@ -608,6 +629,8 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
                 if audio_array is not None and len(audio_array) > 0:
                     audio_segments.append(audio_array)
                     logger.info(f"Generated audio chunk {i+1}, length: {len(audio_array)} samples")
+                    if progress_callback:
+                        progress_callback(f"Completed chunk {i+1}/{len(chunks)}")
                 else:
                     logger.warning(f"Empty audio generated for chunk {i+1}")
                     
@@ -619,18 +642,66 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
             raise ValueError("No audio generated from any chunks")
         
         # Concatenate all audio segments
+        if progress_callback:
+            progress_callback("Concatenating audio segments...")
         final_audio = np.concatenate(audio_segments)
         
         # Save final audio file
+        if progress_callback:
+            progress_callback("Saving audio file...")
         sf.write(str(output_path), final_audio, sample_rate)
         
         logger.info("Bark TTS conversion completed", output_path=str(output_path), chunks=len(chunks), 
                    audio_length=len(final_audio), sample_rate=sample_rate)
+        if progress_callback:
+            progress_callback("Conversion completed!")
         return str(output_path)
         
     except Exception as e:
         logger.error("Bark TTS conversion error", error=str(e), exc_info=True)
         raise
+
+
+def _run_tts_conversion(task_id: str, doc_id: str, text: str, doc_name: str, audio_path: Path, speaker_wav: Optional[str]):
+    """Run TTS conversion in background thread and update task status."""
+    try:
+        tts_tasks[task_id]["status"] = "processing"
+        tts_tasks[task_id]["progress"] = "Initializing TTS model..."
+        
+        # Store task_id in a way that text_to_speech_sync can access it
+        # We'll modify text_to_speech_sync to accept an optional progress callback
+        def update_progress(message: str):
+            if task_id in tts_tasks:
+                tts_tasks[task_id]["progress"] = message
+        
+        # Run TTS conversion with progress updates
+        audio_file_path = text_to_speech_sync(text, audio_path, speaker_wav, progress_callback=update_progress)
+        
+        # Get audio file size
+        audio_size = audio_path.stat().st_size if audio_path.exists() else 0
+        
+        safe_name = "".join(c for c in doc_name if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+        safe_name = safe_name.replace(' ', '_')
+        
+        audio_id = audio_path.stem
+        
+        tts_tasks[task_id]["status"] = "completed"
+        tts_tasks[task_id]["progress"] = "Conversion completed!"
+        tts_tasks[task_id]["result"] = {
+            "id": audio_id,
+            "file_path": f"/api/writer/audio/{audio_id}",
+            "filename": f"{safe_name}.wav",
+            "size": audio_size,
+            "document_id": doc_id,
+            "document_name": doc_name
+        }
+        logger.info("TTS conversion completed", task_id=task_id, audio_path=audio_file_path, size=audio_size)
+    except Exception as e:
+        error_msg = str(e)
+        logger.error("TTS conversion failed", task_id=task_id, error=error_msg, exc_info=True)
+        tts_tasks[task_id]["status"] = "failed"
+        tts_tasks[task_id]["error"] = error_msg
+        tts_tasks[task_id]["progress"] = f"Conversion failed: {error_msg}"
 
 
 @router.post("/api/writer/documents/{doc_id}/convert-to-audio")
@@ -639,12 +710,15 @@ async def convert_pdf_to_audio(
     speaker_wav: Optional[str] = None,
     language: str = "en"
 ):
-    """Convert PDF document to audio using local TTS model.
+    """Start PDF to audio conversion asynchronously. Returns task ID for status polling.
     
     Args:
         doc_id: Document ID (can be uploaded doc ID, ferrari project ID, or book-writer project ID)
         speaker_wav: Optional path to speaker reference audio (for voice cloning with XTTS)
         language: Language code (default: en)
+    
+    Returns:
+        Task ID to use for polling status via /api/writer/tts-status/{task_id}
     """
     try:
         text = None
@@ -710,69 +784,43 @@ async def convert_pdf_to_audio(
         safe_name = "".join(c for c in doc_name if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
         safe_name = safe_name.replace(' ', '_')
         
-        # Generate audio file path
+        # Generate task ID and audio file path
+        task_id = str(uuid.uuid4())
         audio_id = str(uuid.uuid4())
         audio_path = AUDIO_DIR / f"{audio_id}.wav"
+        
+        # Initialize task status
+        tts_tasks[task_id] = {
+            "status": "pending",
+            "progress": "Preparing conversion...",
+            "result": None,
+            "error": None
+        }
         
         # Note: Bark supports history_prompt for voice cloning, but we use default for now
         # speaker_wav parameter is kept for API compatibility but not used with Bark
         
-        # Run TTS conversion in thread pool (it's CPU/GPU intensive)
-        logger.info("Starting TTS conversion", doc_id=doc_id, text_length=len(text))
+        # Start TTS conversion in background thread (non-blocking)
+        logger.info("Starting TTS conversion", task_id=task_id, doc_id=doc_id, text_length=len(text))
         
-        try:
-            loop = asyncio.get_event_loop()
-            audio_file_path = await loop.run_in_executor(
-                tts_executor,
-                text_to_speech_sync,
-                text,
-                audio_path,
-                speaker_wav  # Pass speaker_wav (Bark doesn't use it but kept for API compatibility)
-            )
-        except Exception as e:
-            error_msg = str(e)
-            logger.error("TTS conversion failed", error=error_msg, exc_info=True)
-            
-            # Provide helpful error messages
-            if "Bark" in error_msg or "bark" in error_msg.lower():
-                raise HTTPException(
-                    status_code=500,
-                    detail="Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
-                )
-            elif "TTS model not available" in error_msg or "No TTS model" in error_msg:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
-                )
-            elif "ImportError" in error_msg or "ModuleNotFoundError" in error_msg:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Bark TTS library not found. Install with: pip install git+https://github.com/suno-ai/bark.git"
-                )
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"TTS conversion failed: {error_msg}"
-                )
+        # Run conversion in background thread
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(
+            tts_executor,
+            _run_tts_conversion,
+            task_id,
+            doc_id,
+            text,
+            doc_name,
+            audio_path,
+            speaker_wav
+        )
         
-        # Get audio file size
-        audio_size = audio_path.stat().st_size if audio_path.exists() else 0
-        
-        logger.info("TTS conversion completed", audio_path=audio_file_path, size=audio_size)
-        
-        safe_name = "".join(c for c in doc_name if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
-        safe_name = safe_name.replace(' ', '_')
-        
+        # Return immediately with task ID
         return {
             "success": True,
-            "audio": {
-                "id": audio_id,
-                "file_path": f"/api/writer/audio/{audio_id}",
-                "filename": f"{safe_name}.wav",
-                "size": audio_size,
-                "document_id": doc_id,
-                "document_name": doc_name
-            }
+            "task_id": task_id,
+            "message": "Conversion started. Poll /api/writer/tts-status/{task_id} for status."
         }
     
     except HTTPException:
@@ -780,6 +828,40 @@ async def convert_pdf_to_audio(
     except Exception as e:
         logger.error("PDF to audio conversion error", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Conversion failed: {str(e)}")
+
+
+@router.get("/api/writer/tts-status/{task_id}")
+async def get_tts_status(task_id: str):
+    """Get status of TTS conversion task.
+    
+    Returns:
+        Status object with: status (pending|processing|completed|failed), progress, result, error
+    """
+    if task_id not in tts_tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task = tts_tasks[task_id]
+    
+    response = {
+        "success": True,
+        "status": task["status"],
+        "progress": task.get("progress", ""),
+    }
+    
+    if task["status"] == "completed" and task.get("result"):
+        response["audio"] = task["result"]
+    elif task["status"] == "failed" and task.get("error"):
+        response["error"] = task["error"]
+        # Provide helpful error messages
+        error_msg = task["error"]
+        if "Bark" in error_msg or "bark" in error_msg.lower():
+            response["error"] = "Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
+        elif "TTS model not available" in error_msg or "No TTS model" in error_msg:
+            response["error"] = "Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
+        elif "ImportError" in error_msg or "ModuleNotFoundError" in error_msg:
+            response["error"] = "Bark TTS library not found. Install with: pip install git+https://github.com/suno-ai/bark.git"
+    
+    return response
 
 
 @router.get("/api/writer/audio/{audio_id}")
