@@ -449,6 +449,50 @@ export default function BookWriterPage() {
     }
   };
 
+  const downloadJSON = async (projectId: string) => {
+    try {
+      const response = await fetch(`/api/book-writer/projects/${projectId}/download/json`);
+      if (!response.ok) throw new Error('Failed to download JSON');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `${selectedProject?.title || 'book'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      setError(err.message || 'Failed to download JSON');
+    }
+  };
+
+  const downloadPDF = async (projectId: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/book-writer/projects/${projectId}/download/pdf`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to generate PDF');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `${selectedProject?.title || 'book'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      setError(err.message || 'Failed to download PDF. Make sure the book has been generated.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar - Projects List */}
@@ -591,6 +635,26 @@ export default function BookWriterPage() {
                       >
                         Generate Book {!isOutlineComplete() && '(Incomplete)'}
                       </button>
+                    )}
+                    {selectedProject.status === 'complete' && chapters.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => downloadJSON(selectedProject.id)}
+                          disabled={loading}
+                          className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
+                          title="Download project as JSON file"
+                        >
+                          📥 Download JSON
+                        </button>
+                        <button
+                          onClick={() => downloadPDF(selectedProject.id)}
+                          disabled={loading}
+                          className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:opacity-50"
+                          title="Download book as PDF file"
+                        >
+                          📄 Download PDF
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => deleteProject(selectedProject.id)}

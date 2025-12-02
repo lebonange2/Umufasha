@@ -1,7 +1,10 @@
 """Book writer API routes."""
 import json
+import os
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -544,6 +547,146 @@ async def update_chapter(
         raise HTTPException(status_code=500, detail=f"Failed to update chapter: {str(e)}")
 
 
+@router.get("/api/book-writer/projects/{project_id}/download/json")
+async def download_project_json(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Download project data as JSON file."""
+    try:
+        # Get project
+        result = await db.execute(select(BookProject).where(BookProject.id == project_id))
+        project = result.scalar_one_or_none()
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get outline
+        outline_result = await db.execute(select(BookOutline).where(BookOutline.project_id == project_id))
+        outline = outline_result.scalar_one_or_none()
+        
+        # Get chapters
+        chapters_result = await db.execute(
+            select(BookChapter).where(BookChapter.project_id == project_id).order_by(BookChapter.chapter_number)
+        )
+        chapters = chapters_result.scalars().all()
+        
+        # Assemble package
+        package = {
+            "id": project.id,
+            "title": project.title,
+            "initial_prompt": project.initial_prompt,
+            "num_chapters": project.num_chapters,
+            "status": project.status,
+            "created_at": project.created_at.isoformat(),
+            "updated_at": project.updated_at.isoformat(),
+            "outline": outline.outline_data if outline else [],
+            "chapters": [
+                {
+                    "chapter_number": ch.chapter_number,
+                    "title": ch.title,
+                    "content": ch.content,
+                    "prompt": ch.prompt,
+                    "word_count": ch.word_count,
+                    "status": ch.status
+                }
+                for ch in chapters
+            ]
+        }
+        
+        # Create JSON content
+        json_content = json.dumps(package, indent=2, ensure_ascii=False)
+        
+        # Generate filename
+        safe_title = "".join(c for c in (project.title or "Untitled") if c.isalnum() or c in (' ', '-', '_')).strip()
+        safe_title = safe_title.replace(' ', '_')[:50]
+        filename = f"{safe_title}_book.json"
+        
+        return Response(
+            content=json_content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to generate JSON download", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to generate JSON: {str(e)}")
+
+
+@router.get("/api/book-writer/projects/{project_id}/download/pdf")
+async def download_project_pdf(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Download project as PDF file."""
+    try:
+        # Get project
+        result = await db.execute(select(BookProject).where(BookProject.id == project_id))
+        project = result.scalar_one_or_none()
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if PDF exists in exports (from Ferrari company)
+        # For now, generate PDF on-the-fly from chapters
+        from app.book_writer.ferrari_company import ExportAgent, BookProject as FerrariBookProject, MessageBus
+        from app.book_writer.config import get_config
+        from app.llm.client import LLMClient
+        
+        # Get chapters
+        chapters_result = await db.execute(
+            select(BookChapter).where(BookChapter.project_id == project_id).order_by(BookChapter.chapter_number)
+        )
+        chapters = chapters_result.scalars().all()
+        
+        if not chapters:
+            raise HTTPException(status_code=404, detail="No chapters found. Generate the book first.")
+        
+        # Create formatted manuscript
+        formatted_content = f"# {project.title}\n\n"
+        if project.initial_prompt:
+            formatted_content += f"**Premise:** {project.initial_prompt}\n\n"
+        
+        for chapter in chapters:
+            formatted_content += f"## Chapter {chapter.chapter_number}: {chapter.title}\n\n"
+            if chapter.content:
+                formatted_content += f"{chapter.content}\n\n"
+        
+        # Create temporary BookProject for PDF generation
+        agent_config = get_config()
+        llm_client = LLMClient(
+            api_key=None,
+            base_url=agent_config.get("base_url", "http://localhost:11434/v1"),
+            model=agent_config.get("model", "llama3:latest"),
+            provider=agent_config.get("provider", "local")
+        )
+        message_bus = MessageBus()
+        export_agent = ExportAgent(llm_client, message_bus)
+        
+        ferrari_project = FerrariBookProject(
+            title=project.title,
+            premise=project.initial_prompt or "",
+            formatted_manuscript=formatted_content
+        )
+        
+        # Generate PDF
+        pdf_path = await export_agent._generate_pdf(ferrari_project)
+        
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise HTTPException(status_code=500, detail="Failed to generate PDF. Make sure reportlab is installed.")
+        
+        # Generate filename
+        safe_title = "".join(c for c in (project.title or "Untitled") if c.isalnum() or c in (' ', '-', '_')).strip()
+        safe_title = safe_title.replace(' ', '_')[:50]
+        filename = f"{safe_title}_book.pdf"
+        
+        return FileResponse(
+            path=pdf_path,
+            filename=filename,
+            media_type="application/pdf"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to generate PDF download", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
+
 @router.delete("/api/book-writer/projects/{project_id}")
 async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a book project and all its data."""
@@ -554,7 +697,24 @@ async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        await db.delete(project)
+        # Delete related data first
+        from sqlalchemy import delete
+        
+        # Delete chapters
+        await db.execute(
+            delete(BookChapter).where(BookChapter.project_id == project_id)
+        )
+        
+        # Delete outline
+        await db.execute(
+            delete(BookOutline).where(BookOutline.project_id == project_id)
+        )
+        
+        # Delete project
+        await db.execute(
+            delete(BookProject).where(BookProject.id == project_id)
+        )
+        
         await db.commit()
         
         return {"success": True}
