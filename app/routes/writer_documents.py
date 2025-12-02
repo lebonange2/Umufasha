@@ -577,22 +577,27 @@ async def convert_pdf_to_audio(
                 text_to_speech_sync,
                 text,
                 audio_path,
-                speaker_path
+                speaker_wav  # Pass speaker_wav (Bark doesn't use it but kept for API compatibility)
             )
         except Exception as e:
             error_msg = str(e)
             logger.error("TTS conversion failed", error=error_msg, exc_info=True)
             
             # Provide helpful error messages
-            if "TTS model not available" in error_msg or "No TTS model" in error_msg:
+            if "Bark" in error_msg or "bark" in error_msg.lower():
                 raise HTTPException(
                     status_code=500,
-                    detail="TTS models are not installed. Install with: pip install TTS (or pip install piper-tts for Python 3.12+)"
+                    detail="Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
+                )
+            elif "TTS model not available" in error_msg or "No TTS model" in error_msg:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
                 )
             elif "ImportError" in error_msg or "ModuleNotFoundError" in error_msg:
                 raise HTTPException(
                     status_code=500,
-                    detail="TTS library not found. Install with: pip install TTS (or pip install piper-tts for Python 3.12+)"
+                    detail="Bark TTS library not found. Install with: pip install git+https://github.com/suno-ai/bark.git"
                 )
             else:
                 raise HTTPException(
