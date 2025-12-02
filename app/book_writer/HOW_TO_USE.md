@@ -111,11 +111,39 @@ The system will go through 6 phases:
 
 ### Step 5: Access Generated Files
 
-After completion, files are saved:
+After completion, all files are saved in the output directory (default: `book_outputs/`):
 
-- **book_package.json**: Complete book package with all data
-- **chat_log.json**: Full agent communication log
+- **{Book_Title}_package.json**: Complete book package with all data
+- **{Book_Title}_chat_log.json**: Full agent communication log
 - **{Book_Title}_book.pdf**: PDF file (if generated)
+
+The system will:
+- Create the output directory automatically
+- Display full file paths
+- Show statistics (messages, chapters, word count)
+- Optionally open the directory in your file manager
+
+**Example output:**
+```
+✓ Book creation complete!
+============================================================
+
+📁 All files saved to: /path/to/book_outputs/
+
+📄 Generated Files:
+  • JSON Package: Exile_to_Mars_package.json
+  • Chat Log: Exile_to_Mars_chat_log.json
+  • PDF Book: Exile_to_Mars_book.pdf
+
+📊 Statistics:
+  • Total messages: 45
+  • Chapters: 25
+  • Word count: 85,234
+
+💡 To download files:
+  • JSON: /path/to/book_outputs/Exile_to_Mars_package.json
+  • PDF: /path/to/book_outputs/Exile_to_Mars_book.pdf
+```
 
 ## Method 3: Programmatic Usage
 
