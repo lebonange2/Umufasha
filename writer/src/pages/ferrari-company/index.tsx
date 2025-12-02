@@ -103,15 +103,17 @@ export default function FerrariCompanyPage() {
         method: 'POST'
       });
 
+      // Read response as text first (can only read once)
+      const responseText = await response.text();
+
       if (!response.ok) {
-        // Try to parse as JSON first
+        // Try to parse as JSON
         let errorMessage = 'Failed to execute phase';
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(responseText);
           errorMessage = errorData.detail || errorMessage;
         } catch (e) {
-          // If not JSON, get text
-          const responseText = await response.text();
+          // If not JSON, use text
           if (responseText.includes('<!DOCTYPE')) {
             errorMessage = `Server error (${response.status}): The server returned an HTML error page. This usually means an internal error occurred. Check server logs.`;
           } else {
@@ -121,7 +123,8 @@ export default function FerrariCompanyPage() {
         throw new Error(errorMessage);
       }
 
-      const result = await response.json();
+      // Parse JSON from text
+      const result = JSON.parse(responseText);
       setCurrentArtifacts(result.artifacts);
       setChatLog(result.chat_log || []);
       
@@ -149,15 +152,17 @@ export default function FerrariCompanyPage() {
         body: JSON.stringify({ decision })
       });
 
+      // Read response as text first (can only read once)
+      const responseText = await response.text();
+
       if (!response.ok) {
-        // Try to parse as JSON first
+        // Try to parse as JSON
         let errorMessage = 'Failed to process decision';
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(responseText);
           errorMessage = errorData.detail || errorMessage;
         } catch (e) {
-          // If not JSON, get text
-          const responseText = await response.text();
+          // If not JSON, use text
           if (responseText.includes('<!DOCTYPE')) {
             errorMessage = `Server error (${response.status}): The server returned an HTML error page. Check server logs.`;
           } else {
@@ -167,7 +172,8 @@ export default function FerrariCompanyPage() {
         throw new Error(errorMessage);
       }
 
-      const result = await response.json();
+      // Parse JSON from text
+      const result = JSON.parse(responseText);
       
       // Refresh project
       await refreshProject();
@@ -201,7 +207,8 @@ export default function FerrariCompanyPage() {
     try {
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}`);
       if (response.ok) {
-        const projectData = await response.json();
+        const responseText = await response.text();
+        const projectData = JSON.parse(responseText);
         setProject(projectData);
       }
     } catch (err) {
@@ -215,7 +222,8 @@ export default function FerrariCompanyPage() {
     try {
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/files`);
       if (response.ok) {
-        const data = await response.json();
+        const responseText = await response.text();
+        const data = JSON.parse(responseText);
         setFileInfo(data.files);
       }
     } catch (err) {
@@ -250,7 +258,8 @@ export default function FerrariCompanyPage() {
     try {
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/chat-log`);
       if (response.ok) {
-        const data = await response.json();
+        const responseText = await response.text();
+        const data = JSON.parse(responseText);
         setChatLog(data.chat_log || []);
       }
     } catch (err) {
