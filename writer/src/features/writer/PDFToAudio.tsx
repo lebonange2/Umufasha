@@ -14,7 +14,7 @@ interface PDFToAudioProps {
   documentName?: string;
 }
 
-export default function PDFToAudio({ documentId, documentName }: PDFToAudioProps) {
+export default function PDFToAudio({ documentId }: PDFToAudioProps) {
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState<string>('');
   const [audioFile, setAudioFile] = useState<AudioFile | null>(null);
