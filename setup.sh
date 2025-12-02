@@ -74,6 +74,39 @@ pip install -r requirements.txt
 pip install -r requirements-app.txt
 print_success "Dependencies installed"
 
+# Try to install TTS libraries (optional, may fail on Python 3.12+)
+print_status "Attempting to install TTS libraries (optional)..."
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+PYTHON_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
+PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+
+# Check Python version for TTS compatibility
+if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 12 ]; then
+    # Python < 3.12 - can install Coqui TTS
+    print_status "Python $PYTHON_VERSION detected - attempting to install Coqui TTS..."
+    if pip install "TTS>=0.22.0" 2>&1 | grep -q "Successfully installed" || python3 -c "from TTS.api import TTS" 2>/dev/null; then
+        print_success "Coqui TTS installed successfully"
+    else
+        print_warning "Coqui TTS installation failed, trying Piper TTS..."
+        if pip install piper-tts 2>&1 | grep -q "Successfully installed" || python3 -c "from piper import PiperVoice" 2>/dev/null; then
+            print_success "Piper TTS installed"
+        else
+            print_warning "Piper TTS installation also failed"
+        fi
+    fi
+else
+    # Python 3.12+ - use Piper TTS or skip
+    print_status "Python $PYTHON_VERSION detected - Coqui TTS not compatible (<3.12 required)"
+    print_status "Attempting to install Piper TTS (Python 3.12 compatible)..."
+    if pip install piper-tts 2>&1 | grep -q "Successfully installed" || python3 -c "from piper import PiperVoice" 2>/dev/null; then
+        print_success "Piper TTS installed successfully"
+    else
+        print_warning "Piper TTS installation failed. TTS features will not be available."
+        print_warning "You can install manually later: pip install piper-tts"
+        print_warning "Or use alternative TTS solutions compatible with Python 3.12+"
+    fi
+fi
+
 # Verify critical packages
 print_status "Verifying critical packages..."
 MISSING_PACKAGES=()
@@ -104,15 +137,24 @@ python3 -c "import sqlalchemy; print(f'✓ sqlalchemy {sqlalchemy.__version__}')
 # Check TTS dependencies (optional but recommended)
 print_status "Checking TTS dependencies..."
 TTS_AVAILABLE=false
+TTS_TYPE="none"
 if python3 -c "from TTS.api import TTS" 2>/dev/null; then
     print_success "Coqui TTS found"
     TTS_AVAILABLE=true
+    TTS_TYPE="coqui"
 elif python3 -c "from piper import PiperVoice" 2>/dev/null; then
     print_success "Piper TTS found"
     TTS_AVAILABLE=true
+    TTS_TYPE="piper"
 else
     print_warning "TTS libraries not found. PDF to Audio feature will not work."
-    print_warning "Install with: pip install TTS (or pip install piper-tts for lighter option)"
+    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    if [ "$(python3 -c "import sys; print(sys.version_info.minor)")" -ge 12 ]; then
+        print_warning "Python 3.12+ detected - Coqui TTS not compatible."
+        print_warning "Install Piper TTS: pip install piper-tts"
+    else
+        print_warning "Install with: pip install TTS (or pip install piper-tts for lighter option)"
+    fi
 fi
 
 if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
@@ -452,11 +494,21 @@ echo "- Test: ollama run llama3:latest 'Hello'"
 echo ""
 echo "🎙️ Text-to-Speech (TTS):"
 if [ "$TTS_AVAILABLE" = true ]; then
-    echo "- Status: ✅ TTS libraries installed"
+    if [ "$TTS_TYPE" = "coqui" ]; then
+        echo "- Status: ✅ Coqui TTS installed"
+    elif [ "$TTS_TYPE" = "piper" ]; then
+        echo "- Status: ✅ Piper TTS installed"
+    fi
     echo "- PDF to Audio: Available on /writer page"
 else
     echo "- Status: ⚠️ TTS libraries not installed"
-    echo "- Install with: pip install TTS (or pip install piper-tts)"
+    PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+    if [ "$PYTHON_MINOR" -ge 12 ]; then
+        echo "- Python 3.12+ detected - Coqui TTS not compatible"
+        echo "- Install Piper TTS: pip install piper-tts"
+    else
+        echo "- Install with: pip install TTS (or pip install piper-tts)"
+    fi
     echo "- PDF to Audio: Will not work until TTS is installed"
 fi
 echo ""

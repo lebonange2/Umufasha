@@ -44,11 +44,11 @@ python-docx==1.1.0
 # Utilities
 python-dateutil==2.8.2
 
-# Text-to-Speech (TTS) - Best quality local models
-# Coqui TTS with XTTS v2 (high quality, multilingual)
-TTS>=0.22.0
-# Piper TTS (lightweight fallback)
-piper-tts>=1.2.0
-# Audio processing
+# Audio processing (required for TTS features)
 soundfile>=0.12.1
-torch>=2.0.0  # Required for Coqui TTS
+
+# Text-to-Speech (TTS) - Optional, install separately based on Python version
+# Note: TTS libraries have Python version constraints
+#   For Python <3.12: pip install TTS>=0.22.0
+#   For Python 3.12+: pip install piper-tts (or use alternative TTS solutions)
+#   torch>=2.0.0 is required for Coqui TTS (install manually if using TTS)
