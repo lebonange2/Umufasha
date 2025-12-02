@@ -77,3 +77,4 @@ assistant.db
 # Sessions and output
 sessions/
 out/
+test_bark_output.wav

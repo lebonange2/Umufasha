@@ -16,6 +16,43 @@ from app.models import BookProject, BookChapter
 
 logger = structlog.get_logger(__name__)
 
+# Apply PyTorch 2.6+ compatibility fix for Bark at module level
+# This ensures the patch is applied before any Bark imports
+try:
+    import torch
+    import numpy
+    
+    # Check if patch is already applied
+    if not hasattr(torch.load, '_bark_patched'):
+        # Try to add safe globals for numpy objects (PyTorch 2.6+)
+        try:
+            if hasattr(torch.serialization, 'add_safe_globals'):
+                torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
+                logger.info("Added numpy.core.multiarray.scalar to torch safe globals (module level)")
+        except Exception as e:
+            logger.warning(f"Could not add safe globals at module level: {e}")
+        
+        # Monkey patch torch.load to use weights_only=False for Bark compatibility
+        # This is safe since Bark models come from a trusted source (Suno AI)
+        original_load = torch.load
+        def patched_load(*args, **kwargs):
+            # If weights_only is not explicitly set, default to False for Bark compatibility
+            if 'weights_only' not in kwargs:
+                kwargs['weights_only'] = False
+            return original_load(*args, **kwargs)
+        
+        # Mark as patched to avoid double-patching
+        patched_load._bark_patched = True
+        
+        # Apply the patch
+        torch.load = patched_load
+        logger.info("Patched torch.load for Bark compatibility (module level)")
+except ImportError:
+    # torch/numpy not installed yet, will patch later in _init_tts_model
+    pass
+except Exception as e:
+    logger.warning(f"Could not apply PyTorch patch at module level: {e}")
+
 router = APIRouter()
 
 # Create uploads directory
@@ -330,28 +367,35 @@ def _init_tts_model():
         import torch
         import numpy
         
-        # Fix for PyTorch 2.6+ weights_only issue with Bark models
-        # Bark models contain numpy objects that need to be allowlisted
-        try:
-            # Try to add safe globals for numpy objects (PyTorch 2.6+)
-            if hasattr(torch.serialization, 'add_safe_globals'):
-                torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
-                logger.info("Added numpy.core.multiarray.scalar to torch safe globals")
-        except Exception as e:
-            logger.warning(f"Could not add safe globals (may not be needed): {e}")
-        
-        # Monkey patch torch.load to use weights_only=False for Bark compatibility
-        # This is safe since Bark models come from a trusted source (Suno AI)
-        original_load = torch.load
-        def patched_load(*args, **kwargs):
-            # If weights_only is not explicitly set, default to False for Bark compatibility
-            if 'weights_only' not in kwargs:
-                kwargs['weights_only'] = False
-            return original_load(*args, **kwargs)
-        
-        # Apply the patch
-        torch.load = patched_load
-        logger.info("Patched torch.load for Bark compatibility")
+        # Ensure PyTorch patch is applied (in case module-level patch didn't work)
+        if not hasattr(torch.load, '_bark_patched'):
+            # Fix for PyTorch 2.6+ weights_only issue with Bark models
+            # Bark models contain numpy objects that need to be allowlisted
+            try:
+                # Try to add safe globals for numpy objects (PyTorch 2.6+)
+                if hasattr(torch.serialization, 'add_safe_globals'):
+                    torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
+                    logger.info("Added numpy.core.multiarray.scalar to torch safe globals")
+            except Exception as e:
+                logger.warning(f"Could not add safe globals (may not be needed): {e}")
+            
+            # Monkey patch torch.load to use weights_only=False for Bark compatibility
+            # This is safe since Bark models come from a trusted source (Suno AI)
+            original_load = torch.load
+            def patched_load(*args, **kwargs):
+                # If weights_only is not explicitly set, default to False for Bark compatibility
+                if 'weights_only' not in kwargs:
+                    kwargs['weights_only'] = False
+                return original_load(*args, **kwargs)
+            
+            # Mark as patched to avoid double-patching
+            patched_load._bark_patched = True
+            
+            # Apply the patch
+            torch.load = patched_load
+            logger.info("Patched torch.load for Bark compatibility")
+        else:
+            logger.info("PyTorch patch already applied")
         
         from bark import generate_audio, preload_models, SAMPLE_RATE
         
@@ -365,15 +409,32 @@ def _init_tts_model():
             "SAMPLE_RATE": SAMPLE_RATE
         }, "bark"
     except ImportError as e:
-        logger.error(f"Bark not installed: {e}")
+        logger.error(f"Bark not installed: {e}", exc_info=True)
+        import sys
+        python_path = sys.executable
         raise Exception(
-            "Bark TTS not available. Install with: pip install git+https://github.com/suno-ai/bark.git"
+            f"Bark TTS not available. Import error: {str(e)}. "
+            f"Install with: pip install git+https://github.com/suno-ai/bark.git. "
+            f"Current Python: {python_path}. "
+            f"Make sure you're using the correct virtual environment and restart the server after installation."
         )
     except Exception as e:
-        logger.error(f"Bark initialization failed: {e}")
+        logger.error(f"Bark initialization failed: {e}", exc_info=True)
+        import sys
+        python_path = sys.executable
+        error_str = str(e)
+        # Check if it's a PyTorch weights_only error
+        if "weights_only" in error_str or "Weights only load failed" in error_str:
+            raise Exception(
+                f"Bark TTS initialization failed due to PyTorch compatibility issue: {error_str[:200]}. "
+                f"This should be fixed by the PyTorch patch. If this error persists, please restart the server. "
+                f"Current Python: {python_path}"
+            )
         raise Exception(
-            f"Failed to initialize Bark TTS: {str(e)}. "
-            f"Install with: pip install git+https://github.com/suno-ai/bark.git"
+            f"Failed to initialize Bark TTS: {error_str[:300]}. "
+            f"Install with: pip install git+https://github.com/suno-ai/bark.git. "
+            f"Current Python: {python_path}. "
+            f"Make sure you're using the correct virtual environment and restart the server after installation."
         )
 
 
@@ -389,12 +450,27 @@ def get_tts_model():
         try:
             _tts_model, _tts_type = _init_tts_model()
         except Exception as e:
-            logger.error(f"Failed to initialize Bark TTS model: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Bark TTS not available: {str(e)}. "
-                f"Install with: pip install git+https://github.com/suno-ai/bark.git"
-            )
+            import sys
+            python_path = sys.executable
+            error_detail = str(e)
+            logger.error(f"Failed to initialize Bark TTS model: {e}", exc_info=True)
+            
+            # Provide more helpful error message
+            if "ImportError" in error_detail or "No module named 'bark'" in error_detail:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Bark TTS not installed. "
+                    f"Python: {python_path}. "
+                    f"Install with: pip install git+https://github.com/suno-ai/bark.git "
+                    f"Then restart the server."
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Bark TTS initialization failed: {error_detail[:400]}. "
+                    f"Python: {python_path}. "
+                    f"If Bark is installed, try restarting the server."
+                )
     return _tts_model, _tts_type
 
 
