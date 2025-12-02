@@ -46,9 +46,14 @@ python-dateutil==2.8.2
 
 # Audio processing (required for TTS features)
 soundfile>=0.12.1
+pydub>=0.25.1  # Required for gTTS audio conversion
 
 # Text-to-Speech (TTS) - Optional, install separately based on Python version
 # Note: TTS libraries have Python version constraints
-#   For Python <3.12: pip install TTS>=0.22.0
-#   For Python 3.12+: pip install piper-tts (or use alternative TTS solutions)
+#   For Python <3.12: pip install TTS>=0.22.0 (Coqui TTS)
+#   For Python 3.12+: 
+#     - pip install edge-tts (recommended, Microsoft Edge TTS, requires internet)
+#     - pip install gtts (Google TTS, requires internet)
+#     - pip install pyttsx3 (system TTS, offline but quality varies)
+#     - pip install piper-tts (local TTS, may have installation issues)
 #   torch>=2.0.0 is required for Coqui TTS (install manually if using TTS)

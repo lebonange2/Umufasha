@@ -325,9 +325,14 @@ async def add_text_context(doc_id: str, request: Request):
 
 
 def _init_tts_model():
-    """Initialize TTS model (lazy loading)."""
-    try:
-        # Try Coqui TTS XTTS v2 first (best quality)
+    """Initialize TTS model (lazy loading) with multiple fallback options."""
+    import sys
+    
+    python_version = sys.version_info
+    logger.info(f"Python version: {python_version.major}.{python_version.minor}.{python_version.micro}")
+    
+    # Try Coqui TTS XTTS v2 first (best quality, but requires Python <3.12)
+    if python_version.major == 3 and python_version.minor < 12:
         try:
             from TTS.api import TTS
             import torch
@@ -340,36 +345,87 @@ def _init_tts_model():
             logger.info("Initialized Coqui TTS XTTS v2 model")
             return tts, "coqui_xtts"
         except ImportError:
-            logger.warning("Coqui TTS not installed, trying Piper TTS")
+            logger.warning("Coqui TTS not installed, trying alternatives")
         except Exception as e:
-            logger.warning(f"Coqui TTS initialization failed: {e}, trying Piper TTS")
+            logger.warning(f"Coqui TTS initialization failed: {e}, trying alternatives")
+    else:
+        logger.info("Python 3.12+ detected, skipping Coqui TTS (not compatible)")
+    
+    # Try Piper TTS (works with Python 3.12+)
+    try:
+        from piper import PiperVoice
+        from piper.download import ensure_voice_exists, find_voice
         
-        # Fallback to Piper TTS (lighter, faster)
-        try:
-            from piper import PiperVoice
-            from piper.download import ensure_voice_exists, find_voice
-            import json
-            
-            # Download and use Piper voice
-            voice_name = "en_US-lessac-medium"
-            voice_path = ensure_voice_exists(voice_name, [])
-            config_path = find_voice(voice_name, [])
-            
-            tts = PiperVoice.load(voice_path, config_path=config_path)
-            logger.info("Initialized Piper TTS model")
-            return tts, "piper"
-        except ImportError:
-            logger.error("Piper TTS not installed")
-        except Exception as e2:
-            logger.error(f"Piper TTS initialization failed: {e2}")
+        # Download and use Piper voice
+        voice_name = "en_US-lessac-medium"
+        voice_path = ensure_voice_exists(voice_name, [])
+        config_path = find_voice(voice_name, [])
         
-        # If both fail, raise exception
-        raise Exception(
-            "No TTS model available. Install Coqui TTS: pip install TTS, or Piper TTS: pip install piper-tts"
-        )
+        tts = PiperVoice.load(voice_path, config_path=config_path)
+        logger.info("Initialized Piper TTS model")
+        return tts, "piper"
+    except ImportError:
+        logger.warning("Piper TTS not installed, trying edge-tts")
     except Exception as e:
-        logger.error(f"TTS model initialization error: {e}")
-        raise
+        logger.warning(f"Piper TTS initialization failed: {e}, trying edge-tts")
+    
+    # Try edge-tts (Microsoft Edge TTS - works with Python 3.12+, requires internet)
+    try:
+        import edge_tts
+        logger.info("Initialized edge-tts (Microsoft Edge TTS)")
+        return edge_tts, "edge_tts"
+    except ImportError:
+        logger.warning("edge-tts not installed, trying gTTS")
+    except Exception as e:
+        logger.warning(f"edge-tts initialization failed: {e}, trying gTTS")
+    
+    # Try gTTS (Google Text-to-Speech - works with Python 3.12+, requires internet)
+    try:
+        from gtts import gTTS
+        import io
+        logger.info("Initialized gTTS (Google Text-to-Speech)")
+        return {"gTTS": gTTS, "io": io}, "gtts"
+    except ImportError:
+        logger.warning("gTTS not installed, trying pyttsx3")
+    except Exception as e:
+        logger.warning(f"gTTS initialization failed: {e}, trying pyttsx3")
+    
+    # Try pyttsx3 (system TTS - works with Python 3.12+, offline but quality varies)
+    try:
+        import pyttsx3
+        engine = pyttsx3.init()
+        # Set properties for better quality
+        engine.setProperty('rate', 150)  # Speed of speech
+        engine.setProperty('volume', 0.9)  # Volume level
+        # Try to set a better voice if available
+        voices = engine.getProperty('voices')
+        if voices:
+            # Prefer female voice if available
+            for voice in voices:
+                if 'female' in voice.name.lower() or 'zira' in voice.name.lower():
+                    engine.setProperty('voice', voice.id)
+                    break
+        logger.info("Initialized pyttsx3 (system TTS)")
+        return engine, "pyttsx3"
+    except ImportError:
+        logger.warning("pyttsx3 not installed")
+    except Exception as e:
+        logger.warning(f"pyttsx3 initialization failed: {e}")
+    
+    # If all fail, raise exception with helpful message
+    python_version_str = f"{python_version.major}.{python_version.minor}"
+    if python_version.minor >= 12:
+        raise Exception(
+            f"No TTS model available for Python {python_version_str}. "
+            f"Install one of: pip install edge-tts (recommended), pip install gtts, or pip install pyttsx3. "
+            f"Note: Coqui TTS requires Python <3.12."
+        )
+    else:
+        raise Exception(
+            f"No TTS model available. Install one of: "
+            f"pip install TTS (Coqui TTS), pip install piper-tts, "
+            f"pip install edge-tts, pip install gtts, or pip install pyttsx3"
+        )
 
 
 # Global TTS model instance (lazy loaded)
@@ -385,10 +441,22 @@ def get_tts_model():
             _tts_model, _tts_type = _init_tts_model()
         except Exception as e:
             logger.error(f"Failed to initialize TTS model: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"TTS model not available: {str(e)}. Install with: pip install TTS or pip install piper-tts"
-            )
+            import sys
+            python_version = sys.version_info
+            if python_version.minor >= 12:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"TTS model not available: {str(e)}. "
+                    f"For Python 3.12+, install one of: pip install edge-tts (recommended), "
+                    f"pip install gtts, or pip install pyttsx3"
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"TTS model not available: {str(e)}. "
+                    f"Install one of: pip install TTS, pip install piper-tts, "
+                    f"pip install edge-tts, pip install gtts, or pip install pyttsx3"
+                )
     return _tts_model, _tts_type
 
 
@@ -436,6 +504,7 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         import numpy as np
         
         audio_segments = []
+        sample_rate = 22050  # Default sample rate
         
         for i, chunk in enumerate(chunks):
             if not chunk.strip():
@@ -459,20 +528,119 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
                         file_path=str(chunk_output),
                         language="en"
                     )
+                # Load audio to get sample rate
+                if chunk_output.exists():
+                    data, sample_rate = sf.read(str(chunk_output))
+                    audio_segments.append(data)
+                    chunk_output.unlink()
+                    
             elif tts_type == "piper":
                 # Piper TTS
                 with open(chunk_output, "wb") as f:
                     tts.synthesize(chunk, f)
-            
-            # Load and append audio
-            if chunk_output.exists():
-                data, sample_rate = sf.read(str(chunk_output))
-                audio_segments.append(data)
-                # Clean up chunk file
-                chunk_output.unlink()
+                # Load audio to get sample rate
+                if chunk_output.exists():
+                    data, sample_rate = sf.read(str(chunk_output))
+                    audio_segments.append(data)
+                    chunk_output.unlink()
+                    
+            elif tts_type == "edge_tts":
+                # Microsoft Edge TTS (requires internet)
+                import asyncio
+                import edge_tts
+                
+                async def generate_edge_tts():
+                    communicate = edge_tts.Communicate(chunk, "en-US-AriaNeural")
+                    await communicate.save(str(chunk_output))
+                
+                # Run async function
+                try:
+                    # Try to get existing event loop, or create new one
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_closed():
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    loop.run_until_complete(generate_edge_tts())
+                except Exception as e:
+                    logger.warning(f"edge-tts chunk {i} failed: {e}, trying next chunk")
+                    continue
+                
+                # Load audio
+                if chunk_output.exists():
+                    data, sample_rate = sf.read(str(chunk_output))
+                    audio_segments.append(data)
+                    chunk_output.unlink()
+                    
+            elif tts_type == "gtts":
+                # Google Text-to-Speech (requires internet)
+                import io
+                
+                try:
+                    # Generate speech
+                    gTTS_class = tts["gTTS"]
+                    tts_obj = gTTS_class(text=chunk, lang='en', slow=False)
+                    mp3_buffer = io.BytesIO()
+                    tts_obj.write_to_fp(mp3_buffer)
+                    mp3_buffer.seek(0)
+                    
+                    # Convert MP3 to WAV using pydub
+                    try:
+                        from pydub import AudioSegment
+                        audio = AudioSegment.from_mp3(mp3_buffer)
+                        audio.export(str(chunk_output), format="wav")
+                    except ImportError:
+                        # Fallback: save as MP3 and let soundfile handle it (may not work)
+                        logger.warning("pydub not available, trying direct MP3 save")
+                        with open(str(chunk_output).replace('.wav', '.mp3'), 'wb') as f:
+                            f.write(mp3_buffer.getvalue())
+                        # Try to read MP3 directly (may fail)
+                        chunk_output = Path(str(chunk_output).replace('.wav', '.mp3'))
+                    
+                    # Load audio
+                    if chunk_output.exists():
+                        data, sample_rate = sf.read(str(chunk_output))
+                        audio_segments.append(data)
+                        chunk_output.unlink()
+                except Exception as e:
+                    logger.warning(f"gTTS chunk {i} failed: {e}, trying next chunk")
+                    continue
+                    
+            elif tts_type == "pyttsx3":
+                # System TTS (offline, quality varies)
+                import tempfile
+                import wave
+                
+                try:
+                    # Save to temporary WAV file
+                    temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+                    temp_wav_path = temp_wav.name
+                    temp_wav.close()
+                    
+                    tts.save_to_file(chunk, temp_wav_path)
+                    tts.runAndWait()
+                    
+                    # Load and convert to proper format
+                    if os.path.exists(temp_wav_path):
+                        # Read WAV file
+                        with wave.open(temp_wav_path, 'rb') as wav_file:
+                            sample_rate = wav_file.getframerate()
+                            frames = wav_file.readframes(wav_file.getnframes())
+                            # Convert to numpy array
+                            import struct
+                            audio_data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+                            audio_segments.append(audio_data)
+                        os.unlink(temp_wav_path)
+                except Exception as e:
+                    logger.warning(f"pyttsx3 chunk {i} failed: {e}, trying next chunk")
+                    continue
         
         if not audio_segments:
-            raise ValueError("No audio generated")
+            raise ValueError("No audio generated from any chunks")
         
         # Concatenate all audio segments
         final_audio = np.concatenate(audio_segments)

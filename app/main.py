@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     logger.info("Shutting down appointment assistant")
     if scheduler:
-        scheduler.shutdown()
+        scheduler.stop()
         logger.info("Scheduler stopped")
 
 

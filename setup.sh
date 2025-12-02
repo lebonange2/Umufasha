@@ -245,16 +245,50 @@ if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 12 ]; then
         fi
     fi
 else
-    # Python 3.12+ - skip Coqui TTS completely, only try Piper TTS
+    # Python 3.12+ - skip Coqui TTS completely, try alternatives
     print_status "Python $PYTHON_VERSION detected - Coqui TTS not compatible (requires <3.12)"
     print_status "Skipping Coqui TTS installation (not compatible with Python 3.12+)..."
-    print_status "Attempting to install Piper TTS (Python 3.12 compatible)..."
+    
+    # Try Piper TTS first
+    print_status "Attempting to install Piper TTS..."
+    PIPER_INSTALLED=false
     if pip install piper-tts >/dev/null 2>&1 || python3 -c "from piper import PiperVoice" 2>/dev/null; then
         print_success "Piper TTS installed successfully"
+        PIPER_INSTALLED=true
     else
-        print_warning "Piper TTS installation failed. TTS features will not be available."
-        print_warning "You can install manually later: pip install piper-tts"
-        print_warning "Or use alternative TTS solutions compatible with Python 3.12+"
+        print_warning "Piper TTS installation failed, trying edge-tts..."
+    fi
+    
+    # Try edge-tts (Microsoft Edge TTS - recommended for Python 3.12+)
+    if [ "$PIPER_INSTALLED" = false ]; then
+        print_status "Attempting to install edge-tts (Microsoft Edge TTS)..."
+        if pip install edge-tts >/dev/null 2>&1 || python3 -c "import edge_tts" 2>/dev/null; then
+            print_success "edge-tts installed successfully"
+        else
+            print_warning "edge-tts installation failed, trying gTTS..."
+            
+            # Try gTTS (Google Text-to-Speech)
+            print_status "Attempting to install gTTS..."
+            if pip install gtts >/dev/null 2>&1 || python3 -c "from gtts import gTTS" 2>/dev/null; then
+                print_success "gTTS installed successfully"
+                # gTTS requires pydub for audio conversion
+                pip install pydub >/dev/null 2>&1 || print_warning "pydub installation failed (needed for gTTS)"
+            else
+                print_warning "gTTS installation failed, trying pyttsx3..."
+                
+                # Try pyttsx3 (system TTS - offline)
+                print_status "Attempting to install pyttsx3 (system TTS)..."
+                if pip install pyttsx3 >/dev/null 2>&1 || python3 -c "import pyttsx3" 2>/dev/null; then
+                    print_success "pyttsx3 installed successfully"
+                else
+                    print_warning "All TTS libraries failed to install. TTS features will not be available."
+                    print_warning "You can install manually later:"
+                    print_warning "  pip install edge-tts (recommended for Python 3.12+)"
+                    print_warning "  pip install gtts (requires internet)"
+                    print_warning "  pip install pyttsx3 (system TTS, offline)"
+                fi
+            fi
+        fi
     fi
 fi
 
@@ -297,14 +331,26 @@ elif python3 -c "from piper import PiperVoice" 2>/dev/null; then
     print_success "Piper TTS found"
     TTS_AVAILABLE=true
     TTS_TYPE="piper"
+elif python3 -c "import edge_tts" 2>/dev/null; then
+    print_success "edge-tts found (Microsoft Edge TTS)"
+    TTS_AVAILABLE=true
+    TTS_TYPE="edge-tts"
+elif python3 -c "from gtts import gTTS" 2>/dev/null; then
+    print_success "gTTS found (Google Text-to-Speech)"
+    TTS_AVAILABLE=true
+    TTS_TYPE="gtts"
+elif python3 -c "import pyttsx3" 2>/dev/null; then
+    print_success "pyttsx3 found (system TTS)"
+    TTS_AVAILABLE=true
+    TTS_TYPE="pyttsx3"
 else
     print_warning "TTS libraries not found. PDF to Audio feature will not work."
-    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-    if [ "$(python3 -c "import sys; print(sys.version_info.minor)")" -ge 12 ]; then
+    PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+    if [ "$PYTHON_MINOR" -ge 12 ]; then
         print_warning "Python 3.12+ detected - Coqui TTS not compatible."
-        print_warning "Install Piper TTS: pip install piper-tts"
+        print_warning "Install one of: pip install edge-tts (recommended), pip install gtts, or pip install pyttsx3"
     else
-        print_warning "Install with: pip install TTS (or pip install piper-tts for lighter option)"
+        print_warning "Install with: pip install TTS, pip install piper-tts, pip install edge-tts, pip install gtts, or pip install pyttsx3"
     fi
 fi
 
@@ -649,16 +695,25 @@ if [ "$TTS_AVAILABLE" = true ]; then
         echo "- Status: ✅ Coqui TTS installed"
     elif [ "$TTS_TYPE" = "piper" ]; then
         echo "- Status: ✅ Piper TTS installed"
+    elif [ "$TTS_TYPE" = "edge-tts" ]; then
+        echo "- Status: ✅ edge-tts installed (Microsoft Edge TTS)"
+    elif [ "$TTS_TYPE" = "gtts" ]; then
+        echo "- Status: ✅ gTTS installed (Google Text-to-Speech)"
+    elif [ "$TTS_TYPE" = "pyttsx3" ]; then
+        echo "- Status: ✅ pyttsx3 installed (system TTS)"
     fi
-    echo "- PDF to Audio: Available on /writer page"
+    echo "- PDF to Audio: Available on /writer/pdf-to-audio page"
 else
     echo "- Status: ⚠️ TTS libraries not installed"
     PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
     if [ "$PYTHON_MINOR" -ge 12 ]; then
         echo "- Python 3.12+ detected - Coqui TTS not compatible"
-        echo "- Install Piper TTS: pip install piper-tts"
+        echo "- Install one of:"
+        echo "  pip install edge-tts (recommended, requires internet)"
+        echo "  pip install gtts (requires internet)"
+        echo "  pip install pyttsx3 (system TTS, offline)"
     else
-        echo "- Install with: pip install TTS (or pip install piper-tts)"
+        echo "- Install with: pip install TTS, pip install piper-tts, pip install edge-tts, pip install gtts, or pip install pyttsx3"
     fi
     echo "- PDF to Audio: Will not work until TTS is installed"
 fi
