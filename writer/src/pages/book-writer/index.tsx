@@ -234,18 +234,20 @@ export default function BookWriterPage() {
       });
 
       if (!response.ok) {
-        // Try to parse as JSON first
+        // Read the response body once as text, then try to parse as JSON
         let errorMessage = 'Failed to generate book';
+        const responseText = await response.text();
+        
+        // Try to parse as JSON
         try {
-          const errorData = await response.json();
+          const errorData = JSON.parse(responseText);
           errorMessage = errorData.detail || errorMessage;
         } catch (e) {
-          // If not JSON, get text
-          const text = await response.text();
-          if (text.includes('<!DOCTYPE')) {
+          // If not JSON, use the text directly
+          if (responseText.includes('<!DOCTYPE')) {
             errorMessage = `Server error (${response.status}): The server returned an HTML error page. Check server logs.`;
           } else {
-            errorMessage = text || errorMessage;
+            errorMessage = responseText || errorMessage;
           }
         }
         throw new Error(errorMessage);
