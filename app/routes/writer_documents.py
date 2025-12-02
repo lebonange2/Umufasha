@@ -327,6 +327,32 @@ async def add_text_context(doc_id: str, request: Request):
 def _init_tts_model():
     """Initialize Bark TTS model (lazy loading)."""
     try:
+        import torch
+        import numpy
+        
+        # Fix for PyTorch 2.6+ weights_only issue with Bark models
+        # Bark models contain numpy objects that need to be allowlisted
+        try:
+            # Try to add safe globals for numpy objects (PyTorch 2.6+)
+            if hasattr(torch.serialization, 'add_safe_globals'):
+                torch.serialization.add_safe_globals([numpy.core.multiarray.scalar])
+                logger.info("Added numpy.core.multiarray.scalar to torch safe globals")
+        except Exception as e:
+            logger.warning(f"Could not add safe globals (may not be needed): {e}")
+        
+        # Monkey patch torch.load to use weights_only=False for Bark compatibility
+        # This is safe since Bark models come from a trusted source (Suno AI)
+        original_load = torch.load
+        def patched_load(*args, **kwargs):
+            # If weights_only is not explicitly set, default to False for Bark compatibility
+            if 'weights_only' not in kwargs:
+                kwargs['weights_only'] = False
+            return original_load(*args, **kwargs)
+        
+        # Apply the patch
+        torch.load = patched_load
+        logger.info("Patched torch.load for Bark compatibility")
+        
         from bark import generate_audio, preload_models, SAMPLE_RATE
         
         # Preload models on first initialization (this downloads models if needed)
