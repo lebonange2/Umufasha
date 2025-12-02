@@ -122,8 +122,20 @@ async def execute_phase(project_id: str):
         # Get current phase
         current_phase = Phase(project_data["current_phase"])
         
+        logger.info(f"Executing phase {current_phase.value} for project {project_id}")
+        
         # Execute phase (same as CLI)
-        await company._execute_phase(current_phase)
+        try:
+            await company._execute_phase(current_phase)
+        except Exception as phase_error:
+            logger.error(f"Phase execution error: {str(phase_error)}", error=str(phase_error), exc_info=True)
+            # Provide more detailed error message
+            error_msg = str(phase_error)
+            if "timeout" in error_msg.lower():
+                error_msg = "Phase execution timed out. The LLM may be slow or unavailable. Please try again."
+            elif "connection" in error_msg.lower():
+                error_msg = "Cannot connect to LLM service. Make sure Ollama is running."
+            raise HTTPException(status_code=500, detail=f"Phase execution failed: {error_msg}")
         
         # Update project state
         project_data["company"] = company
@@ -133,36 +145,44 @@ async def execute_phase(project_id: str):
         artifacts = {}
         summary_parts = []
         
-        if current_phase == Phase.STRATEGY_CONCEPT:
-            artifacts = {"book_brief": company.project.book_brief or {}}
-            summary_parts.append("CPSO has created the initial book brief.")
-        elif current_phase == Phase.EARLY_DESIGN:
-            artifacts = {
-                "world_dossier": company.project.world_dossier or {},
-                "character_bible": company.project.character_bible or {},
-                "plot_arc": company.project.plot_arc or {}
-            }
-            summary_parts.append("Story Design Director has completed world and character design.")
-        elif current_phase == Phase.DETAILED_ENGINEERING:
-            artifacts = {"outline": company.project.outline or []}
-            summary_parts.append("Narrative Engineering Director has created the full hierarchical outline.")
-        elif current_phase == Phase.PROTOTYPES_TESTING:
-            artifacts = {
-                "draft_chapters": company.project.draft_chapters,
-                "revision_report": company.project.revision_report or {}
-            }
-            summary_parts.append("Production and QA teams have completed draft and testing.")
-        elif current_phase == Phase.INDUSTRIALIZATION_PACKAGING:
-            artifacts = {"formatted_manuscript": company.project.formatted_manuscript or ""}
-            summary_parts.append("Formatting and export agents have prepared the production-ready manuscript.")
-        elif current_phase == Phase.MARKETING_LAUNCH:
-            artifacts = {"launch_package": company.project.launch_package or {}}
-            summary_parts.append("Launch Director has created the complete launch package.")
+        try:
+            if current_phase == Phase.STRATEGY_CONCEPT:
+                artifacts = {"book_brief": company.project.book_brief or {}}
+                summary_parts.append("CPSO has created the initial book brief.")
+            elif current_phase == Phase.EARLY_DESIGN:
+                artifacts = {
+                    "world_dossier": company.project.world_dossier or {},
+                    "character_bible": company.project.character_bible or {},
+                    "plot_arc": company.project.plot_arc or {}
+                }
+                summary_parts.append("Story Design Director has completed world and character design.")
+            elif current_phase == Phase.DETAILED_ENGINEERING:
+                artifacts = {"outline": company.project.outline or []}
+                summary_parts.append("Narrative Engineering Director has created the full hierarchical outline.")
+            elif current_phase == Phase.PROTOTYPES_TESTING:
+                artifacts = {
+                    "draft_chapters": company.project.draft_chapters,
+                    "revision_report": company.project.revision_report or {}
+                }
+                summary_parts.append("Production and QA teams have completed draft and testing.")
+            elif current_phase == Phase.INDUSTRIALIZATION_PACKAGING:
+                artifacts = {"formatted_manuscript": company.project.formatted_manuscript or ""}
+                summary_parts.append("Formatting and export agents have prepared the production-ready manuscript.")
+            elif current_phase == Phase.MARKETING_LAUNCH:
+                artifacts = {"launch_package": company.project.launch_package or {}}
+                summary_parts.append("Launch Director has created the complete launch package.")
+        except Exception as artifact_error:
+            logger.warning(f"Error getting artifacts: {str(artifact_error)}")
+            # Continue with empty artifacts rather than failing
         
         summary = " ".join(summary_parts) if summary_parts else f"Phase {current_phase.value.replace('_', ' ').title()} completed."
         
         # Get chat log for this phase
-        phase_chat_log = company.message_bus.get_chat_log(current_phase)
+        try:
+            phase_chat_log = company.message_bus.get_chat_log(current_phase)
+        except Exception as log_error:
+            logger.warning(f"Error getting chat log: {str(log_error)}")
+            phase_chat_log = []
         
         return {
             "success": True,
@@ -172,8 +192,10 @@ async def execute_phase(project_id: str):
             "chat_log": phase_chat_log,
             "ready_for_decision": True
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Failed to execute phase", error=str(e))
+        logger.error("Failed to execute phase", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to execute phase: {str(e)}")
 
 

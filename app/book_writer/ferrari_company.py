@@ -508,26 +508,41 @@ class NarrativeEngineeringDirectorAgent(BaseAgent):
     
     async def create_outline(self, project: BookProject) -> List[Dict[str, Any]]:
         """Create full hierarchical outline using engineering team."""
-        # Use the existing multi-agent system for outline generation
-        from app.book_writer.multi_agent_system import MultiAgentBookGenerator
-        
-        generator = MultiAgentBookGenerator(
-            title=project.title or "Untitled",
-            premise=project.premise,
-            target_word_count=project.target_word_count,
-            num_chapters=project.book_brief.get('recommended_word_count', 80000) // 3000 if project.book_brief else 25,
-            tone=project.book_brief.get('tone', 'narrative') if project.book_brief else 'narrative',
-            style=project.book_brief.get('style', 'third person') if project.book_brief else 'third person'
-        )
-        
-        # Generate outline
-        result = await generator.generate_book(generate_prose=False)
-        outline = result.get('outline', [])
-        
-        await self.send_message("CEO", Phase.DETAILED_ENGINEERING, 
-                              f"Full hierarchical outline created with {len(outline)} chapters.")
-        
-        return outline
+        try:
+            # Use the existing multi-agent system for outline generation
+            from app.book_writer.multi_agent_system import MultiAgentBookGenerator
+            
+            # Calculate number of chapters
+            num_chapters = 25  # Default
+            if project.book_brief and project.book_brief.get('recommended_word_count'):
+                num_chapters = max(3, project.book_brief.get('recommended_word_count', 80000) // 3000)
+            elif project.target_word_count:
+                num_chapters = max(3, project.target_word_count // 3000)
+            
+            generator = MultiAgentBookGenerator(
+                title=project.title or "Untitled",
+                premise=project.premise,
+                target_word_count=project.target_word_count,
+                num_chapters=num_chapters,
+                tone=project.book_brief.get('tone', 'narrative') if project.book_brief else 'narrative',
+                style=project.book_brief.get('style', 'third person') if project.book_brief else 'third person'
+            )
+            
+            # Generate outline
+            result = await generator.generate_book(generate_prose=False)
+            outline = result.get('outline', [])
+            
+            if not outline:
+                raise ValueError("Outline generation returned empty result")
+            
+            await self.send_message("CEO", Phase.DETAILED_ENGINEERING, 
+                                  f"Full hierarchical outline created with {len(outline)} chapters.")
+            
+            return outline
+        except Exception as e:
+            error_msg = f"Failed to create outline: {str(e)}"
+            await self.send_message("CEO", Phase.DETAILED_ENGINEERING, f"ERROR: {error_msg}")
+            raise Exception(error_msg) from e
 
 
 class ProductionDirectorAgent(BaseAgent):

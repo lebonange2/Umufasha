@@ -104,8 +104,21 @@ export default function FerrariCompanyPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to execute phase');
+        // Try to parse as JSON first
+        let errorMessage = 'Failed to execute phase';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+          // If not JSON, get text
+          const responseText = await response.text();
+          if (responseText.includes('<!DOCTYPE')) {
+            errorMessage = `Server error (${response.status}): The server returned an HTML error page. This usually means an internal error occurred. Check server logs.`;
+          } else {
+            errorMessage = responseText || errorMessage;
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -115,6 +128,7 @@ export default function FerrariCompanyPage() {
       // Refresh project status
       await refreshProject();
     } catch (err: any) {
+      console.error('Execute phase error:', err);
       setError(err.message || 'Failed to execute phase');
     } finally {
       setLoading(false);
@@ -136,8 +150,21 @@ export default function FerrariCompanyPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to process decision');
+        // Try to parse as JSON first
+        let errorMessage = 'Failed to process decision';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+          // If not JSON, get text
+          const responseText = await response.text();
+          if (responseText.includes('<!DOCTYPE')) {
+            errorMessage = `Server error (${response.status}): The server returned an HTML error page. Check server logs.`;
+          } else {
+            errorMessage = responseText || errorMessage;
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -161,6 +188,7 @@ export default function FerrariCompanyPage() {
         }, 500);
       }
     } catch (err: any) {
+      console.error('Decision error:', err);
       setError(err.message || 'Failed to process decision');
     } finally {
       setLoading(false);
