@@ -116,23 +116,21 @@ export default function FerrariCompanyPage() {
     setError(null);
 
     try {
+      // Start phase execution (returns immediately)
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/execute-phase`, {
         method: 'POST'
       });
 
-      // Read response as text first (can only read once)
       const responseText = await response.text();
 
       if (!response.ok) {
-        // Try to parse as JSON
-        let errorMessage = 'Failed to execute phase';
+        let errorMessage = 'Failed to start phase execution';
         try {
           const errorData = JSON.parse(responseText);
           errorMessage = errorData.detail || errorMessage;
         } catch (e) {
-          // If not JSON, use text
           if (responseText.includes('<!DOCTYPE')) {
-            errorMessage = `Server error (${response.status}): The server returned an HTML error page. This usually means an internal error occurred. Check server logs.`;
+            errorMessage = `Server error (${response.status}): The server returned an HTML error page. Check server logs.`;
           } else {
             errorMessage = responseText || errorMessage;
           }
@@ -140,19 +138,81 @@ export default function FerrariCompanyPage() {
         throw new Error(errorMessage);
       }
 
-      // Parse JSON from text
       const result = JSON.parse(responseText);
-      setCurrentArtifacts(result.artifacts);
-      setChatLog(result.chat_log || []);
       
-      // Refresh project status
-      await refreshProject();
+      // If already running, start polling
+      if (result.status === 'running' || result.status === 'started') {
+        // Start polling for status
+        pollPhaseStatus();
+      } else {
+        // Shouldn't happen, but handle it
+        setLoading(false);
+      }
     } catch (err: any) {
       console.error('Execute phase error:', err);
       setError(err.message || 'Failed to execute phase');
-    } finally {
       setLoading(false);
     }
+  };
+
+  const pollPhaseStatus = async () => {
+    if (!project) return;
+
+    const maxAttempts = 600; // 10 minutes max (1 second intervals)
+    let attempts = 0;
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/ferrari-company/projects/${project!.project_id}/phase-status`);
+        const responseText = await response.text();
+
+        if (!response.ok) {
+          // Try to parse error
+          let errorMessage = 'Failed to get phase status';
+          try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+          } catch (e) {
+            errorMessage = responseText || errorMessage;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const status = JSON.parse(responseText);
+
+        if (status.status === 'completed') {
+          // Phase completed!
+          setCurrentArtifacts(status.artifacts);
+          setChatLog(status.chat_log || []);
+          setLoading(false);
+          await refreshProject();
+        } else if (status.status === 'failed') {
+          setError(status.error || 'Phase execution failed');
+          setLoading(false);
+        } else if (status.status === 'running') {
+          // Still running, continue polling
+          attempts++;
+          if (attempts >= maxAttempts) {
+            setError('Phase execution is taking too long. Please check server logs.');
+            setLoading(false);
+          } else {
+            // Poll again after 1 second
+            setTimeout(poll, 1000);
+          }
+        } else {
+          // Not started or unknown
+          setError('Phase execution status unknown');
+          setLoading(false);
+        }
+      } catch (err: any) {
+        console.error('Poll phase status error:', err);
+        setError(err.message || 'Failed to poll phase status');
+        setLoading(false);
+      }
+    };
+
+    // Start polling
+    poll();
   };
 
   const makeDecision = async (decision: 'approve' | 'request_changes' | 'stop') => {

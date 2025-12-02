@@ -22,6 +22,9 @@ router = APIRouter()
 # Store active projects in memory (in production, use Redis or database)
 active_projects: Dict[str, Dict[str, Any]] = {}
 
+# Store phase execution status for background tasks
+phase_execution_status: Dict[str, Dict[str, Any]] = {}
+
 
 class FerrariProjectCreate(BaseModel):
     """Create Ferrari project request."""
@@ -127,9 +130,59 @@ async def get_ferrari_project(project_id: str):
     )
 
 
+async def _execute_phase_background(project_id: str, current_phase: Phase):
+    """Background task to execute phase without blocking HTTP request."""
+    project_data = active_projects.get(project_id)
+    if not project_data:
+        logger.error(f"Project {project_id} not found in background task")
+        return
+    
+    company = project_data["company"]
+    status_key = f"{project_id}_{current_phase.value}"
+    
+    try:
+        # Mark as running
+        phase_execution_status[status_key] = {
+            "status": "running",
+            "phase": current_phase.value,
+            "started_at": datetime.utcnow().isoformat(),
+            "error": None
+        }
+        
+        logger.info(f"Background: Executing phase {current_phase.value} for project {project_id}")
+        
+        # Execute phase (same as CLI) - no timeout in background
+        await company._execute_phase(current_phase)
+        
+        # Update project state
+        project_data["company"] = company
+        project_data["current_phase"] = current_phase.value
+        
+        # Mark as completed
+        phase_execution_status[status_key] = {
+            "status": "completed",
+            "phase": current_phase.value,
+            "started_at": phase_execution_status[status_key]["started_at"],
+            "completed_at": datetime.utcnow().isoformat(),
+            "error": None
+        }
+        
+        logger.info(f"Background: Phase {current_phase.value} completed for project {project_id}")
+        
+    except Exception as phase_error:
+        logger.error(f"Background phase execution error: {str(phase_error)}", error=str(phase_error), exc_info=True)
+        # Mark as failed
+        phase_execution_status[status_key] = {
+            "status": "failed",
+            "phase": current_phase.value,
+            "started_at": phase_execution_status.get(status_key, {}).get("started_at", datetime.utcnow().isoformat()),
+            "error": str(phase_error)
+        }
+
+
 @router.post("/api/ferrari-company/projects/{project_id}/execute-phase")
-async def execute_phase(project_id: str):
-    """Execute the current phase."""
+async def execute_phase(project_id: str, background_tasks: BackgroundTasks):
+    """Start phase execution in background and return immediately."""
     if project_id not in active_projects:
         raise HTTPException(status_code=404, detail="Project not found")
     
@@ -141,8 +194,6 @@ async def execute_phase(project_id: str):
     if project_data["status"] == "stopped":
         raise HTTPException(status_code=400, detail="Project has been stopped")
     
-    company = project_data["company"]
-    
     try:
         # Get current phase
         try:
@@ -151,99 +202,136 @@ async def execute_phase(project_id: str):
             logger.error(f"Invalid phase: {project_data.get('current_phase')}", error=str(e))
             raise HTTPException(status_code=400, detail=f"Invalid phase: {project_data.get('current_phase')}")
         
-        logger.info(f"Executing phase {current_phase.value} for project {project_id}")
+        # Check if already running
+        status_key = f"{project_id}_{current_phase.value}"
+        if status_key in phase_execution_status:
+            existing_status = phase_execution_status[status_key]
+            if existing_status.get("status") == "running":
+                return {
+                    "success": True,
+                    "status": "running",
+                    "message": "Phase execution already in progress",
+                    "phase": current_phase.value
+                }
         
-        # Execute phase (same as CLI) - with timeout protection
-        try:
-            # Set a reasonable timeout (30 minutes for long phases)
-            await asyncio.wait_for(
-                company._execute_phase(current_phase),
-                timeout=1800.0  # 30 minutes
-            )
-        except asyncio.TimeoutError:
-            logger.error(f"Phase execution timed out for project {project_id}")
-            raise HTTPException(
-                status_code=504, 
-                detail="Phase execution timed out. The LLM may be slow or unavailable. Please try again."
-            )
-        except Exception as phase_error:
-            logger.error(f"Phase execution error: {str(phase_error)}", error=str(phase_error), exc_info=True)
-            # Provide more detailed error message
-            error_msg = str(phase_error)
-            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                error_msg = "Phase execution timed out. The LLM may be slow or unavailable. Please try again."
-            elif "connection" in error_msg.lower() or "connect" in error_msg.lower():
-                error_msg = "Cannot connect to LLM service. Make sure Ollama is running and accessible."
-            elif "json" in error_msg.lower() and "decode" in error_msg.lower():
-                error_msg = "LLM returned invalid response. The model may need to be restarted."
-            raise HTTPException(status_code=500, detail=f"Phase execution failed: {error_msg}")
+        # Start background task
+        background_tasks.add_task(_execute_phase_background, project_id, current_phase)
         
-        # Update project state
-        project_data["company"] = company
-        project_data["current_phase"] = current_phase.value
+        logger.info(f"Started background phase execution for {current_phase.value} in project {project_id}")
         
-        # Get artifacts for presentation (same format as CLI)
+        return {
+            "success": True,
+            "status": "started",
+            "message": "Phase execution started in background",
+            "phase": current_phase.value
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to start phase execution", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to start phase execution: {str(e)}")
+
+
+@router.get("/api/ferrari-company/projects/{project_id}/phase-status")
+async def get_phase_status(project_id: str):
+    """Get status of phase execution."""
+    if project_id not in active_projects:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_data = active_projects[project_id]
+    current_phase = project_data.get("current_phase")
+    
+    if not current_phase:
+        return {
+            "status": "unknown",
+            "phase": None,
+            "message": "No phase information available"
+        }
+    
+    status_key = f"{project_id}_{current_phase}"
+    execution_status = phase_execution_status.get(status_key, {})
+    
+    if execution_status.get("status") == "completed":
+        # Phase completed, get artifacts
+        company = project_data["company"]
+        current_phase_enum = Phase(current_phase)
+        
+        # Get artifacts for presentation
         artifacts = {}
         summary_parts = []
         
         try:
-            if current_phase == Phase.STRATEGY_CONCEPT:
+            if current_phase_enum == Phase.STRATEGY_CONCEPT:
                 artifacts = {"book_brief": company.project.book_brief or {}}
                 summary_parts.append("CPSO has created the initial book brief.")
-            elif current_phase == Phase.EARLY_DESIGN:
+            elif current_phase_enum == Phase.EARLY_DESIGN:
                 artifacts = {
                     "world_dossier": company.project.world_dossier or {},
                     "character_bible": company.project.character_bible or {},
                     "plot_arc": company.project.plot_arc or {}
                 }
                 summary_parts.append("Story Design Director has completed world and character design.")
-            elif current_phase == Phase.DETAILED_ENGINEERING:
-                # Ensure outline is a list
+            elif current_phase_enum == Phase.DETAILED_ENGINEERING:
                 outline = company.project.outline or []
                 if not isinstance(outline, list):
                     outline = []
                 artifacts = {"outline": outline}
                 summary_parts.append("Narrative Engineering Director has created the full hierarchical outline.")
-            elif current_phase == Phase.PROTOTYPES_TESTING:
+            elif current_phase_enum == Phase.PROTOTYPES_TESTING:
                 artifacts = {
                     "draft_chapters": company.project.draft_chapters or {},
                     "revision_report": company.project.revision_report or {}
                 }
                 summary_parts.append("Production and QA teams have completed draft and testing.")
-            elif current_phase == Phase.INDUSTRIALIZATION_PACKAGING:
+            elif current_phase_enum == Phase.INDUSTRIALIZATION_PACKAGING:
                 artifacts = {"formatted_manuscript": company.project.formatted_manuscript or ""}
                 summary_parts.append("Formatting and export agents have prepared the production-ready manuscript.")
-            elif current_phase == Phase.MARKETING_LAUNCH:
+            elif current_phase_enum == Phase.MARKETING_LAUNCH:
                 artifacts = {"launch_package": company.project.launch_package or {}}
                 summary_parts.append("Launch Director has created the complete launch package.")
         except Exception as artifact_error:
             logger.warning(f"Error getting artifacts: {str(artifact_error)}", exc_info=True)
-            # Continue with empty artifacts rather than failing
         
-        summary = " ".join(summary_parts) if summary_parts else f"Phase {current_phase.value.replace('_', ' ').title()} completed."
+        summary = " ".join(summary_parts) if summary_parts else f"Phase {current_phase.replace('_', ' ').title()} completed."
         
-        # Get chat log for this phase
+        # Get chat log
         try:
-            phase_chat_log = company.message_bus.get_chat_log(current_phase)
+            phase_chat_log = company.message_bus.get_chat_log(current_phase_enum)
             if not isinstance(phase_chat_log, list):
                 phase_chat_log = []
         except Exception as log_error:
             logger.warning(f"Error getting chat log: {str(log_error)}", exc_info=True)
             phase_chat_log = []
         
+        # Clear status after returning
+        phase_execution_status.pop(status_key, None)
+        
         return {
-            "success": True,
-            "phase": current_phase.value,
+            "status": "completed",
+            "phase": current_phase,
             "summary": summary,
             "artifacts": artifacts,
             "chat_log": phase_chat_log,
             "ready_for_decision": True
         }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to execute phase", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to execute phase: {str(e)}")
+    elif execution_status.get("status") == "failed":
+        error_msg = execution_status.get("error", "Unknown error")
+        # Clear status
+        phase_execution_status.pop(status_key, None)
+        raise HTTPException(status_code=500, detail=f"Phase execution failed: {error_msg}")
+    elif execution_status.get("status") == "running":
+        return {
+            "status": "running",
+            "phase": current_phase,
+            "message": "Phase execution in progress",
+            "started_at": execution_status.get("started_at")
+        }
+    else:
+        return {
+            "status": "not_started",
+            "phase": current_phase,
+            "message": "Phase execution not started"
+        }
 
 
 @router.post("/api/ferrari-company/projects/{project_id}/decide")
