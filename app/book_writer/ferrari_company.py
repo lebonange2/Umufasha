@@ -177,8 +177,14 @@ CEO Question: Approve, request changes, or stop the project?
             message_type="owner_request"
         )
         
-        # In real implementation, this would wait for user input
-        # For now, return a placeholder that will be set by the company
+        # Check if owner callback is set (by company)
+        if hasattr(self, '_owner_callback') and self._owner_callback:
+            # Call the owner callback (which is a regular function, not async)
+            callback_result = self._owner_callback(phase, summary, artifacts)
+            # The callback returns OwnerDecision directly (synchronous)
+            return callback_result
+        
+        # Default: approve (for testing/automation)
         return OwnerDecision.APPROVE
     
     async def coordinate_phase(self, phase: Phase, project: BookProject) -> Tuple[Dict[str, Any], OwnerDecision]:
@@ -1006,7 +1012,7 @@ class FerrariBookCompany:
         
         # Set owner callback if provided
         if owner_callback:
-            self.ceo.present_to_owner = lambda phase, summary, artifacts: owner_callback(phase, summary, artifacts)
+            self.ceo._owner_callback = owner_callback
         
         # Run all phases
         phases = [
