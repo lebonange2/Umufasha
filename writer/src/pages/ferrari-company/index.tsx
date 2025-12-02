@@ -78,14 +78,31 @@ export default function FerrariCompanyPage() {
         })
       });
 
+      // Read response as text first (can only read once)
+      const responseText = await response.text();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to create project');
+        // Try to parse as JSON
+        let errorMessage = 'Failed to create project';
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+          // If not JSON, use text
+          if (responseText.includes('<!DOCTYPE')) {
+            errorMessage = `Server error (${response.status}): The server returned an HTML error page. Check server logs.`;
+          } else {
+            errorMessage = responseText || errorMessage;
+          }
+        }
+        throw new Error(errorMessage);
       }
 
-      const projectData = await response.json();
+      // Parse JSON from text
+      const projectData = JSON.parse(responseText);
       setProject(projectData);
     } catch (err: any) {
+      console.error('Create project error:', err);
       setError(err.message || 'Failed to create project');
     } finally {
       setLoading(false);
@@ -208,8 +225,16 @@ export default function FerrariCompanyPage() {
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}`);
       if (response.ok) {
         const responseText = await response.text();
-        const projectData = JSON.parse(responseText);
-        setProject(projectData);
+        try {
+          const projectData = JSON.parse(responseText);
+          setProject(projectData);
+        } catch (parseErr) {
+          console.error('Failed to parse project data:', parseErr);
+        }
+      } else {
+        // Handle error response
+        const responseText = await response.text();
+        console.error('Failed to refresh project:', response.status, responseText);
       }
     } catch (err) {
       console.error('Failed to refresh project:', err);
@@ -223,8 +248,16 @@ export default function FerrariCompanyPage() {
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/files`);
       if (response.ok) {
         const responseText = await response.text();
-        const data = JSON.parse(responseText);
-        setFileInfo(data.files);
+        try {
+          const data = JSON.parse(responseText);
+          setFileInfo(data.files);
+        } catch (parseErr) {
+          console.error('Failed to parse file info:', parseErr);
+        }
+      } else {
+        // Handle error response
+        const responseText = await response.text();
+        console.error('Failed to check files:', response.status, responseText);
       }
     } catch (err) {
       console.error('Failed to check files:', err);
@@ -236,7 +269,26 @@ export default function FerrariCompanyPage() {
 
     try {
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/download/${fileType}`);
-      if (!response.ok) throw new Error('Download failed');
+      if (!response.ok) {
+        // Try to get error message
+        let errorMessage = 'Download failed';
+        try {
+          const responseText = await response.text();
+          try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.detail || errorMessage;
+          } catch (e) {
+            if (responseText.includes('<!DOCTYPE')) {
+              errorMessage = `Server error (${response.status}): The server returned an HTML error page. Check server logs.`;
+            } else {
+              errorMessage = responseText || errorMessage;
+            }
+          }
+        } catch (e) {
+          errorMessage = `Download failed with status ${response.status}`;
+        }
+        throw new Error(errorMessage);
+      }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -248,6 +300,7 @@ export default function FerrariCompanyPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err: any) {
+      console.error('Download error:', err);
       setError(err.message || 'Failed to download file');
     }
   };
@@ -259,11 +312,22 @@ export default function FerrariCompanyPage() {
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/chat-log`);
       if (response.ok) {
         const responseText = await response.text();
-        const data = JSON.parse(responseText);
-        setChatLog(data.chat_log || []);
+        try {
+          const data = JSON.parse(responseText);
+          setChatLog(data.chat_log || []);
+        } catch (parseErr) {
+          console.error('Failed to parse chat log:', parseErr);
+          setChatLog([]);
+        }
+      } else {
+        // Handle error response
+        const responseText = await response.text();
+        console.error('Failed to load chat log:', response.status, responseText);
+        setChatLog([]);
       }
     } catch (err) {
       console.error('Failed to load chat log:', err);
+      setChatLog([]);
     }
   };
 
