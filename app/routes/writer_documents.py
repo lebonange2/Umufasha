@@ -94,7 +94,27 @@ AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
 # Thread pool for TTS operations
-tts_executor = ThreadPoolExecutor(max_workers=1)
+# Use multiple workers if multiple GPUs are available for parallel chunk processing
+import torch
+
+# Check if parallel processing is enabled via environment variable
+ENABLE_PARALLEL_TTS = os.environ.get("ENABLE_PARALLEL_TTS", "true").lower() == "true"
+MAX_PARALLEL_WORKERS = int(os.environ.get("MAX_PARALLEL_TTS_WORKERS", "4"))
+
+if ENABLE_PARALLEL_TTS and torch.cuda.is_available() and torch.cuda.device_count() > 1:
+    # Use one worker per GPU for parallel processing (up to MAX_PARALLEL_WORKERS)
+    num_workers = min(torch.cuda.device_count(), MAX_PARALLEL_WORKERS)
+    tts_executor = ThreadPoolExecutor(max_workers=num_workers)
+    logger.info(f"Multi-GPU detected: {torch.cuda.device_count()} GPUs, using {num_workers} workers for parallel TTS")
+else:
+    # Single GPU or CPU: use 1 worker to avoid memory issues
+    tts_executor = ThreadPoolExecutor(max_workers=1)
+    if not torch.cuda.is_available():
+        logger.info("CPU mode: Using single worker for TTS")
+    elif torch.cuda.device_count() == 1:
+        logger.info("Single GPU: Using single worker for TTS (set ENABLE_PARALLEL_TTS=true for parallel processing)")
+    else:
+        logger.info(f"Parallel TTS disabled (set ENABLE_PARALLEL_TTS=true to enable)")
 
 # Task status tracking for async TTS conversions
 # Format: {task_id: {"status": "pending|processing|completed|failed", "progress": str, "result": dict, "error": str}}
@@ -451,14 +471,27 @@ def _init_tts_model():
         
         from bark import generate_audio, preload_models, SAMPLE_RATE
         
+        # Check GPU availability and configure device
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        
+        if device == "cuda":
+            logger.info(f"GPU detected: {torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB)")
+            if device_count > 1:
+                logger.info(f"Multiple GPUs available: {device_count} devices")
+        else:
+            logger.info("Using CPU (GPU not available)")
+        
         # Preload models on first initialization (this downloads models if needed)
         logger.info("Preloading Bark models (this may take a while on first run)...")
         preload_models()
         
-        logger.info("Initialized Bark TTS model")
+        logger.info(f"Initialized Bark TTS model (device: {device})")
         return {
             "generate_audio": generate_audio,
-            "SAMPLE_RATE": SAMPLE_RATE
+            "SAMPLE_RATE": SAMPLE_RATE,
+            "device": device,
+            "device_count": device_count
         }, "bark"
     except ImportError as e:
         logger.error(f"Bark not installed: {e}", exc_info=True)
@@ -590,53 +623,133 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         # Generate audio for each chunk and concatenate
         import soundfile as sf
         import numpy as np
+        from concurrent.futures import as_completed
         
         audio_segments = []
+        device_count = bark_model.get("device_count", 1)
+        device = bark_model.get("device", "cpu")
         
-        # Check if we're running in a task context (for progress updates)
-        task_id = None
-        # Try to get task_id from thread-local storage or global context
-        # For now, we'll pass it through a different mechanism
+        # Use parallel processing if:
+        # 1. Parallel processing is enabled (ENABLE_PARALLEL_TTS=true)
+        # 2. Multiple GPUs are available
+        # 3. We have more than 1 chunk to process
+        # Note: Parallel processing distributes chunks across GPUs for faster conversion
+        use_parallel = (ENABLE_PARALLEL_TTS and 
+                       device_count > 1 and 
+                       len(chunks) > 1 and 
+                       device == "cuda")
         
-        for i, chunk in enumerate(chunks):
-            if not chunk.strip():
-                continue
+        if use_parallel:
+            # Multi-GPU: Process chunks in parallel across GPUs
+            logger.info(f"Using parallel processing with {device_count} GPUs for {len(chunks)} chunks")
+            if progress_callback:
+                progress_callback(f"Processing {len(chunks)} chunks in parallel across {device_count} GPUs...")
             
-            try:
-                chunk_progress = f"Generating audio chunk {i+1}/{len(chunks)}..."
-                logger.info(f"Generating audio for chunk {i+1}/{len(chunks)} (length: {len(chunk)})")
-                if progress_callback:
-                    progress_callback(chunk_progress)
+            def process_chunk(chunk_data):
+                """Process a single chunk on a specific GPU.
                 
-                # Use voice preset if speaker_wav is provided (Bark supports history_prompt)
-                # Otherwise use default voice
-                history_prompt = None
-                if speaker_wav:
-                    # Bark can use history prompts for voice cloning, but we'll use a default for now
-                    # You can extend this to support custom voice prompts
-                    history_prompt = "v2/en_speaker_1"  # Default English speaker
-                
-                # Generate audio with Bark
-                audio_array = generate_audio(
-                    chunk,
-                    history_prompt=history_prompt,
-                    text_temp=0.7,
-                    waveform_temp=0.7,
-                    silent=True  # Disable progress bar
-                )
-                
-                # Bark returns numpy array at 24kHz sample rate
-                if audio_array is not None and len(audio_array) > 0:
-                    audio_segments.append(audio_array)
-                    logger.info(f"Generated audio chunk {i+1}, length: {len(audio_array)} samples")
-                    if progress_callback:
-                        progress_callback(f"Completed chunk {i+1}/{len(chunks)}")
-                else:
-                    logger.warning(f"Empty audio generated for chunk {i+1}")
+                Note: Each thread needs to reload the Bark model on its assigned GPU.
+                This is because Bark models are loaded per-process, not per-thread.
+                """
+                chunk_idx, chunk_text, gpu_id = chunk_data
+                try:
+                    # Set CUDA device for this thread
+                    if torch.cuda.is_available() and gpu_id < torch.cuda.device_count():
+                        torch.cuda.set_device(gpu_id)
+                        logger.info(f"Processing chunk {chunk_idx+1} on GPU {gpu_id} ({torch.cuda.get_device_name(gpu_id)})")
                     
-            except Exception as e:
-                logger.warning(f"Bark chunk {i+1} failed: {e}, trying next chunk")
-                continue
+                    # Re-import generate_audio in this thread to ensure it uses the correct device
+                    # Bark's generate_audio should automatically use the current CUDA device
+                    history_prompt = None
+                    if speaker_wav:
+                        history_prompt = "v2/en_speaker_1"
+                    
+                    audio_array = generate_audio(
+                        chunk_text,
+                        history_prompt=history_prompt,
+                        text_temp=0.7,
+                        waveform_temp=0.7,
+                        silent=True
+                    )
+                    
+                    return (chunk_idx, audio_array, None)
+                except Exception as e:
+                    logger.warning(f"Chunk {chunk_idx+1} failed on GPU {gpu_id}: {e}", exc_info=True)
+                    return (chunk_idx, None, str(e))
+            
+            # Distribute chunks across GPUs
+            chunk_data_list = [
+                (i, chunk, i % device_count)  # Round-robin GPU assignment
+                for i, chunk in enumerate(chunks)
+                if chunk.strip()
+            ]
+            
+            # Process chunks in parallel (one per GPU)
+            # Use the global tts_executor which is already configured for multi-GPU
+            from concurrent.futures import ThreadPoolExecutor as ChunkExecutor
+            with ChunkExecutor(max_workers=min(device_count, len(chunk_data_list))) as executor:
+                future_to_chunk = {executor.submit(process_chunk, chunk_data): chunk_data[0] 
+                                  for chunk_data in chunk_data_list}
+                
+                completed = 0
+                for future in as_completed(future_to_chunk):
+                    chunk_idx, audio_array, error = future.result()
+                    completed += 1
+                    
+                    if progress_callback:
+                        progress_callback(f"Completed {completed}/{len(chunk_data_list)} chunks (parallel processing)")
+                    
+                    if audio_array is not None and len(audio_array) > 0:
+                        audio_segments.append((chunk_idx, audio_array))
+                        logger.info(f"Generated audio chunk {chunk_idx+1}, length: {len(audio_array)} samples")
+                    elif error:
+                        logger.warning(f"Chunk {chunk_idx+1} failed: {error}")
+            
+            # Sort audio segments by chunk index to maintain order
+            audio_segments.sort(key=lambda x: x[0])
+            audio_segments = [audio for _, audio in audio_segments]
+            
+        else:
+            # Single GPU or CPU: Process chunks sequentially
+            for i, chunk in enumerate(chunks):
+                if not chunk.strip():
+                    continue
+                
+                try:
+                    chunk_progress = f"Generating audio chunk {i+1}/{len(chunks)}..."
+                    logger.info(f"Generating audio for chunk {i+1}/{len(chunks)} (length: {len(chunk)})")
+                    if progress_callback:
+                        progress_callback(chunk_progress)
+                    
+                    # Use voice preset if speaker_wav is provided (Bark supports history_prompt)
+                    # Otherwise use default voice
+                    history_prompt = None
+                    if speaker_wav:
+                        # Bark can use history prompts for voice cloning, but we'll use a default for now
+                        # You can extend this to support custom voice prompts
+                        history_prompt = "v2/en_speaker_1"  # Default English speaker
+                    
+                    # Generate audio with Bark
+                    audio_array = generate_audio(
+                        chunk,
+                        history_prompt=history_prompt,
+                        text_temp=0.7,
+                        waveform_temp=0.7,
+                        silent=True  # Disable progress bar
+                    )
+                    
+                    # Bark returns numpy array at 24kHz sample rate
+                    if audio_array is not None and len(audio_array) > 0:
+                        audio_segments.append(audio_array)
+                        logger.info(f"Generated audio chunk {i+1}, length: {len(audio_array)} samples")
+                        if progress_callback:
+                            progress_callback(f"Completed chunk {i+1}/{len(chunks)}")
+                    else:
+                        logger.warning(f"Empty audio generated for chunk {i+1}")
+                        
+                except Exception as e:
+                    logger.warning(f"Bark chunk {i+1} failed: {e}, trying next chunk")
+                    continue
         
         if not audio_segments:
             raise ValueError("No audio generated from any chunks")
