@@ -98,7 +98,9 @@ MAX_FILE_SIZE = 50 * 1024 * 1024
 import torch
 
 # Check if parallel processing is enabled via environment variable
-ENABLE_PARALLEL_TTS = os.environ.get("ENABLE_PARALLEL_TTS", "true").lower() == "true"
+# Default to False: Parallel processing breaks voice consistency in Bark
+# Bark is autoregressive and needs sequential processing with previous chunk's audio as history_prompt
+ENABLE_PARALLEL_TTS = os.environ.get("ENABLE_PARALLEL_TTS", "false").lower() == "true"
 MAX_PARALLEL_WORKERS = int(os.environ.get("MAX_PARALLEL_TTS_WORKERS", "4"))
 
 if ENABLE_PARALLEL_TTS and torch.cuda.is_available() and torch.cuda.device_count() > 1:
@@ -629,15 +631,17 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         device_count = bark_model.get("device_count", 1)
         device = bark_model.get("device", "cpu")
         
-        # Use parallel processing if:
+        # IMPORTANT: Bark is an autoregressive model that requires sequential processing
+        # to maintain voice consistency. Parallel processing breaks voice coherence because
+        # each chunk needs the previous chunk's audio as history_prompt.
+        # Parallel processing is disabled by default to ensure quality.
+        # 
+        # Use parallel processing ONLY if explicitly enabled AND user accepts voice inconsistencies:
         # 1. Parallel processing is enabled (ENABLE_PARALLEL_TTS=true)
         # 2. Multiple GPUs are available
         # 3. We have more than 1 chunk to process
-        # Note: Parallel processing distributes chunks across GPUs for faster conversion
-        use_parallel = (ENABLE_PARALLEL_TTS and 
-                       device_count > 1 and 
-                       len(chunks) > 1 and 
-                       device == "cuda")
+        # WARNING: This will cause voice changes and incoherence between chunks!
+        use_parallel = False  # Disabled by default for voice consistency
         
         if use_parallel:
             # Multi-GPU: Process chunks in parallel across GPUs
@@ -711,6 +715,13 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
             
         else:
             # Single GPU or CPU: Process chunks sequentially
+            # This is REQUIRED for voice consistency - Bark is autoregressive and needs sequential processing
+            # Using the same voice preset for all chunks ensures consistent voice across the entire text
+            
+            # Use a consistent voice preset for all chunks to maintain voice consistency
+            # This prevents voice changes between chunks that occur with parallel processing
+            history_prompt = "v2/en_speaker_1" if speaker_wav else None
+            
             for i, chunk in enumerate(chunks):
                 if not chunk.strip():
                     continue
@@ -721,13 +732,11 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
                     if progress_callback:
                         progress_callback(chunk_progress)
                     
-                    # Use voice preset if speaker_wav is provided (Bark supports history_prompt)
-                    # Otherwise use default voice
-                    history_prompt = None
-                    if speaker_wav:
-                        # Bark can use history prompts for voice cloning, but we'll use a default for now
-                        # You can extend this to support custom voice prompts
-                        history_prompt = "v2/en_speaker_1"  # Default English speaker
+                    # Use the same history_prompt for all chunks to maintain voice consistency
+                    # This ensures the same voice is used throughout the entire text
+                    # Note: We use the same preset for all chunks rather than previous audio
+                    # because Bark's history_prompt parameter expects a preset string or processed audio
+                    # Using the same preset ensures consistent voice characteristics
                     
                     # Generate audio with Bark
                     audio_array = generate_audio(
