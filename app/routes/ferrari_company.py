@@ -450,6 +450,225 @@ async def make_decision(project_id: str, decision: PhaseDecision):
         raise HTTPException(status_code=500, detail=f"Failed to process decision: {str(e)}")
 
 
+def _generate_plain_text(final_package: Dict[str, Any]) -> str:
+    """Generate well-structured plain text from final package for audio conversion.
+    
+    The text is structured with:
+    - Clear chapter headings
+    - Proper paragraph breaks
+    - Clean formatting (no markdown)
+    - Punctuation optimized for TTS
+    """
+    lines = []
+    
+    # Title
+    title = final_package.get("title", "Untitled Book")
+    lines.append(title.upper())
+    lines.append("")
+    lines.append("=" * len(title))
+    lines.append("")
+    
+    # Premise (if available)
+    premise = final_package.get("premise")
+    if premise:
+        lines.append("PREMISE")
+        lines.append("-" * 40)
+        lines.append("")
+        lines.append(_clean_text_for_audio(premise))
+        lines.append("")
+        lines.append("")
+    
+    # Use formatted_manuscript if available, otherwise use full_draft
+    manuscript = final_package.get("formatted_manuscript") or final_package.get("full_draft")
+    
+    if manuscript:
+        # Convert markdown to plain text
+        text = _convert_markdown_to_plain_text(manuscript)
+        lines.append(text)
+    elif final_package.get("outline"):
+        # If no manuscript, use outline as fallback
+        lines.append("OUTLINE")
+        lines.append("-" * 40)
+        lines.append("")
+        outline = final_package.get("outline", [])
+        for chapter in outline:
+            chapter_num = chapter.get("chapter_number", 0)
+            chapter_title = chapter.get("title", "Untitled")
+            lines.append(f"Chapter {chapter_num}: {chapter_title}")
+            lines.append("")
+            
+            # Add chapter content if available
+            if chapter.get("content"):
+                lines.append(_clean_text_for_audio(chapter["content"]))
+                lines.append("")
+            elif chapter.get("sections"):
+                for section in chapter.get("sections", []):
+                    section_title = section.get("title", "")
+                    if section_title:
+                        lines.append(f"  {section_title}")
+                        lines.append("")
+                    if section.get("content"):
+                        lines.append(_clean_text_for_audio(section["content"]))
+                        lines.append("")
+            lines.append("")
+    
+    return "\n".join(lines)
+
+
+def _clean_text_for_audio(text: str) -> str:
+    """Clean text for optimal audio conversion.
+    
+    - Removes markdown formatting
+    - Removes excessive whitespace
+    - Ensures proper sentence endings
+    - Normalizes punctuation for TTS
+    """
+    if not text:
+        return ""
+    
+    import re
+    
+    # Remove markdown formatting (bold, italic, code, links)
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Bold
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)  # Italic
+    text = re.sub(r'__([^_]+)__', r'\1', text)  # Bold alt
+    text = re.sub(r'_([^_]+)_', r'\1', text)  # Italic alt
+    text = re.sub(r'`([^`]+)`', r'\1', text)  # Code
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)  # Links
+    
+    # Remove markdown headers (already handled in conversion)
+    text = text.replace("#", "").replace("##", "").replace("###", "")
+    
+    # Clean up whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)  # Max 2 newlines
+    text = re.sub(r' {2,}', ' ', text)  # Max 1 space
+    text = re.sub(r'\t+', ' ', text)  # Tabs to spaces
+    
+    # Normalize punctuation for better TTS
+    text = re.sub(r'\.{3,}', '...', text)  # Multiple dots to ellipsis
+    text = re.sub(r'!{2,}', '!', text)  # Multiple exclamations to one
+    text = re.sub(r'\?{2,}', '?', text)  # Multiple questions to one
+    
+    # Ensure sentences end with punctuation (but don't add if already has it)
+    text = text.strip()
+    if text and text[-1] not in '.!?;:':
+        # Check if it looks like a sentence (has some content)
+        if len(text) > 10:
+            text += '.'
+    
+    return text
+
+
+def _convert_markdown_to_plain_text(markdown_text: str) -> str:
+    """Convert markdown to plain text optimized for audio conversion.
+    
+    Structure:
+    - Chapter headers are clearly marked and separated
+    - Sections have clear breaks
+    - Paragraphs are properly spaced
+    - Text flows naturally for TTS reading
+    """
+    if not markdown_text:
+        return ""
+    
+    lines = []
+    current_paragraph = []
+    in_list = False
+    
+    for line in markdown_text.split('\n'):
+        original_line = line
+        line = line.strip()
+        
+        if not line:
+            # Empty line - end current paragraph and list
+            if current_paragraph:
+                lines.append(' '.join(current_paragraph))
+                current_paragraph = []
+            if in_list:
+                in_list = False
+            lines.append("")
+            continue
+        
+        # Handle markdown headers
+        if line.startswith('#'):
+            # Header - end paragraph and add header
+            if current_paragraph:
+                lines.append(' '.join(current_paragraph))
+                current_paragraph = []
+            in_list = False
+            
+            # Remove # symbols and clean
+            header_text = line.lstrip('#').strip()
+            header_text = _clean_text_for_audio(header_text)
+            
+            if header_text:
+                # Determine header level
+                header_level = len(original_line) - len(original_line.lstrip('#'))
+                
+                # Make headers clear for audio
+                lines.append("")
+                if header_level == 1:
+                    # Main chapter title
+                    lines.append(header_text.upper())
+                    lines.append("=" * min(len(header_text), 70))
+                elif header_level == 2:
+                    # Section title
+                    lines.append(header_text.upper())
+                    lines.append("-" * min(len(header_text), 60))
+                else:
+                    # Subsection
+                    lines.append(header_text)
+                lines.append("")
+            continue
+        
+        # Handle lists (convert to natural text)
+        if line.startswith('- ') or line.startswith('* ') or line.startswith('+ '):
+            if current_paragraph:
+                lines.append(' '.join(current_paragraph))
+                current_paragraph = []
+            
+            list_item = line[2:].strip()
+            list_item = _clean_text_for_audio(list_item)
+            if list_item:
+                # Format as natural sentence
+                lines.append(f"  • {list_item}")
+            in_list = True
+            continue
+        elif line[0].isdigit() and '. ' in line[:5]:
+            # Numbered list
+            if current_paragraph:
+                lines.append(' '.join(current_paragraph))
+                current_paragraph = []
+            
+            list_item = line.split('. ', 1)[1] if '. ' in line else line
+            list_item = _clean_text_for_audio(list_item)
+            if list_item:
+                lines.append(f"  {list_item}")
+            in_list = True
+            continue
+        
+        # Regular paragraph text
+        if in_list:
+            in_list = False
+        
+        # Clean and add to paragraph
+        cleaned_line = _clean_text_for_audio(line)
+        if cleaned_line:
+            current_paragraph.append(cleaned_line)
+    
+    # Add remaining paragraph
+    if current_paragraph:
+        lines.append(' '.join(current_paragraph))
+    
+    # Final cleanup - ensure proper spacing
+    result = '\n'.join(lines)
+    # Remove excessive blank lines (max 2 consecutive)
+    import re
+    result = re.sub(r'\n{4,}', '\n\n\n', result)
+    
+    return result
+
+
 async def save_final_files(project_id: str, company: FerrariBookCompany, project_data: Dict[str, Any]):
     """Save final files after completion."""
     try:
@@ -501,6 +720,19 @@ async def save_final_files(project_id: str, company: FerrariBookCompany, project
             logger.error(f"Failed to save chat log: {str(e)}", exc_info=True)
             raise
         
+        # Generate plain text export (well-structured for audio conversion)
+        txt_filename = None
+        try:
+            txt_content = _generate_plain_text(final_package)
+            if txt_content:
+                txt_filename = output_dir / f"{safe_title}_book.txt"
+                with open(txt_filename, "w", encoding="utf-8") as f:
+                    f.write(txt_content)
+                logger.info(f"Generated plain text export: {txt_filename}")
+        except Exception as e:
+            logger.warning(f"Could not generate plain text export: {str(e)}", exc_info=True)
+            # Continue without plain text
+        
         # Copy PDF if exists
         pdf_dest_path = None
         try:
@@ -528,6 +760,8 @@ async def save_final_files(project_id: str, company: FerrariBookCompany, project
             with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 zipf.write(json_filename, json_filename.name)
                 zipf.write(chat_log_filename, chat_log_filename.name)
+                if txt_filename and txt_filename.exists():
+                    zipf.write(txt_filename, txt_filename.name)
                 if pdf_dest_path and pdf_dest_path.exists():
                     zipf.write(pdf_dest_path, pdf_dest_path.name)
         except Exception as e:
@@ -538,6 +772,7 @@ async def save_final_files(project_id: str, company: FerrariBookCompany, project
         project_data["files"] = {
             "json": str(json_filename.absolute()),
             "chat_log": str(chat_log_filename.absolute()),
+            "txt": str(txt_filename.absolute()) if txt_filename and txt_filename.exists() else None,
             "pdf": str(pdf_dest_path.absolute()) if pdf_dest_path and pdf_dest_path.exists() else None,
             "zip": str(zip_filename.absolute()) if zip_filename and zip_filename.exists() else None
         }
@@ -591,6 +826,15 @@ async def download_file(project_id: str, file_type: str):
             path=file_path,
             filename=Path(file_path).name,
             media_type="application/json"
+        )
+    elif file_type == "txt":
+        file_path = files.get("txt")
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Text file not found")
+        return FileResponse(
+            path=file_path,
+            filename=Path(file_path).name,
+            media_type="text/plain"
         )
     elif file_type == "pdf":
         file_path = files.get("pdf")
