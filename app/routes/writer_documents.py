@@ -134,15 +134,22 @@ class DocumentInfo(BaseModel):
 
 
 def extract_text_from_pdf(file_path: Path) -> str:
-    """Extract text from PDF file."""
+    """Extract text from PDF file, preserving page order."""
     try:
         import PyPDF2
-        text = []
+        text_parts = []
         with open(file_path, 'rb') as f:
             pdf_reader = PyPDF2.PdfReader(f)
-            for page in pdf_reader.pages:
-                text.append(page.extract_text())
-        return '\n\n'.join(text)
+            # Extract pages in order to preserve text sequence
+            for page_num, page in enumerate(pdf_reader.pages, 1):
+                page_text = page.extract_text()
+                if page_text.strip():  # Only add non-empty pages
+                    text_parts.append(page_text)
+                    logger.debug(f"Extracted text from PDF page {page_num} ({len(page_text)} chars)")
+        # Join with double newline to preserve paragraph structure
+        full_text = '\n\n'.join(text_parts)
+        logger.info(f"Extracted {len(full_text)} characters from PDF ({len(text_parts)} pages)")
+        return full_text
     except Exception as e:
         logger.error("PDF extraction error", error=str(e))
         raise HTTPException(status_code=400, detail=f"Failed to extract text from PDF: {str(e)}")
@@ -168,15 +175,20 @@ def extract_text_from_docx(file_path: Path) -> str:
 
 
 def extract_text_from_txt(file_path: Path) -> str:
-    """Extract text from TXT file."""
+    """Extract text from TXT file, preserving order and structure."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
+            text = f.read()
+            # Preserve the text as-is to maintain order and structure
+            logger.debug(f"Extracted {len(text)} characters from TXT file")
+            return text
     except UnicodeDecodeError:
         # Try with different encoding
         try:
             with open(file_path, 'r', encoding='latin-1') as f:
-                return f.read()
+                text = f.read()
+                logger.debug(f"Extracted {len(text)} characters from TXT file (latin-1 encoding)")
+                return text
         except Exception as e:
             logger.error("TXT extraction error", error=str(e))
             raise HTTPException(status_code=400, detail=f"Failed to extract text from TXT: {str(e)}")
@@ -591,36 +603,135 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         generate_audio = bark_model["generate_audio"]
         sample_rate = bark_model["SAMPLE_RATE"]
         
-        # Clean and prepare text
-        # Bark works well with ~13 seconds of spoken text per chunk
-        # Split text into sentences and group them into reasonable chunks
-        max_chunk_length = 250  # characters per chunk (conservative for Bark)
+        # Clean and prepare text for TTS
+        # Remove excessive whitespace and normalize line breaks
+        import re
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Max 2 consecutive newlines
+        text = re.sub(r'[ \t]+', ' ', text)  # Normalize spaces
+        text = text.strip()
+        
+        # Bark works well with ~13-15 seconds of spoken text per chunk
+        # Use larger chunks (500-800 chars) to maintain coherence and reduce voice changes
+        # Split text intelligently by sentences while preserving paragraph structure
+        max_chunk_length = 600  # characters per chunk (optimal for Bark coherence)
+        min_chunk_length = 100  # minimum chunk size to avoid too many tiny chunks
+        
         chunks = []
+        
+        # Split text into paragraphs first to preserve structure
+        paragraphs = text.split('\n\n')
+        
         current_chunk = ""
         
-        # Split by sentences first
-        sentences = text.replace('!', '.').replace('?', '.').split('. ')
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
+        for para_idx, paragraph in enumerate(paragraphs):
+            paragraph = paragraph.strip()
+            if not paragraph:
                 continue
-                
-            # Add period back if it was removed
-            if not sentence.endswith('.'):
-                sentence += '.'
             
-            if len(current_chunk) + len(sentence) < max_chunk_length:
-                current_chunk += sentence + ' '
-            else:
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
-                current_chunk = sentence + ' '
+            # Use regex to split by sentence endings while preserving abbreviations
+            # Pattern: sentence ending (. ! ?) followed by space and capital letter or end of text
+            # This avoids splitting on abbreviations like "Dr.", "U.S.", "etc."
+            sentence_pattern = r'(?<=[.!?])\s+(?=[A-Z])|(?<=[.!?])\s*$'
+            sentences = re.split(sentence_pattern, paragraph)
+            
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                
+                # Ensure sentence ends with punctuation
+                if not re.search(r'[.!?]$', sentence):
+                    sentence += '.'
+                
+                # Check if adding this sentence would exceed max length
+                potential_chunk = (current_chunk + ' ' + sentence).strip() if current_chunk else sentence
+                
+                if len(potential_chunk) <= max_chunk_length:
+                    # Add to current chunk
+                    if current_chunk:
+                        current_chunk += ' ' + sentence
+                    else:
+                        current_chunk = sentence
+                else:
+                    # Current chunk is full, save it and start new one
+                    if current_chunk and len(current_chunk) >= min_chunk_length:
+                        chunks.append(current_chunk)
+                        logger.debug(f"Chunk {len(chunks)}: {current_chunk[:100]}...")
+                    elif current_chunk:
+                        # Chunk is too small, try to add sentence anyway if it's not too long
+                        if len(sentence) <= max_chunk_length:
+                            current_chunk = sentence
+                        else:
+                            # Sentence itself is too long, split it by commas or semicolons
+                            parts = re.split(r'[,;]\s+', sentence)
+                            for part in parts:
+                                part = part.strip()
+                                if not part:
+                                    continue
+                                if not re.search(r'[.!?]$', part):
+                                    part += '.'
+                                
+                                if current_chunk and len(current_chunk) + len(part) + 1 <= max_chunk_length:
+                                    current_chunk += ' ' + part
+                                else:
+                                    if current_chunk:
+                                        chunks.append(current_chunk)
+                                        logger.debug(f"Chunk {len(chunks)}: {current_chunk[:100]}...")
+                                    current_chunk = part
+                    else:
+                        # No current chunk, start with this sentence
+                        if len(sentence) <= max_chunk_length:
+                            current_chunk = sentence
+                        else:
+                            # Sentence too long, split by commas
+                            parts = re.split(r'[,;]\s+', sentence)
+                            for part in parts:
+                                part = part.strip()
+                                if not part:
+                                    continue
+                                if not re.search(r'[.!?]$', part):
+                                    part += '.'
+                                if current_chunk and len(current_chunk) + len(part) + 1 <= max_chunk_length:
+                                    current_chunk += ' ' + part
+                                else:
+                                    if current_chunk:
+                                        chunks.append(current_chunk)
+                                    current_chunk = part
+            
+            # Add paragraph break if we have content and it fits
+            if current_chunk and len(current_chunk) < max_chunk_length - 10:
+                # Small space for paragraph break
+                pass  # Paragraph breaks are preserved by the space between sentences
         
+        # Add final chunk if it exists
         if current_chunk:
-            chunks.append(current_chunk.strip())
+            chunks.append(current_chunk)
+            logger.debug(f"Final chunk {len(chunks)}: {current_chunk[:100]}...")
         
+        # Fallback: if no chunks created, use entire text (or first part if too long)
         if not chunks:
-            chunks = [text[:max_chunk_length]]
+            if len(text) <= max_chunk_length:
+                chunks = [text]
+            else:
+                # Split by sentences as fallback
+                sentences = re.split(r'(?<=[.!?])\s+', text)
+                current = ""
+                for sent in sentences:
+                    if len(current + sent) <= max_chunk_length:
+                        current += ' ' + sent if current else sent
+                    else:
+                        if current:
+                            chunks.append(current.strip())
+                        current = sent
+                if current:
+                    chunks.append(current.strip())
+        
+        # Log chunk summary for debugging
+        logger.info(f"Text split into {len(chunks)} chunks for TTS conversion")
+        for i, chunk in enumerate(chunks[:5], 1):  # Log first 5 chunks
+            logger.debug(f"Chunk {i} preview: {chunk[:150]}...")
+        if len(chunks) > 5:
+            logger.debug(f"... and {len(chunks) - 5} more chunks")
         
         # Generate audio for each chunk and concatenate
         import soundfile as sf
@@ -716,29 +827,35 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
         else:
             # Single GPU or CPU: Process chunks sequentially
             # This is REQUIRED for voice consistency - Bark is autoregressive and needs sequential processing
-            # Using the same voice preset for all chunks ensures consistent voice across the entire text
+            # CRITICAL: Process chunks in strict order to maintain text coherence
             
             # Use a consistent voice preset for all chunks to maintain voice consistency
-            # This prevents voice changes between chunks that occur with parallel processing
+            # This prevents voice changes between chunks
             history_prompt = "v2/en_speaker_1" if speaker_wav else None
             
-            for i, chunk in enumerate(chunks):
-                if not chunk.strip():
+            logger.info(f"Processing {len(chunks)} chunks sequentially for voice consistency")
+            
+            # Process chunks in strict order (index-based to ensure no reordering)
+            for chunk_idx in range(len(chunks)):
+                chunk = chunks[chunk_idx]
+                
+                if not chunk or not chunk.strip():
+                    logger.warning(f"Skipping empty chunk {chunk_idx+1}")
                     continue
                 
                 try:
-                    chunk_progress = f"Generating audio chunk {i+1}/{len(chunks)}..."
-                    logger.info(f"Generating audio for chunk {i+1}/{len(chunks)} (length: {len(chunk)})")
+                    chunk_progress = f"Generating audio chunk {chunk_idx+1}/{len(chunks)}..."
+                    logger.info(f"Processing chunk {chunk_idx+1}/{len(chunks)} (text length: {len(chunk)} chars)")
+                    logger.debug(f"Chunk {chunk_idx+1} text preview: {chunk[:200]}...")
+                    
                     if progress_callback:
                         progress_callback(chunk_progress)
                     
                     # Use the same history_prompt for all chunks to maintain voice consistency
                     # This ensures the same voice is used throughout the entire text
-                    # Note: We use the same preset for all chunks rather than previous audio
-                    # because Bark's history_prompt parameter expects a preset string or processed audio
-                    # Using the same preset ensures consistent voice characteristics
+                    # Using a consistent preset prevents voice changes between chunks
                     
-                    # Generate audio with Bark
+                    # Generate audio with Bark - process in strict sequential order
                     audio_array = generate_audio(
                         chunk,
                         history_prompt=history_prompt,
@@ -749,16 +866,26 @@ def text_to_speech_sync(text: str, output_path: Path, speaker_wav: Optional[str]
                     
                     # Bark returns numpy array at 24kHz sample rate
                     if audio_array is not None and len(audio_array) > 0:
-                        audio_segments.append(audio_array)
-                        logger.info(f"Generated audio chunk {i+1}, length: {len(audio_array)} samples")
+                        # Append in order - chunk_idx ensures correct ordering
+                        audio_segments.append((chunk_idx, audio_array))
+                        duration = len(audio_array) / sample_rate
+                        logger.info(f"✓ Generated audio chunk {chunk_idx+1}/{len(chunks)}: {len(audio_array)} samples ({duration:.2f}s)")
                         if progress_callback:
-                            progress_callback(f"Completed chunk {i+1}/{len(chunks)}")
+                            progress_callback(f"Completed chunk {chunk_idx+1}/{len(chunks)}")
                     else:
-                        logger.warning(f"Empty audio generated for chunk {i+1}")
+                        logger.warning(f"Empty audio generated for chunk {chunk_idx+1}")
                         
                 except Exception as e:
-                    logger.warning(f"Bark chunk {i+1} failed: {e}, trying next chunk")
+                    logger.error(f"Bark chunk {chunk_idx+1} failed: {e}", exc_info=True)
+                    # Continue with next chunk instead of failing entirely
                     continue
+            
+            # Sort by chunk index to ensure correct order (should already be in order, but safety check)
+            audio_segments.sort(key=lambda x: x[0])
+            # Extract just the audio arrays in order
+            audio_segments = [audio for _, audio in audio_segments]
+            
+            logger.info(f"Processed {len(audio_segments)} audio chunks in sequential order")
         
         if not audio_segments:
             raise ValueError("No audio generated from any chunks")
