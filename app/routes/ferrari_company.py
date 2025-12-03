@@ -597,9 +597,15 @@ def _convert_markdown_to_plain_text(markdown_text: str) -> str:
                 current_paragraph = []
             in_list = False
             
-            # Remove # symbols and clean
+            # Remove # symbols and clean (but don't add period to headers)
             header_text = line.lstrip('#').strip()
-            header_text = _clean_text_for_audio(header_text)
+            # Clean markdown but preserve header formatting
+            import re
+            header_text = re.sub(r'\*\*([^*]+)\*\*', r'\1', header_text)
+            header_text = re.sub(r'\*([^*]+)\*', r'\1', header_text)
+            header_text = re.sub(r'__([^_]+)__', r'\1', header_text)
+            header_text = re.sub(r'_([^_]+)_', r'\1', header_text)
+            header_text = header_text.strip()
             
             if header_text:
                 # Determine header level
