@@ -15,6 +15,7 @@ interface PDFSource {
   source: 'uploaded' | 'ferrari' | 'book-writer';
   size?: number;
   project_id?: string;
+  file_type?: 'pdf' | 'txt'; // Track file type
 }
 
 interface PDFToAudioProps {
@@ -78,9 +79,18 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
       const response = await fetch('/api/writer/documents');
       const data = await response.json();
       if (data.success) {
-        setUploadedDocs(data.documents.filter((doc: any) => 
-          doc.type.includes('pdf') || doc.name.endsWith('.pdf')
-        ));
+        // Filter for both PDF and TXT files
+        // Filter for both PDF and TXT files, and add file_type metadata
+        setUploadedDocs(data.documents
+          .filter((doc: any) => 
+            doc.type.includes('pdf') || doc.name.endsWith('.pdf') ||
+            doc.type.includes('text/plain') || doc.name.endsWith('.txt')
+          )
+          .map((doc: any) => ({
+            ...doc,
+            file_type: (doc.type.includes('text/plain') || doc.name.endsWith('.txt')) ? 'txt' : 'pdf'
+          }))
+        );
       }
     } catch (error) {
       console.error('Failed to load uploaded documents:', error);
@@ -115,9 +125,12 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Check file type
-    if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-      alert('Please upload a PDF file.');
+    // Check file type - accept both PDF and TXT files
+    const isPDF = file.type.includes('pdf') || file.name.endsWith('.pdf');
+    const isTXT = file.type.includes('text/plain') || file.name.endsWith('.txt');
+    
+    if (!isPDF && !isTXT) {
+      alert('Please upload a PDF or TXT file.');
       return;
     }
 
@@ -141,11 +154,16 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
       if (data.success) {
         await loadUploadedDocuments();
         // Auto-select the newly uploaded document
+        // Determine file type
+        const isTXT = data.document.type?.includes('text/plain') || data.document.name?.endsWith('.txt');
+        const fileType = isTXT ? 'txt' : 'pdf';
+        
         const newDoc: PDFSource = {
           id: data.document.id,
           name: data.document.name,
           source: 'uploaded',
-          size: data.document.size
+          size: data.document.size,
+          file_type: fileType
         };
         setSelectedSource(newDoc);
         setShowUpload(false);
@@ -166,7 +184,7 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
 
   const handleConvertToAudio = async () => {
     if (!selectedSource) {
-      setError('Please select a PDF to convert');
+      setError('Please select a PDF or TXT file to convert');
       return;
     }
 
@@ -257,7 +275,7 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
       
     } catch (error: any) {
       console.error('Conversion error:', error);
-      let errorMessage = error.message || 'Failed to convert PDF to audio.';
+      let errorMessage = error.message || 'Failed to convert document to audio.';
       
       // Provide more specific error messages
       if (errorMessage.includes('TTS model not available') || errorMessage.includes('No TTS model')) {
@@ -325,13 +343,13 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
       <div className="space-y-4">
         {/* Upload Section */}
         <div className="flex items-center justify-between mb-4">
-          <label className="block text-sm font-semibold">PDF Source</label>
+          <label className="block text-sm font-semibold">Document Source</label>
           <button
             onClick={() => setShowUpload(!showUpload)}
             disabled={uploading}
             className="px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
           >
-            {uploading ? '⏳ Uploading...' : '📁 Upload PDF'}
+            {uploading ? '⏳ Uploading...' : '📁 Upload PDF/TXT'}
           </button>
         </div>
 
@@ -340,24 +358,24 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf"
+              accept=".pdf,.txt"
               onChange={handleFileUpload}
               className="w-full text-sm"
               disabled={uploading}
             />
             <p className="text-sm text-gray-600 mt-2">
-              Select a PDF file to upload (max 50MB)
+              Select a PDF or TXT file to upload (max 50MB)
             </p>
           </div>
         )}
 
-        {/* PDF Selection */}
+        {/* Document Selection */}
         <div className="mb-4">
-          <label className="block text-sm font-semibold mb-2">Select PDF Document</label>
+          <label className="block text-sm font-semibold mb-2">Select Document (PDF or TXT)</label>
           {allPDFs.length === 0 ? (
             <div className="p-4 bg-gray-50 border border-gray-200 rounded">
               <p className="text-sm text-gray-600">
-                No PDFs available. Upload a PDF or generate one using Ferrari Company or Book Writer.
+                No documents available. Upload a PDF or TXT file, or generate one using Ferrari Company or Book Writer.
               </p>
             </div>
           ) : (
@@ -370,12 +388,12 @@ export default function PDFToAudio({ documentId: _documentId }: PDFToAudioProps)
               disabled={converting}
               className="w-full p-3 border rounded text-sm disabled:opacity-50 bg-white"
             >
-              <option value="">-- Select a PDF document --</option>
+              <option value="">-- Select a document (PDF or TXT) --</option>
               {uploadedDocs.length > 0 && (
-                <optgroup label="📄 Uploaded PDFs">
+                <optgroup label="📄 Uploaded Documents">
                   {uploadedDocs.map((doc) => (
                     <option key={doc.id} value={doc.id}>
-                      {doc.name} ({formatFileSize(doc.size)})
+                      {doc.name} {doc.file_type === 'txt' ? '(TXT)' : '(PDF)'} ({formatFileSize(doc.size)})
                     </option>
                   ))}
                 </optgroup>

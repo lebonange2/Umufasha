@@ -837,7 +837,7 @@ async def convert_pdf_to_audio(
         text = None
         doc_name = "document"
         
-        # Check if it's an uploaded document
+        # Check if it's an uploaded document (PDF, TXT, or DOCX)
         text_path = UPLOADS_DIR / f"{doc_id}.txt"
         if text_path.exists():
             with open(text_path, 'r', encoding='utf-8') as f:
@@ -849,6 +849,12 @@ async def convert_pdf_to_audio(
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
                     doc_name = metadata.get("name", "document")
+                    # Check if original file was TXT - if so, we already have the text
+                    file_type = metadata.get("type", "").lower()
+                    file_name = metadata.get("name", "").lower()
+                    if 'text/plain' in file_type or file_name.endswith('.txt'):
+                        # Text file - use the extracted text directly
+                        pass  # text is already loaded above
         else:
             # Check if it's a ferrari-company project
             from app.routes.ferrari_company import active_projects
