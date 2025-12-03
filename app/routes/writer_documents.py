@@ -861,8 +861,17 @@ async def convert_pdf_to_audio(
             if doc_id in active_projects:
                 project_data = active_projects[doc_id]
                 files = project_data.get("files", {})
-                pdf_path = files.get("pdf")
-                if pdf_path and os.path.exists(pdf_path):
+                
+                # Check for TXT file first (preferred for audio conversion - already optimized)
+                txt_path = files.get("txt")
+                if txt_path and os.path.exists(txt_path):
+                    # Use plain text file directly (already optimized for audio)
+                    with open(txt_path, 'r', encoding='utf-8') as f:
+                        text = f.read()
+                    doc_name = project_data.get("title", "Ferrari Book")
+                # Fallback to PDF
+                elif files.get("pdf") and os.path.exists(files.get("pdf")):
+                    pdf_path = files.get("pdf")
                     # Extract text from PDF
                     text = extract_text_from_pdf(Path(pdf_path))
                     doc_name = project_data.get("title", "Ferrari Book")
