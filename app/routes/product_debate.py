@@ -33,8 +33,8 @@ class DebateRequest(BaseModel):
     max_rounds: int = 6
     core_market: Optional[str] = None
     category: Optional[str] = None
-    agent_a_model: str = "llama3:latest"  # Local model for Agent A
-    agent_b_model: str = "llama3:latest"  # Local model for Agent B
+    agent_a_model: str = "qwen3:30b"  # Local model for Agent A
+    agent_b_model: str = "qwen3:30b"  # Local model for Agent B
 
 
 class DebateResponse(BaseModel):
@@ -139,8 +139,8 @@ async def start_debate_with_csv(
     max_rounds: int = Form(6),
     core_market: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
-    agent_a_model: str = Form("llama3:latest"),
-    agent_b_model: str = Form("llama3:latest"),
+    agent_a_model: str = Form("qwen3:30b"),
+    agent_b_model: str = Form("qwen3:30b"),
     csv_file: UploadFile = File(...)
 ):
     """Start a debate session with products from CSV."""
@@ -394,6 +394,7 @@ async def get_available_models():
     # Default models if Ollama not available or empty
     if not local_models:
         local_models = [
+            {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
             {"value": "llama3:latest", "label": "Llama 3 (Local)", "provider": "local"},
             {"value": "llama3.2", "label": "Llama 3.2 (Local)", "provider": "local"},
             {"value": "mistral", "label": "Mistral (Local)", "provider": "local"},

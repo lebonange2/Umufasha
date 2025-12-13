@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     
     # LLM - Local models only (Ollama)
-    LLM_MODEL: str = "llama3:latest"  # Default local model
+    LLM_MODEL: str = "qwen3:30b"  # Default local model
     LLM_PROVIDER: str = "local"  # Always local (Ollama) - no API keys needed
     LLM_LOCAL_URL: str = "http://localhost:11434/v1"  # Ollama default URL
     # Legacy fields (deprecated, not used - kept for backwards compatibility)

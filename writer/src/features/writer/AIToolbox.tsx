@@ -226,6 +226,7 @@ export default function AIToolbox({
                 onChange={(e) => onSettingsChange({ ...settings, model: e.target.value, provider: 'local' })}
                 className="w-full p-1 border rounded text-sm"
               >
+                <option value="qwen3:30b">Qwen3 30B</option>
                 <option value="llama3:latest">Llama 3 (Latest)</option>
                 <option value="llama3.2:latest">Llama 3.2 (Latest)</option>
                 <option value="mistral:latest">Mistral (Latest)</option>

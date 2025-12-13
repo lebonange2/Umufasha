@@ -13,7 +13,7 @@ import { structureStorage } from '../../features/structure/storage';
 
 const DEFAULT_SETTINGS: WriterSettings = {
   provider: 'local',
-  model: 'llama3:latest',
+  model: 'qwen3:30b',
   temperature: 0.7,
   maxTokens: 1000,
   sendFullContext: false,
@@ -32,7 +32,7 @@ const loadSettings = (): WriterSettings => {
       settings.provider = 'local';  // Always use local provider
       // If model is not a local model, use default
       // Validate model is a local model (Ollama format: name:tag)
-      const validLocalModels = ['llama3:latest', 'llama3.2:latest', 'mistral:latest', 'codellama:latest', 'phi3:latest'];
+      const validLocalModels = ['qwen3:30b', 'llama3:latest', 'llama3.2:latest', 'mistral:latest', 'codellama:latest', 'phi3:latest'];
       if (!validLocalModels.includes(settings.model)) {
         settings.model = DEFAULT_SETTINGS.model;
       }

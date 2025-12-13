@@ -35,7 +35,7 @@ def get_llm_client() -> LLMClient:
     if _llm_client is None:
         # Always use local provider (Ollama) - no API keys needed
         provider = "local"
-        model = settings.LLM_MODEL if hasattr(settings, 'LLM_MODEL') else "llama3:latest"
+        model = settings.LLM_MODEL if hasattr(settings, 'LLM_MODEL') else "qwen3:30b"
         base_url = settings.LLM_LOCAL_URL if hasattr(settings, 'LLM_LOCAL_URL') else "http://localhost:11434/v1"
         
         _llm_client = LLMClient(

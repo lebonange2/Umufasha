@@ -15,7 +15,7 @@ except ImportError:
 class LLMClient:
     """Generic LLM client that can work with OpenAI, Claude (Anthropic), or other HTTP endpoints."""
     
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: str = "llama3:latest", provider: str = "local"):
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: str = "qwen3:30b", provider: str = "local"):
         self.api_key = api_key
         self.provider = provider.lower()  # local, openai, anthropic, or custom
         if provider.lower() == "anthropic":

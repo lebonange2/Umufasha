@@ -175,7 +175,7 @@ def init_backends():
     # Initialize Ollama LLM (local models)
     try:
         ollama_client = OllamaClient(
-            model=config.get('llm.ollama_model', 'gemma3:latest'),
+            model=config.get('llm.ollama_model', 'qwen3:30b'),
             base_url=config.get('llm.ollama_url', 'http://localhost:11434')
         )
         if ollama_client.is_available():

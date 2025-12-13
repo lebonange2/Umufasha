@@ -684,7 +684,7 @@ async def download_project_pdf(project_id: str, db: AsyncSession = Depends(get_d
         llm_client = LLMClient(
             api_key=None,
             base_url=agent_config.get("base_url", "http://localhost:11434/v1"),
-            model=agent_config.get("model", "llama3:latest"),
+            model=agent_config.get("model", "qwen3:30b"),
             provider=agent_config.get("provider", "local")
         )
         message_bus = MessageBus()
