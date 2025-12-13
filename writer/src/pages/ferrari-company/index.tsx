@@ -243,7 +243,12 @@ export default function BookPublishingHousePage() {
     // The phase will complete when the server finishes processing
     const poll = async () => {
       try {
-        const response = await fetch(`/api/ferrari-company/projects/${project!.project_id}/phase-status`);
+        // Fetch without timeout - let it run indefinitely
+        const controller = new AbortController();
+        const response = await fetch(`/api/ferrari-company/projects/${project!.project_id}/phase-status`, {
+          signal: controller.signal,
+          // No timeout - let the request complete naturally
+        });
         const responseText = await response.text();
 
         if (!response.ok) {
@@ -255,7 +260,17 @@ export default function BookPublishingHousePage() {
           } catch (e) {
             errorMessage = responseText || errorMessage;
           }
-          throw new Error(errorMessage);
+          // Don't throw for non-critical errors - just log and continue polling
+          if (response.status === 404) {
+            console.error('Project not found, stopping poll');
+            setError(errorMessage);
+            setLoading(false);
+            return;
+          }
+          // For other errors, log but continue polling (might be transient)
+          console.warn('Phase status check error (will retry):', errorMessage);
+          setTimeout(poll, 2000); // Retry after 2 seconds
+          return;
         }
 
         const status = JSON.parse(responseText);
@@ -277,14 +292,22 @@ export default function BookPublishingHousePage() {
           // Poll again after 1 second
           setTimeout(poll, 1000);
         } else {
-          // Not started or unknown
-          setError('Phase execution status unknown');
-          setLoading(false);
+          // Not started or unknown - continue polling in case it starts
+          console.log('Phase status unknown, continuing to poll...');
+          setTimeout(poll, 2000); // Poll again after 2 seconds
         }
       } catch (err: any) {
         console.error('Poll phase status error:', err);
-        setError(err.message || 'Failed to poll phase status');
-        setLoading(false);
+        // Don't stop polling on transient errors - retry after a delay
+        // Only stop if it's a critical error (like 404)
+        if (err.message && err.message.includes('404')) {
+          setError(err.message || 'Project not found');
+          setLoading(false);
+        } else {
+          // Transient error - retry after 3 seconds
+          console.warn('Transient error during polling, will retry:', err.message);
+          setTimeout(poll, 3000);
+        }
       }
     };
 

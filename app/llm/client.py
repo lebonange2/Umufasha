@@ -29,8 +29,10 @@ class LLMClient:
             self.base_url = base_url or "https://api.openai.com/v1"
             self.model = model
         # Initialize httpx client with proper settings and connection pooling
+        # Very large timeout (24 hours) - effectively no timeout for long-running phases
+        # User can cancel if needed, but requests won't timeout automatically
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=10.0),
+            timeout=httpx.Timeout(86400.0, connect=30.0),  # 24 hours timeout, 30s connect
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
         )
     
