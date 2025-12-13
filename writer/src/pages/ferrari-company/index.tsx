@@ -46,6 +46,8 @@ export default function BookPublishingHousePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentArtifacts, setCurrentArtifacts] = useState<PhaseArtifacts | null>(null);
+  const [editableArtifactsJson, setEditableArtifactsJson] = useState<string>('');
+  const [jsonParseError, setJsonParseError] = useState<string | null>(null);
   const [chatLog, setChatLog] = useState<any[]>([]);
   const [showChatLog, setShowChatLog] = useState(false);
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
@@ -257,6 +259,9 @@ export default function BookPublishingHousePage() {
         if (status.status === 'completed') {
           // Phase completed!
           setCurrentArtifacts(status.artifacts);
+          // Initialize editable JSON with formatted artifacts
+          setEditableArtifactsJson(JSON.stringify(status.artifacts, null, 2));
+          setJsonParseError(null);
           setChatLog(status.chat_log || []);
           setLoading(false);
           await refreshProject();
@@ -283,18 +288,56 @@ export default function BookPublishingHousePage() {
     poll();
   };
 
+  const handleJsonChange = (value: string) => {
+    setEditableArtifactsJson(value);
+    // Try to parse JSON to validate
+    try {
+      JSON.parse(value);
+      setJsonParseError(null);
+    } catch (e: any) {
+      setJsonParseError(e.message || 'Invalid JSON');
+    }
+  };
+
+  const getEditedArtifacts = (): PhaseArtifacts | null => {
+    if (!editableArtifactsJson.trim()) return currentArtifacts;
+    
+    try {
+      const parsed = JSON.parse(editableArtifactsJson);
+      return parsed as PhaseArtifacts;
+    } catch (e) {
+      // If JSON is invalid, return original artifacts
+      return currentArtifacts;
+    }
+  };
+
   const makeDecision = async (decision: 'approve' | 'request_changes' | 'stop') => {
     if (!project) return;
 
+    // Validate JSON before proceeding
+    if (jsonParseError) {
+      setError(`Invalid JSON: ${jsonParseError}. Please fix the JSON before proceeding.`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    
     setCurrentArtifacts(null); // Clear current artifacts
+    setEditableArtifactsJson(''); // Clear editable JSON
 
     try {
+      // Get edited artifacts if user made changes
+      const artifactsToUse = getEditedArtifacts();
+      const hasChanges = artifactsToUse && JSON.stringify(artifactsToUse) !== JSON.stringify(currentArtifacts);
+      
       const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/decide`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision })
+        body: JSON.stringify({ 
+          decision,
+          modified_artifacts: hasChanges ? artifactsToUse : null
+        })
       });
 
       // Read response as text first (can only read once)
@@ -720,11 +763,40 @@ export default function BookPublishingHousePage() {
               </div>
               
               <div className="mb-4">
-                <div className="bg-gray-50 border rounded p-4 max-h-96 overflow-auto">
-                  <pre className="text-sm whitespace-pre-wrap">
-                    {JSON.stringify(currentArtifacts, null, 2)}
-                  </pre>
+                <div className="mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phase Results (Editable JSON)
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    You can edit the JSON below to modify the phase results before approving.
+                  </p>
                 </div>
+                <div className="bg-gray-50 border rounded p-4">
+                  <textarea
+                    value={editableArtifactsJson}
+                    onChange={(e) => handleJsonChange(e.target.value)}
+                    className="w-full h-96 p-3 font-mono text-sm bg-white border border-gray-300 rounded resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    spellCheck={false}
+                    placeholder="Loading artifacts..."
+                  />
+                </div>
+                {jsonParseError && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                    <p className="text-sm text-red-700">
+                      <strong>JSON Error:</strong> {jsonParseError}
+                    </p>
+                    <p className="text-xs text-red-600 mt-1">
+                      Please fix the JSON syntax before proceeding.
+                    </p>
+                  </div>
+                )}
+                {!jsonParseError && editableArtifactsJson && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+                    <p className="text-sm text-green-700">
+                      ✓ Valid JSON - Ready to proceed
+                    </p>
+                  </div>
+                )}
               </div>
               
               <div className="border-t pt-4">

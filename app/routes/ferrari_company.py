@@ -39,6 +39,7 @@ class BookPublishingHouseProjectCreate(BaseModel):
 class PhaseDecision(BaseModel):
     """Owner decision for a phase."""
     decision: str  # "approve", "request_changes", "stop"
+    modified_artifacts: Optional[Dict[str, Any]] = None  # Optional edited artifacts from user
 
 
 class BookPublishingHouseProjectResponse(BaseModel):
@@ -409,6 +410,40 @@ async def make_decision(project_id: str, decision: PhaseDecision):
                 "ready_for_decision": True
             }
         else:  # APPROVE
+            # Apply modified artifacts if provided by user
+            if decision.modified_artifacts:
+                try:
+                    # Update project artifacts based on current phase
+                    if current_phase == Phase.STRATEGY_CONCEPT:
+                        if 'book_brief' in decision.modified_artifacts:
+                            company.project.book_brief = decision.modified_artifacts['book_brief']
+                    elif current_phase == Phase.EARLY_DESIGN:
+                        if 'world_dossier' in decision.modified_artifacts:
+                            company.project.world_dossier = decision.modified_artifacts['world_dossier']
+                        if 'character_bible' in decision.modified_artifacts:
+                            company.project.character_bible = decision.modified_artifacts['character_bible']
+                        if 'plot_arc' in decision.modified_artifacts:
+                            company.project.plot_arc = decision.modified_artifacts['plot_arc']
+                    elif current_phase == Phase.DETAILED_ENGINEERING:
+                        if 'outline' in decision.modified_artifacts:
+                            company.project.outline = decision.modified_artifacts['outline']
+                    elif current_phase == Phase.PROTOTYPES_TESTING:
+                        if 'draft_chapters' in decision.modified_artifacts:
+                            company.project.draft_chapters = decision.modified_artifacts['draft_chapters']
+                        if 'revision_report' in decision.modified_artifacts:
+                            company.project.revision_report = decision.modified_artifacts['revision_report']
+                    elif current_phase == Phase.INDUSTRIALIZATION_PACKAGING:
+                        if 'formatted_manuscript' in decision.modified_artifacts:
+                            company.project.formatted_manuscript = decision.modified_artifacts['formatted_manuscript']
+                    elif current_phase == Phase.MARKETING_LAUNCH:
+                        if 'launch_package' in decision.modified_artifacts:
+                            company.project.launch_package = decision.modified_artifacts['launch_package']
+                    
+                    logger.info(f"Applied user-modified artifacts for phase {current_phase.value} in project {project_id}")
+                except Exception as artifact_error:
+                    logger.warning(f"Error applying modified artifacts: {str(artifact_error)}", exc_info=True)
+                    # Continue anyway - user edits are optional
+            
             # Move to next phase
             phases = [
                 Phase.STRATEGY_CONCEPT,
