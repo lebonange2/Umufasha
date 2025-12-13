@@ -283,38 +283,56 @@ Target Word Count: {target_word_count or 'Not specified'}
 Target Audience: {audience or 'Not specified'}
 
 The brief must include:
-1. Genre classification
-2. Target audience (if not specified, recommend based on premise)
-3. Recommended word count (if not specified, recommend based on genre)
-4. Core themes
-5. Tone and style recommendations
-6. Key constraints or requirements
-7. Success criteria
+1. Genre classification (e.g., "Science Fiction", "Fantasy", "Literary Fiction")
+2. Target audience (if not specified, recommend based on premise and genre)
+3. Recommended word count (if not specified, recommend based on genre: 60k-80k for most fiction)
+4. Core themes - MUST include at least 3-5 specific themes extracted from the premise
+5. Tone and style recommendations (e.g., "serious and contemplative", "light and humorous")
+6. Key constraints or requirements - MUST include at least 2-3 specific constraints
+7. Success criteria - MUST include at least 3-5 specific measurable criteria
 
-Format as JSON:
+IMPORTANT: 
+- core_themes MUST be a non-empty array with at least 3 themes
+- constraints MUST be a non-empty array with at least 2 constraints  
+- success_criteria MUST be a non-empty array with at least 3 criteria
+- All fields must contain meaningful, specific content - NOT empty arrays or generic placeholders
+
+Format as JSON (return ONLY valid JSON, no markdown, no explanations):
 {{
-    "genre": "...",
-    "target_audience": "...",
+    "genre": "specific genre name",
+    "target_audience": "specific audience description",
     "recommended_word_count": number,
-    "core_themes": ["theme1", "theme2", ...],
-    "tone": "...",
-    "style": "...",
-    "constraints": ["constraint1", ...],
-    "success_criteria": ["criterion1", ...]
+    "core_themes": ["specific theme 1", "specific theme 2", "specific theme 3"],
+    "tone": "specific tone description",
+    "style": "specific style description",
+    "constraints": ["specific constraint 1", "specific constraint 2"],
+    "success_criteria": ["specific criterion 1", "specific criterion 2", "specific criterion 3"]
 }}"""
         
         response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
         
-        # Extract JSON
+        # Extract JSON - handle markdown code blocks and plain JSON
+        brief = None
         try:
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start >= 0 and json_end > json_start:
-                brief = json.loads(response[json_start:json_end])
+            # Try to find JSON in markdown code blocks first
+            import re
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if json_match:
+                brief = json.loads(json_match.group(1))
             else:
-                brief = self._parse_brief_from_text(response)
-        except json.JSONDecodeError:
+                # Try to find JSON without code blocks
+                json_start = response.find('{')
+                json_end = response.rfind('}') + 1
+                if json_start >= 0 and json_end > json_start:
+                    brief = json.loads(response[json_start:json_end])
+                else:
+                    brief = self._parse_brief_from_text(response)
+        except (json.JSONDecodeError, AttributeError) as e:
+            # If JSON parsing fails, try to extract from text
             brief = self._parse_brief_from_text(response)
+        
+        # Ensure all required fields have actual content (not empty arrays/strings)
+        brief = self._ensure_brief_completeness(brief, premise, title, target_word_count, audience)
         
         await self.send_message("CEO", Phase.STRATEGY_CONCEPT, 
                               f"Book brief created: {json.dumps(brief, indent=2)}")
@@ -322,8 +340,10 @@ Format as JSON:
         return brief
     
     def _parse_brief_from_text(self, text: str) -> Dict[str, Any]:
-        """Fallback parser for brief."""
-        return {
+        """Fallback parser for brief - tries to extract info from text response."""
+        import re
+        
+        brief = {
             "genre": "Fiction",
             "target_audience": "General",
             "recommended_word_count": 80000,
@@ -333,6 +353,97 @@ Format as JSON:
             "constraints": [],
             "success_criteria": []
         }
+        
+        # Try to extract genre
+        genre_match = re.search(r'genre[:\s]+([^\n,]+)', text, re.IGNORECASE)
+        if genre_match:
+            brief["genre"] = genre_match.group(1).strip()
+        
+        # Try to extract themes
+        themes_match = re.search(r'(?:themes?|core themes?)[:\s]+(.*?)(?:\n\n|\n[A-Z]|$)', text, re.IGNORECASE | re.DOTALL)
+        if themes_match:
+            themes_text = themes_match.group(1)
+            # Extract list items or comma-separated values
+            themes = re.findall(r'[-•*]\s*([^\n]+)|([^,\n]+)', themes_text)
+            brief["core_themes"] = [t[0].strip() or t[1].strip() for t in themes if (t[0] or t[1]).strip()][:5]
+        
+        # Try to extract constraints
+        constraints_match = re.search(r'(?:constraints?|requirements?)[:\s]+(.*?)(?:\n\n|\n[A-Z]|$)', text, re.IGNORECASE | re.DOTALL)
+        if constraints_match:
+            constraints_text = constraints_match.group(1)
+            constraints = re.findall(r'[-•*]\s*([^\n]+)|([^,\n]+)', constraints_text)
+            brief["constraints"] = [c[0].strip() or c[1].strip() for c in constraints if (c[0] or c[1]).strip()][:5]
+        
+        # Try to extract success criteria
+        criteria_match = re.search(r'(?:success criteria|criteria)[:\s]+(.*?)(?:\n\n|\n[A-Z]|$)', text, re.IGNORECASE | re.DOTALL)
+        if criteria_match:
+            criteria_text = criteria_match.group(1)
+            criteria = re.findall(r'[-•*]\s*([^\n]+)|([^,\n]+)', criteria_text)
+            brief["success_criteria"] = [cr[0].strip() or cr[1].strip() for cr in criteria if (cr[0] or cr[1]).strip()][:5]
+        
+        return brief
+    
+    def _ensure_brief_completeness(self, brief: Dict[str, Any], premise: str, title: Optional[str], 
+                                   target_word_count: Optional[int], audience: Optional[str]) -> Dict[str, Any]:
+        """Ensure brief has actual content, not just empty arrays."""
+        # If core_themes is empty, generate some from premise
+        if not brief.get("core_themes") or len(brief.get("core_themes", [])) == 0:
+            # Extract potential themes from premise
+            premise_lower = premise.lower()
+            themes = []
+            if any(word in premise_lower for word in ["love", "relationship", "romance"]):
+                themes.append("Love and Relationships")
+            if any(word in premise_lower for word in ["power", "control", "authority"]):
+                themes.append("Power and Control")
+            if any(word in premise_lower for word in ["identity", "self", "discovery"]):
+                themes.append("Identity and Self-Discovery")
+            if any(word in premise_lower for word in ["survival", "struggle", "challenge"]):
+                themes.append("Survival and Resilience")
+            if any(word in premise_lower for word in ["justice", "right", "wrong", "moral"]):
+                themes.append("Justice and Morality")
+            if not themes:
+                themes = ["Human Experience", "Personal Growth", "Overcoming Challenges"]
+            brief["core_themes"] = themes[:5]
+        
+        # If constraints is empty, add some default constraints
+        if not brief.get("constraints") or len(brief.get("constraints", [])) == 0:
+            brief["constraints"] = [
+                "Maintain consistency with established world and characters",
+                "Follow the approved outline structure",
+                "Ensure appropriate tone and style throughout"
+            ]
+        
+        # If success_criteria is empty, add some default criteria
+        if not brief.get("success_criteria") or len(brief.get("success_criteria", [])) == 0:
+            brief["success_criteria"] = [
+                "Engaging narrative that holds reader interest",
+                "Well-developed characters with clear motivations",
+                "Coherent plot that follows the established arc",
+                "Appropriate pacing and structure",
+                "Consistent tone and style"
+            ]
+        
+        # Ensure target_audience is meaningful
+        if not brief.get("target_audience") or brief.get("target_audience") == "General":
+            if audience:
+                brief["target_audience"] = audience
+            else:
+                # Infer from genre
+                genre = brief.get("genre", "").lower()
+                if "sci" in genre or "fantasy" in genre:
+                    brief["target_audience"] = "Science Fiction and Fantasy Readers"
+                elif "mystery" in genre or "thriller" in genre:
+                    brief["target_audience"] = "Mystery and Thriller Enthusiasts"
+                elif "romance" in genre:
+                    brief["target_audience"] = "Romance Readers"
+                else:
+                    brief["target_audience"] = "General Fiction Readers"
+        
+        # Ensure recommended_word_count is set
+        if not brief.get("recommended_word_count") or brief.get("recommended_word_count") == 0:
+            brief["recommended_word_count"] = target_word_count or 80000
+        
+        return brief
 
 
 class StoryDesignDirectorAgent(BaseAgent):
