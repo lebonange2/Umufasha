@@ -34,6 +34,7 @@ class BookPublishingHouseProjectCreate(BaseModel):
     audience: Optional[str] = None
     output_directory: str = "book_outputs"
     reference_documents: Optional[List[str]] = None  # List of document IDs
+    model: Optional[str] = "qwen3:30b"  # Model to use: llama3:latest or qwen3:30b
 
 
 class PhaseDecision(BaseModel):
@@ -51,6 +52,7 @@ class BookPublishingHouseProjectResponse(BaseModel):
     status: str
     output_directory: str
     reference_documents: Optional[List[str]] = None
+    model: Optional[str] = "qwen3:30b"  # Model being used
 
 
 @router.post("/api/ferrari-company/projects", response_model=BookPublishingHouseProjectResponse)
@@ -63,9 +65,13 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
         
         project_id = str(uuid.uuid4())
         
-        # Create company instance
+        # Create company instance with selected model
         try:
-            company = FerrariBookCompany()
+            model = project.model or "qwen3:30b"
+            # Validate model
+            if model not in ["llama3:latest", "qwen3:30b"]:
+                model = "qwen3:30b"  # Fall back to default
+            company = FerrariBookCompany(model=model)
         except Exception as e:
             logger.error("Failed to initialize FerrariBookCompany", error=str(e), exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to initialize book company: {str(e)}")
@@ -84,6 +90,10 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
             raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
         
         # Store project
+        model = project.model or "qwen3:30b"
+        if model not in ["llama3:latest", "qwen3:30b"]:
+            model = "qwen3:30b"
+        
         active_projects[project_id] = {
             "company": company,
             "title": project.title,
@@ -92,6 +102,7 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
             "audience": project.audience,
             "output_directory": project.output_directory,
             "reference_documents": project.reference_documents or [],
+            "model": model,
             "current_phase": Phase.STRATEGY_CONCEPT.value,
             "status": "in_progress",
             "owner_decisions": {},
@@ -109,7 +120,8 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
             current_phase=Phase.STRATEGY_CONCEPT.value,
             status="in_progress",
             output_directory=project.output_directory,
-            reference_documents=project.reference_documents
+            reference_documents=project.reference_documents,
+            model=model
         )
     except HTTPException:
         raise
@@ -133,7 +145,8 @@ async def get_book_publishing_house_project(project_id: str):
         current_phase=project_data["current_phase"],
         status=project_data["status"],
         output_directory=project_data["output_directory"],
-        reference_documents=project_data.get("reference_documents", [])
+        reference_documents=project_data.get("reference_documents", []),
+        model=project_data.get("model", "qwen3:30b")
     )
 
 

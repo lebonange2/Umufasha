@@ -1296,15 +1296,27 @@ Make it engaging and concise."""
 class FerrariBookCompany:
     """Main orchestrator for the Book Publishing House book creation system."""
     
-    def __init__(self):
-        """Initialize the company with all agents."""
+    def __init__(self, model: Optional[str] = None):
+        """Initialize the company with all agents.
+        
+        Args:
+            model: Model to use (llama3:latest or qwen3:30b). If None, uses default from config.
+        """
         agent_config = get_config()
+        
+        # Use provided model or fall back to config/default
+        selected_model = model or agent_config.get("model", "qwen3:30b")
+        
+        # Validate model is one of the supported models
+        if selected_model not in ["llama3:latest", "qwen3:30b"]:
+            # Fall back to default if invalid model provided
+            selected_model = agent_config.get("model", "qwen3:30b")
         
         # Create LLM client
         self.llm_client = LLMClient(
             api_key=None,
             base_url=agent_config.get("base_url", "http://localhost:11434/v1"),
-            model=agent_config.get("model", "qwen3:30b"),
+            model=selected_model,
             provider=agent_config.get("provider", "local")
         )
         

@@ -395,7 +395,7 @@ async def get_available_models():
     if not local_models:
         local_models = [
             {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
-            {"value": "llama3:latest", "label": "Llama 3 (Local)", "provider": "local"},
+            {"value": "llama3:latest", "label": "Llama 3 Latest (Local)", "provider": "local"},
             {"value": "llama3.2", "label": "Llama 3.2 (Local)", "provider": "local"},
             {"value": "mistral", "label": "Mistral (Local)", "provider": "local"},
             {"value": "codellama", "label": "CodeLlama (Local)", "provider": "local"},
