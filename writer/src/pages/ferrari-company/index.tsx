@@ -233,9 +233,8 @@ export default function BookPublishingHousePage() {
   const pollPhaseStatus = async () => {
     if (!project) return;
 
-    const maxAttempts = 600; // 10 minutes max (1 second intervals)
-    let attempts = 0;
-
+    // Poll indefinitely until phase completes or fails (no timeout)
+    // The phase will complete when the server finishes processing
     const poll = async () => {
       try {
         const response = await fetch(`/api/ferrari-company/projects/${project!.project_id}/phase-status`);
@@ -265,15 +264,9 @@ export default function BookPublishingHousePage() {
           setError(status.error || 'Phase execution failed');
           setLoading(false);
         } else if (status.status === 'running') {
-          // Still running, continue polling
-          attempts++;
-          if (attempts >= maxAttempts) {
-            setError('Phase execution is taking too long. Please check server logs.');
-            setLoading(false);
-          } else {
-            // Poll again after 1 second
-            setTimeout(poll, 1000);
-          }
+          // Still running, continue polling indefinitely
+          // Poll again after 1 second
+          setTimeout(poll, 1000);
         } else {
           // Not started or unknown
           setError('Phase execution status unknown');
