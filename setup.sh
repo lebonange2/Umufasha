@@ -347,7 +347,7 @@ MOCK_SENDGRID=true
 # LLM Configuration - Local models only (Ollama)
 # No API keys needed - uses local Ollama models
 LLM_PROVIDER=local
-LLM_MODEL=llama3:latest
+LLM_MODEL=qwen3:30b
 LLM_LOCAL_URL=http://localhost:11434/v1
 
 # Twilio Configuration (not used in mock mode)
@@ -571,23 +571,23 @@ if command -v ollama &> /dev/null; then
         print_success "Ollama server is already running"
     fi
     
-    # Check if llama3:latest model is already installed
-    if ollama list 2>/dev/null | grep -q "llama3:latest"; then
-        print_success "llama3:latest model is already installed"
+    # Check if qwen3:30b model is already installed
+    if ollama list 2>/dev/null | grep -q "qwen3:30b"; then
+        print_success "qwen3:30b model is already installed"
     else
-        print_status "Downloading llama3:latest model (this may take 5-10 minutes, ~5GB)..."
-        print_warning "You can skip this and download later with: ollama pull llama3:latest"
+        print_status "Downloading qwen3:30b model (this may take 10-20 minutes, ~20GB)..."
+        print_warning "You can skip this and download later with: ollama pull qwen3:30b"
         print_warning "The app will work, but local AI needs the model to be downloaded"
         
-        # Try to pull with timeout (10 minutes)
-        if timeout 600 ollama pull llama3:latest 2>&1 | tee /tmp/ollama_pull.log; then
-            print_success "llama3:latest model downloaded successfully"
+        # Try to pull with timeout (20 minutes for larger model)
+        if timeout 1200 ollama pull qwen3:30b 2>&1 | tee /tmp/ollama_pull.log; then
+            print_success "qwen3:30b model downloaded successfully"
         else
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
-                print_warning "Model download timed out (10 minutes). Download it later with: ollama pull llama3:latest"
+                print_warning "Model download timed out (20 minutes). Download it later with: ollama pull qwen3:30b"
             else
-                print_warning "Model download failed. You can try again later with: ollama pull llama3:latest"
+                print_warning "Model download failed. You can try again later with: ollama pull qwen3:30b"
             fi
             print_warning "The app will still work, but local AI features require the model"
         fi
@@ -634,10 +634,10 @@ echo "5. Run tests: ./test.sh"
 echo "6. Stop application: ./stop.sh"
 echo ""
 echo "🤖 Local AI (Ollama):"
-echo "- Model: llama3:latest (default)"
+echo "- Model: qwen3:30b (default)"
 echo "- Status: Check with: ollama list"
-echo "- If model not downloaded: ollama pull llama3:latest"
-echo "- Test: ollama run llama3:latest 'Hello'"
+echo "- If model not downloaded: ollama pull qwen3:30b"
+echo "- Test: ollama run qwen3:30b 'Hello'"
 echo ""
 echo "🎙️ Text-to-Speech (TTS):"
 if [ "$TTS_AVAILABLE" = true ]; then

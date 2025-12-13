@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { WriterMode, WriterSettings } from '../../lib/types';
 
 interface AIToolboxProps {
@@ -14,6 +14,12 @@ interface AIToolboxProps {
   showDocumentManager: boolean;
   onToggleDocumentManager: () => void;
   selectedDocumentsCount: number;
+}
+
+interface ModelOption {
+  value: string;
+  label: string;
+  provider: string;
 }
 
 export default function AIToolbox({
@@ -34,6 +40,33 @@ export default function AIToolbox({
   const [expandWords, setExpandWords] = useState(100);
   const [rewriteTone, setRewriteTone] = useState('plain');
   const [qaQuestion, setQaQuestion] = useState('');
+  const [availableModels, setAvailableModels] = useState<ModelOption[]>([
+    { value: 'qwen3:30b', label: 'Qwen3 30B', provider: 'local' },
+    { value: 'llama3:latest', label: 'Llama 3 (Latest)', provider: 'local' },
+    { value: 'llama3.2:latest', label: 'Llama 3.2 (Latest)', provider: 'local' },
+    { value: 'mistral:latest', label: 'Mistral (Latest)', provider: 'local' },
+    { value: 'codellama:latest', label: 'CodeLlama (Latest)', provider: 'local' },
+    { value: 'phi3:latest', label: 'Phi-3 (Latest)', provider: 'local' },
+  ]);
+
+  // Fetch available models from API
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        const response = await fetch('/api/writer/models');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.models && data.models.length > 0) {
+            setAvailableModels(data.models);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch models:', error);
+        // Keep default models on error
+      }
+    };
+    fetchModels();
+  }, []);
 
   const actions: Array<{
     mode: WriterMode;
@@ -226,12 +259,11 @@ export default function AIToolbox({
                 onChange={(e) => onSettingsChange({ ...settings, model: e.target.value, provider: 'local' })}
                 className="w-full p-1 border rounded text-sm"
               >
-                <option value="qwen3:30b">Qwen3 30B</option>
-                <option value="llama3:latest">Llama 3 (Latest)</option>
-                <option value="llama3.2:latest">Llama 3.2 (Latest)</option>
-                <option value="mistral:latest">Mistral (Latest)</option>
-                <option value="codellama:latest">CodeLlama (Latest)</option>
-                <option value="phi3:latest">Phi-3 (Latest)</option>
+                {availableModels.map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
               </select>
             </div>
 

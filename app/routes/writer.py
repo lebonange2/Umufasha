@@ -173,6 +173,40 @@ async def _load_document_contexts(document_ids: List[str]) -> List[str]:
     return texts
 
 
+@router.get("/api/writer/models")
+async def get_available_models():
+    """Get list of available local models (Ollama) for writer."""
+    import httpx
+    local_models = []
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+            if response.status_code == 200:
+                data = response.json()
+                local_models = [
+                    {"value": model["name"], "label": f"{model['name']} (Local)", "provider": "local"}
+                    for model in data.get("models", [])
+                ]
+    except:
+        pass
+    
+    # Default models if Ollama not available or empty
+    if not local_models:
+        local_models = [
+            {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
+            {"value": "llama3:latest", "label": "Llama 3 (Latest)", "provider": "local"},
+            {"value": "llama3.2:latest", "label": "Llama 3.2 (Latest)", "provider": "local"},
+            {"value": "mistral:latest", "label": "Mistral (Latest)", "provider": "local"},
+            {"value": "codellama:latest", "label": "CodeLlama (Latest)", "provider": "local"},
+            {"value": "phi3:latest", "label": "Phi-3 (Latest)", "provider": "local"},
+        ]
+    
+    return {
+        "models": local_models,
+        "local": local_models
+    }
+
+
 def _build_user_prompt(llm_request: LLMRequest, document_texts: List[str] = None, text_context: Optional[str] = None) -> str:
     """Build user prompt from request with document and text context."""
     mode = llm_request.mode
