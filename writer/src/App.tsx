@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import WriterPage from './pages/writer';
 import OutlinePreviewPage from './pages/outline-preview';
 import BookWriterPage from './pages/book-writer';
-import FerrariCompanyPage from './pages/ferrari-company';
+import BookPublishingHousePage from './pages/ferrari-company';
 import PDFToAudioPage from './pages/pdf-to-audio';
 
 function App() {
@@ -30,7 +30,7 @@ function App() {
         <Route path="/" element={<WriterPage />} />
         <Route path="outline-preview" element={<OutlinePreviewPage />} />
         <Route path="book-writer" element={<BookWriterPage />} />
-        <Route path="ferrari-company" element={<FerrariCompanyPage />} />
+        <Route path="ferrari-company" element={<BookPublishingHousePage />} />
         <Route path="pdf-to-audio" element={<PDFToAudioPage />} />
       </Routes>
     </BrowserRouter>

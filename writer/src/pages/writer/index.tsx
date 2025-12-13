@@ -537,10 +537,10 @@ export default function WriterPage() {
               <button
                 onClick={() => navigate('/ferrari-company')}
                 className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-purple-50"
-                aria-label="Ferrari Company"
-                title="Ferrari-Style Book Creation Company - Multi-agent pipeline"
+                aria-label="Book Publishing House"
+                title="Book Publishing House - Multi-agent pipeline"
               >
-                🏎️ Ferrari Company
+                📚 Book Publishing House
               </button>
               <button
                 onClick={() => navigate('/pdf-to-audio')}

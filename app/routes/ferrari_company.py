@@ -1,4 +1,4 @@
-"""Ferrari Company API routes for web UI."""
+"""Book Publishing House API routes for web UI."""
 import json
 import os
 from pathlib import Path
@@ -26,13 +26,14 @@ active_projects: Dict[str, Dict[str, Any]] = {}
 phase_execution_status: Dict[str, Dict[str, Any]] = {}
 
 
-class FerrariProjectCreate(BaseModel):
-    """Create Ferrari project request."""
+class BookPublishingHouseProjectCreate(BaseModel):
+    """Create Book Publishing House project request."""
     title: Optional[str] = None
     premise: str
     target_word_count: Optional[int] = None
     audience: Optional[str] = None
     output_directory: str = "book_outputs"
+    reference_documents: Optional[List[str]] = None  # List of document IDs
 
 
 class PhaseDecision(BaseModel):
@@ -40,19 +41,20 @@ class PhaseDecision(BaseModel):
     decision: str  # "approve", "request_changes", "stop"
 
 
-class FerrariProjectResponse(BaseModel):
-    """Ferrari project response."""
+class BookPublishingHouseProjectResponse(BaseModel):
+    """Book Publishing House project response."""
     project_id: str
     title: Optional[str]
     premise: str
     current_phase: str
     status: str
     output_directory: str
+    reference_documents: Optional[List[str]] = None
 
 
-@router.post("/api/ferrari-company/projects", response_model=FerrariProjectResponse)
-async def create_ferrari_project(project: FerrariProjectCreate):
-    """Create a new Ferrari company project."""
+@router.post("/api/ferrari-company/projects", response_model=BookPublishingHouseProjectResponse)
+async def create_book_publishing_house_project(project: BookPublishingHouseProjectCreate):
+    """Create a new Book Publishing House project."""
     try:
         # Validate input
         if not project.premise or not project.premise.strip():
@@ -73,7 +75,8 @@ async def create_ferrari_project(project: FerrariProjectCreate):
                 title=project.title,
                 premise=project.premise,
                 target_word_count=project.target_word_count,
-                audience=project.audience
+                audience=project.audience,
+                reference_documents=project.reference_documents or []
             )
         except Exception as e:
             logger.error("Failed to create BookProject", error=str(e), exc_info=True)
@@ -87,6 +90,7 @@ async def create_ferrari_project(project: FerrariProjectCreate):
             "target_word_count": project.target_word_count,
             "audience": project.audience,
             "output_directory": project.output_directory,
+            "reference_documents": project.reference_documents or [],
             "current_phase": Phase.STRATEGY_CONCEPT.value,
             "status": "in_progress",
             "owner_decisions": {},
@@ -95,38 +99,40 @@ async def create_ferrari_project(project: FerrariProjectCreate):
             "created_at": datetime.utcnow().isoformat()
         }
         
-        logger.info(f"Created Ferrari project {project_id}")
+        logger.info(f"Created Book Publishing House project {project_id}")
         
-        return FerrariProjectResponse(
+        return BookPublishingHouseProjectResponse(
             project_id=project_id,
             title=project.title,
             premise=project.premise,
             current_phase=Phase.STRATEGY_CONCEPT.value,
             status="in_progress",
-            output_directory=project.output_directory
+            output_directory=project.output_directory,
+            reference_documents=project.reference_documents
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to create Ferrari project", error=str(e), exc_info=True)
+        logger.error("Failed to create Book Publishing House project", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
 
 
-@router.get("/api/ferrari-company/projects/{project_id}", response_model=FerrariProjectResponse)
-async def get_ferrari_project(project_id: str):
-    """Get Ferrari project status."""
+@router.get("/api/ferrari-company/projects/{project_id}", response_model=BookPublishingHouseProjectResponse)
+async def get_book_publishing_house_project(project_id: str):
+    """Get Book Publishing House project status."""
     if project_id not in active_projects:
         raise HTTPException(status_code=404, detail="Project not found")
     
     project_data = active_projects[project_id]
     
-    return FerrariProjectResponse(
+    return BookPublishingHouseProjectResponse(
         project_id=project_id,
         title=project_data["title"],
         premise=project_data["premise"],
         current_phase=project_data["current_phase"],
         status=project_data["status"],
-        output_directory=project_data["output_directory"]
+        output_directory=project_data["output_directory"],
+        reference_documents=project_data.get("reference_documents", [])
     )
 
 
@@ -874,8 +880,8 @@ async def download_file(project_id: str, file_type: str):
 
 
 @router.get("/api/ferrari-company/projects")
-async def list_ferrari_projects():
-    """List all Ferrari company projects with their PDF files."""
+async def list_book_publishing_house_projects():
+    """List all Book Publishing House projects with their PDF files."""
     try:
         projects = []
         for project_id, project_data in active_projects.items():
@@ -894,7 +900,7 @@ async def list_ferrari_projects():
         
         return {"success": True, "projects": projects}
     except Exception as e:
-        logger.error("Failed to list Ferrari projects", error=str(e))
+        logger.error("Failed to list Book Publishing House projects", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

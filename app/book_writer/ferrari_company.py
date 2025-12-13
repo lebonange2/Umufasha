@@ -1,8 +1,8 @@
 """
-Ferrari-Style Multi-Agent Book Creation Company
+Book Publishing House - Multi-Agent Book Creation System
 
 This module implements a complete organizational structure where every role is an AI agent,
-mirroring Ferrari's car production pipeline but for book creation.
+mirroring a production pipeline for book creation.
 
 The Owner (human user) has absolute override and can see all agent communications.
 """
@@ -65,6 +65,7 @@ class BookProject:
     target_word_count: Optional[int] = None
     audience: Optional[str] = None
     genre: Optional[str] = None
+    reference_documents: List[str] = field(default_factory=list)  # List of document IDs for story reference
     
     # Phase outputs
     book_brief: Optional[Dict[str, Any]] = None
@@ -1182,7 +1183,7 @@ Make it engaging and concise."""
 
 
 class FerrariBookCompany:
-    """Main orchestrator for the Ferrari-style book creation company."""
+    """Main orchestrator for the Book Publishing House book creation system."""
     
     def __init__(self):
         """Initialize the company with all agents."""
@@ -1381,7 +1382,7 @@ async def main():
     import os
     
     print("=" * 60)
-    print("Ferrari-Style Book Creation Company")
+    print("Book Publishing House")
     print("=" * 60)
     print()
     

@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-interface FerrariProject {
+interface BookPublishingHouseProject {
   project_id: string;
   title: string | null;
   premise: string;
   current_phase: string;
   status: string;
   output_directory: string;
+  reference_documents?: string[];
 }
 
 interface PhaseArtifacts {
@@ -39,9 +40,9 @@ const PHASE_NAMES: Record<string, string> = {
   complete: 'Complete'
 };
 
-export default function FerrariCompanyPage() {
+export default function BookPublishingHousePage() {
   const navigate = useNavigate();
-  const [project, setProject] = useState<FerrariProject | null>(null);
+  const [project, setProject] = useState<BookPublishingHouseProject | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentArtifacts, setCurrentArtifacts] = useState<PhaseArtifacts | null>(null);
@@ -55,6 +56,73 @@ export default function FerrariCompanyPage() {
   const [wordCount, setWordCount] = useState('');
   const [audience, setAudience] = useState('');
   const [outputDir, setOutputDir] = useState('book_outputs');
+  const [attachedDocuments, setAttachedDocuments] = useState<File[]>([]);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      const newFiles = Array.from(event.target.files);
+      // Filter to only PDF and TXT files
+      const validFiles = newFiles.filter(file => {
+        const isPDF = file.type.includes('pdf') || file.name.endsWith('.pdf');
+        const isTXT = file.type.includes('text/plain') || file.name.endsWith('.txt');
+        return isPDF || isTXT;
+      });
+      
+      if (validFiles.length !== newFiles.length) {
+        alert('Some files were skipped. Only PDF and TXT files are allowed.');
+      }
+      
+      // Check file sizes
+      const oversizedFiles = validFiles.filter(file => file.size > 50 * 1024 * 1024);
+      if (oversizedFiles.length > 0) {
+        alert(`Some files are too large (max 50MB): ${oversizedFiles.map(f => f.name).join(', ')}`);
+        const sizedFiles = validFiles.filter(file => file.size <= 50 * 1024 * 1024);
+        setAttachedDocuments(prev => [...prev, ...sizedFiles]);
+      } else {
+        setAttachedDocuments(prev => [...prev, ...validFiles]);
+      }
+    }
+  };
+
+  const uploadDocuments = async (files: File[]): Promise<string[]> => {
+    if (files.length === 0) return [];
+
+    setUploadingDocs(true);
+    const uploadedDocIds: string[] = [];
+
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/writer/documents/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          uploadedDocIds.push(data.document.id);
+        } else {
+          alert(`Failed to upload "${file.name}": ${data.error || 'Unknown error'}`);
+        }
+      }
+
+      return uploadedDocIds;
+    } catch (error: any) {
+      console.error('Document upload error:', error);
+      alert('Failed to upload documents: ' + error.message);
+      return [];
+    } finally {
+      setUploadingDocs(false);
+    }
+  };
+
+  const removeDocument = (index: number) => {
+    setAttachedDocuments(prev => prev.filter((_, i) => i !== index));
+  };
 
   const createProject = async () => {
     if (!premise.trim()) {
@@ -66,6 +134,12 @@ export default function FerrariCompanyPage() {
     setError(null);
 
     try {
+      // Upload documents first if any
+      let referenceDocumentIds: string[] = [];
+      if (attachedDocuments.length > 0) {
+        referenceDocumentIds = await uploadDocuments(attachedDocuments);
+      }
+
       const response = await fetch('/api/ferrari-company/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,7 +148,8 @@ export default function FerrariCompanyPage() {
           premise: premise.trim(),
           target_word_count: wordCount ? parseInt(wordCount) : null,
           audience: audience.trim() || null,
-          output_directory: outputDir.trim() || 'book_outputs'
+          output_directory: outputDir.trim() || 'book_outputs',
+          reference_documents: referenceDocumentIds.length > 0 ? referenceDocumentIds : null
         })
       });
 
@@ -406,7 +481,7 @@ export default function FerrariCompanyPage() {
         <div className="max-w-4xl mx-auto">
           <div className="bg-white rounded-lg shadow-lg p-8">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-3xl font-bold">Ferrari-Style Book Creation Company</h1>
+              <h1 className="text-3xl font-bold">Book Publishing House</h1>
               <button
                 onClick={() => navigate('/')}
                 className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
@@ -428,15 +503,64 @@ export default function FerrariCompanyPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Short Idea/Premise (1-3 sentences) *</label>
+                <label className="block text-sm font-medium mb-2">Book Premise/Story Idea *</label>
                 <textarea
                   value={premise}
                   onChange={(e) => setPremise(e.target.value)}
-                  placeholder="A man from Earth goes to live on Mars where there is an advanced civilization."
-                  rows={4}
-                  className="w-full px-4 py-2 border rounded"
+                  placeholder="Enter your book premise, story idea, or detailed synopsis. You can write as much as you need to describe your story concept, characters, world, plot points, themes, or any other relevant details..."
+                  rows={12}
+                  className="w-full px-4 py-2 border rounded resize-y"
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">Provide a detailed description of your book idea. This can be as long as needed.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Reference Documents (optional)</label>
+                <p className="text-xs text-gray-500 mb-2">Attach PDF or TXT files for story reference, research materials, or existing drafts.</p>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".pdf,.txt,application/pdf,text/plain"
+                    onChange={handleFileSelection}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingDocs}
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                    >
+                      {uploadingDocs ? 'Uploading...' : '📎 Attach Documents'}
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      {attachedDocuments.length > 0 
+                        ? `${attachedDocuments.length} file(s) selected`
+                        : 'No files selected'}
+                    </span>
+                  </div>
+                  {attachedDocuments.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {attachedDocuments.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                          <span className="text-sm text-gray-700">
+                            📄 {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeDocument(index)}
+                            className="text-red-500 hover:text-red-700 text-sm"
+                          >
+                            ✕ Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
