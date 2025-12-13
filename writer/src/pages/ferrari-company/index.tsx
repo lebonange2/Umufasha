@@ -58,7 +58,8 @@ export default function BookPublishingHousePage() {
   const [wordCount, setWordCount] = useState('');
   const [audience, setAudience] = useState('');
   const [outputDir, setOutputDir] = useState('book_outputs');
-  const [model, setModel] = useState('qwen3:30b'); // Model selection
+  const [model, setModel] = useState('qwen3:30b'); // Model selection for worker agents
+  const [ceoModel, setCeoModel] = useState('qwen3:30b'); // Model selection for CEO/manager agents
   const [attachedDocuments, setAttachedDocuments] = useState<File[]>([]);
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -152,8 +153,9 @@ export default function BookPublishingHousePage() {
           target_word_count: wordCount ? parseInt(wordCount) : null,
           audience: audience.trim() || null,
           output_directory: outputDir.trim() || 'book_outputs',
-                  reference_documents: referenceDocumentIds.length > 0 ? referenceDocumentIds : null,
-                  model: model
+          reference_documents: referenceDocumentIds.length > 0 ? referenceDocumentIds : null,
+          model: model,
+          ceo_model: ceoModel !== model ? ceoModel : null
         })
       });
 
@@ -601,17 +603,32 @@ export default function BookPublishingHousePage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">AI Model *</label>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full px-4 py-2 border rounded"
-                >
-                  <option value="qwen3:30b">Qwen3 30B (Recommended - Higher Quality)</option>
-                  <option value="llama3:latest">Llama 3 Latest (Faster)</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Choose the AI model to use for book generation. Qwen3 30B provides higher quality but requires more resources.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Worker Agents Model *</label>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full px-4 py-2 border rounded"
+                  >
+                    <option value="qwen3:30b">Qwen3 30B (Recommended - Higher Quality)</option>
+                    <option value="llama3:latest">Llama 3 Latest (Faster)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Model for content generation agents (CPSO, Story Design, etc.)</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">CEO/Manager Model *</label>
+                  <select
+                    value={ceoModel}
+                    onChange={(e) => setCeoModel(e.target.value)}
+                    className="w-full px-4 py-2 border rounded"
+                  >
+                    <option value="qwen3:30b">Qwen3 30B (Recommended - Higher Quality)</option>
+                    <option value="llama3:latest">Llama 3 Latest (Faster)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Model for CEO and manager agents that approve phases</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

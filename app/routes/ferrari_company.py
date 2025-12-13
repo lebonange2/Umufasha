@@ -34,7 +34,8 @@ class BookPublishingHouseProjectCreate(BaseModel):
     audience: Optional[str] = None
     output_directory: str = "book_outputs"
     reference_documents: Optional[List[str]] = None  # List of document IDs
-    model: Optional[str] = "qwen3:30b"  # Model to use: llama3:latest or qwen3:30b
+    model: Optional[str] = "qwen3:30b"  # Model to use for worker agents: llama3:latest or qwen3:30b
+    ceo_model: Optional[str] = None  # Model to use for CEO/manager agents: llama3:latest or qwen3:30b. If None, uses same as model.
 
 
 class PhaseDecision(BaseModel):
@@ -52,7 +53,8 @@ class BookPublishingHouseProjectResponse(BaseModel):
     status: str
     output_directory: str
     reference_documents: Optional[List[str]] = None
-    model: Optional[str] = "qwen3:30b"  # Model being used
+    model: Optional[str] = "qwen3:30b"  # Model being used for worker agents
+    ceo_model: Optional[str] = None  # Model being used for CEO/manager agents
 
 
 @router.post("/api/ferrari-company/projects", response_model=BookPublishingHouseProjectResponse)
@@ -65,13 +67,19 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
         
         project_id = str(uuid.uuid4())
         
-        # Create company instance with selected model
+        # Create company instance with selected models
         try:
             model = project.model or "qwen3:30b"
             # Validate model
             if model not in ["llama3:latest", "qwen3:30b"]:
                 model = "qwen3:30b"  # Fall back to default
-            company = FerrariBookCompany(model=model)
+            
+            ceo_model = project.ceo_model
+            # Validate CEO model if provided
+            if ceo_model and ceo_model not in ["llama3:latest", "qwen3:30b"]:
+                ceo_model = None  # Fall back to using worker model
+            
+            company = FerrariBookCompany(model=model, ceo_model=ceo_model)
         except Exception as e:
             logger.error("Failed to initialize FerrariBookCompany", error=str(e), exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to initialize book company: {str(e)}")
@@ -94,6 +102,10 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
         if model not in ["llama3:latest", "qwen3:30b"]:
             model = "qwen3:30b"
         
+        ceo_model = project.ceo_model or model
+        if ceo_model not in ["llama3:latest", "qwen3:30b"]:
+            ceo_model = model
+        
         active_projects[project_id] = {
             "company": company,
             "title": project.title,
@@ -103,6 +115,7 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
             "output_directory": project.output_directory,
             "reference_documents": project.reference_documents or [],
             "model": model,
+            "ceo_model": ceo_model,
             "current_phase": Phase.STRATEGY_CONCEPT.value,
             "status": "in_progress",
             "owner_decisions": {},
@@ -121,7 +134,8 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
             status="in_progress",
             output_directory=project.output_directory,
             reference_documents=project.reference_documents,
-            model=model
+            model=model,
+            ceo_model=ceo_model
         )
     except HTTPException:
         raise
@@ -146,7 +160,8 @@ async def get_book_publishing_house_project(project_id: str):
         status=project_data["status"],
         output_directory=project_data["output_directory"],
         reference_documents=project_data.get("reference_documents", []),
-        model=project_data.get("model", "qwen3:30b")
+        model=project_data.get("model", "qwen3:30b"),
+        ceo_model=project_data.get("ceo_model")
     )
 
 
@@ -397,17 +412,9 @@ async def make_decision(project_id: str, decision: PhaseDecision):
                 "message": "Project stopped by owner"
             }
         elif owner_decision == OwnerDecision.REQUEST_CHANGES:
-            # Re-run phase
+            # Re-run phase - no timeout, let it run until completion or user cancellation
             try:
-                await asyncio.wait_for(
-                    company._execute_phase(current_phase),
-                    timeout=1800.0  # 30 minutes
-                )
-            except asyncio.TimeoutError:
-                raise HTTPException(
-                    status_code=504,
-                    detail="Phase re-execution timed out. Please try again."
-                )
+                await company._execute_phase(current_phase)
             except Exception as e:
                 logger.error(f"Error re-executing phase: {str(e)}", exc_info=True)
                 raise HTTPException(

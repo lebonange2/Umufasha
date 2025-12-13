@@ -1296,11 +1296,12 @@ Make it engaging and concise."""
 class FerrariBookCompany:
     """Main orchestrator for the Book Publishing House book creation system."""
     
-    def __init__(self, model: Optional[str] = None):
+    def __init__(self, model: Optional[str] = None, ceo_model: Optional[str] = None):
         """Initialize the company with all agents.
         
         Args:
-            model: Model to use (llama3:latest or qwen3:30b). If None, uses default from config.
+            model: Model to use for worker agents (llama3:latest or qwen3:30b). If None, uses default from config.
+            ceo_model: Model to use for CEO/manager agents (llama3:latest or qwen3:30b). If None, uses same as model.
         """
         agent_config = get_config()
         
@@ -1312,7 +1313,14 @@ class FerrariBookCompany:
             # Fall back to default if invalid model provided
             selected_model = agent_config.get("model", "qwen3:30b")
         
-        # Create LLM client
+        # Use provided CEO model or fall back to worker model
+        selected_ceo_model = ceo_model or selected_model
+        
+        # Validate CEO model is one of the supported models
+        if selected_ceo_model not in ["llama3:latest", "qwen3:30b"]:
+            selected_ceo_model = selected_model
+        
+        # Create LLM client for worker agents
         self.llm_client = LLMClient(
             api_key=None,
             base_url=agent_config.get("base_url", "http://localhost:11434/v1"),
@@ -1320,11 +1328,19 @@ class FerrariBookCompany:
             provider=agent_config.get("provider", "local")
         )
         
+        # Create separate LLM client for CEO/manager agents
+        self.ceo_llm_client = LLMClient(
+            api_key=None,
+            base_url=agent_config.get("base_url", "http://localhost:11434/v1"),
+            model=selected_ceo_model,
+            provider=agent_config.get("provider", "local")
+        )
+        
         # Create message bus
         self.message_bus = MessageBus()
         
-        # Create all agents
-        self.ceo = CEOAgent(self.llm_client, self.message_bus)
+        # Create all agents - CEO uses separate model
+        self.ceo = CEOAgent(self.ceo_llm_client, self.message_bus)
         self.cpso = CPSOAgent(self.llm_client, self.message_bus)
         self.story_design_director = StoryDesignDirectorAgent(self.llm_client, self.message_bus)
         self.narrative_engineering_director = NarrativeEngineeringDirectorAgent(self.llm_client, self.message_bus)
