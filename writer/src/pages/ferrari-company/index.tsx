@@ -444,13 +444,16 @@ export default function BookPublishingHousePage() {
 
   const fetchPreviousProjects = async () => {
     setLoadingProjects(true);
+    setError(null);
     try {
       const response = await fetch('/api/ferrari-company/projects');
       if (response.ok) {
         const responseText = await response.text();
         try {
           const data = JSON.parse(responseText);
-          setPreviousProjects(data.projects || []);
+          const projects = data.projects || [];
+          setPreviousProjects(projects);
+          // Automatically show the list if there are projects, or show it anyway so user can see "No projects" message
           setShowPreviousProjects(true);
         } catch (parseErr) {
           console.error('Failed to parse projects list:', parseErr);
@@ -632,10 +635,16 @@ export default function BookPublishingHousePage() {
       // Load existing project
       resumeProject(projectId);
     }
-    // Fetch previous projects on mount
+  }, []);
+
+  useEffect(() => {
+    // Fetch previous projects on mount if no project is loaded
     if (!project) {
       fetchPreviousProjects();
     }
+  }, []);
+
+  useEffect(() => {
     if (project) {
       loadChatLog();
       if (project.status === 'complete') {
@@ -653,11 +662,17 @@ export default function BookPublishingHousePage() {
               <h1 className="text-3xl font-bold">Book Publishing House</h1>
               <div className="flex gap-2">
                 <button
-                  onClick={fetchPreviousProjects}
+                  onClick={() => {
+                    if (showPreviousProjects) {
+                      setShowPreviousProjects(false);
+                    } else {
+                      fetchPreviousProjects();
+                    }
+                  }}
                   disabled={loadingProjects}
                   className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
                 >
-                  {loadingProjects ? 'Loading...' : '📚 Previous Projects'}
+                  {loadingProjects ? 'Loading...' : showPreviousProjects ? '✕ Hide Projects' : '📚 View Previous Projects'}
                 </button>
                 <button
                   onClick={() => navigate('/')}
@@ -669,50 +684,61 @@ export default function BookPublishingHousePage() {
             </div>
 
             {showPreviousProjects && (
-              <div className="mb-6 bg-gray-50 border rounded-lg p-6">
+              <div className="mb-6 bg-white border-2 border-blue-200 rounded-lg p-6 shadow-md">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold">Previous Projects</h2>
+                  <h2 className="text-2xl font-bold text-gray-800">Previous Projects</h2>
                   <button
                     onClick={() => setShowPreviousProjects(false)}
-                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                    className="px-3 py-1 bg-gray-400 text-white rounded hover:bg-gray-500 text-sm"
                   >
                     ✕ Close
                   </button>
                 </div>
-                {previousProjects.length === 0 ? (
-                  <p className="text-gray-500">No previous projects found.</p>
+                {loadingProjects ? (
+                  <p className="text-gray-500 text-center py-4">Loading projects...</p>
+                ) : previousProjects.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500 text-lg mb-2">No previous projects found.</p>
+                    <p className="text-gray-400 text-sm">Create a new project to get started!</p>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
                     {previousProjects.map((proj) => (
                       <div
                         key={proj.project_id}
-                        className="border rounded p-4 hover:bg-white bg-white"
+                        className="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md bg-white transition-all"
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
-                            <h3 className="font-semibold text-lg">
+                            <h3 className="font-semibold text-lg text-gray-800 mb-1">
                               {proj.title || 'Untitled Book'}
                             </h3>
-                            <p className="text-sm text-gray-600 mt-1">
+                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
                               {proj.premise}
                             </p>
-                            <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                              <span>Status: <strong className="text-gray-700">{proj.status}</strong></span>
-                              <span>Phase: <strong className="text-gray-700">{PHASE_NAMES[proj.current_phase] || proj.current_phase}</strong></span>
-                              <span>Created: <strong className="text-gray-700">{new Date(proj.created_at).toLocaleDateString()}</strong></span>
+                            <div className="mt-3 flex flex-wrap gap-4 text-xs">
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                                Status: <strong>{proj.status}</strong>
+                              </span>
+                              <span className="px-2 py-1 bg-green-100 text-green-800 rounded">
+                                Phase: <strong>{PHASE_NAMES[proj.current_phase] || proj.current_phase}</strong>
+                              </span>
+                              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
+                                Created: <strong>{new Date(proj.created_at).toLocaleDateString()}</strong>
+                              </span>
                             </div>
                           </div>
                           <div className="flex gap-2 ml-4">
                             <button
                               onClick={() => resumeProject(proj.project_id)}
-                              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-semibold shadow"
                             >
                               ▶ Resume
                             </button>
                             <a
                               href={`/api/ferrari-company/projects/${proj.project_id}/progress-report`}
                               download
-                              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm inline-block text-center"
+                              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm inline-block text-center font-semibold shadow"
                             >
                               📄 Report
                             </a>
