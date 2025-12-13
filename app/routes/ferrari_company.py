@@ -4,26 +4,254 @@ import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 import structlog
 import asyncio
 import uuid
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
 
 from app.book_writer.ferrari_company import (
     FerrariBookCompany, OwnerDecision, Phase, BookProject
 )
+from app.database import get_db
+from app.models import BookPublishingHouseProject as BPHProject
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
-# Store active projects in memory (in production, use Redis or database)
+# Store active projects in memory (loaded from database)
 active_projects: Dict[str, Dict[str, Any]] = {}
 
 # Store phase execution status for background tasks
 phase_execution_status: Dict[str, Dict[str, Any]] = {}
+
+
+async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: AsyncSession) -> None:
+    """Save project state to database."""
+    try:
+        # Convert BookProject dataclass to dict if needed
+        company = project_data.get("company")
+        project_state = None
+        if company and hasattr(company, 'project') and company.project:
+            bp = company.project
+            project_state = {
+                "title": bp.title,
+                "premise": bp.premise,
+                "target_word_count": bp.target_word_count,
+                "audience": bp.audience,
+                "genre": bp.genre,
+                "reference_documents": bp.reference_documents,
+                "book_brief": bp.book_brief,
+                "world_dossier": bp.world_dossier,
+                "character_bible": bp.character_bible,
+                "plot_arc": bp.plot_arc,
+                "outline": bp.outline,
+                "draft_chapters": bp.draft_chapters,
+                "full_draft": bp.full_draft,
+                "revision_report": bp.revision_report,
+                "formatted_manuscript": bp.formatted_manuscript,
+                "launch_package": bp.launch_package,
+                "current_phase": bp.current_phase.value if hasattr(bp.current_phase, 'value') else str(bp.current_phase),
+                "status": bp.status,
+                "owner_edits": bp.owner_edits,
+            }
+        
+        # Check if project exists
+        result = await db.execute(
+            select(BPHProject).where(BPHProject.id == project_id)
+        )
+        db_project = result.scalar_one_or_none()
+        
+        if db_project:
+            # Update existing project
+            db_project.title = project_data.get("title")
+            db_project.premise = project_data.get("premise")
+            db_project.target_word_count = project_data.get("target_word_count")
+            db_project.audience = project_data.get("audience")
+            db_project.output_directory = project_data.get("output_directory", "book_outputs")
+            db_project.model = project_data.get("model", "qwen3:30b")
+            db_project.ceo_model = project_data.get("ceo_model")
+            db_project.current_phase = project_data.get("current_phase")
+            db_project.status = project_data.get("status", "in_progress")
+            db_project.project_data = project_state
+            db_project.artifacts = project_data.get("artifacts", {})
+            db_project.owner_decisions = project_data.get("owner_decisions", {})
+            db_project.chat_log = project_data.get("chat_log", [])
+            db_project.reference_documents = project_data.get("reference_documents", [])
+            db_project.last_activity_at = datetime.utcnow()
+            db_project.updated_at = datetime.utcnow()
+        else:
+            # Create new project
+            db_project = BPHProject(
+                id=project_id,
+                title=project_data.get("title"),
+                premise=project_data.get("premise"),
+                target_word_count=project_data.get("target_word_count"),
+                audience=project_data.get("audience"),
+                output_directory=project_data.get("output_directory", "book_outputs"),
+                model=project_data.get("model", "qwen3:30b"),
+                ceo_model=project_data.get("ceo_model"),
+                current_phase=project_data.get("current_phase", "strategy_concept"),
+                status=project_data.get("status", "in_progress"),
+                project_data=project_state,
+                artifacts=project_data.get("artifacts", {}),
+                owner_decisions=project_data.get("owner_decisions", {}),
+                chat_log=project_data.get("chat_log", []),
+                reference_documents=project_data.get("reference_documents", []),
+                progress_log=[],
+                error_log=[],
+            )
+            db.add(db_project)
+        
+        await db.commit()
+        logger.info(f"Saved project {project_id} to database")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to save project {project_id} to database", error=str(e), exc_info=True)
+        raise
+
+
+async def load_project_from_db(project_id: str, db: AsyncSession) -> Optional[Dict[str, Any]]:
+    """Load project from database and recreate company instance."""
+    try:
+        result = await db.execute(
+            select(BPHProject).where(BPHProject.id == project_id)
+        )
+        db_project = result.scalar_one_or_none()
+        
+        if not db_project:
+            return None
+        
+        # Recreate company with saved models
+        model = db_project.model or "qwen3:30b"
+        ceo_model = db_project.ceo_model or model
+        company = FerrariBookCompany(model=model, ceo_model=ceo_model)
+        
+        # Restore project state
+        if db_project.project_data:
+            bp_data = db_project.project_data
+            company.project = BookProject(
+                title=bp_data.get("title"),
+                premise=bp_data.get("premise", ""),
+                target_word_count=bp_data.get("target_word_count"),
+                audience=bp_data.get("audience"),
+                genre=bp_data.get("genre"),
+                reference_documents=bp_data.get("reference_documents", []),
+                book_brief=bp_data.get("book_brief"),
+                world_dossier=bp_data.get("world_dossier"),
+                character_bible=bp_data.get("character_bible"),
+                plot_arc=bp_data.get("plot_arc"),
+                outline=bp_data.get("outline"),
+                draft_chapters=bp_data.get("draft_chapters", {}),
+                full_draft=bp_data.get("full_draft"),
+                revision_report=bp_data.get("revision_report"),
+                formatted_manuscript=bp_data.get("formatted_manuscript"),
+                launch_package=bp_data.get("launch_package"),
+                current_phase=Phase(bp_data.get("current_phase", "strategy_concept")),
+                status=bp_data.get("status", "in_progress"),
+                owner_edits=bp_data.get("owner_edits", {}),
+            )
+        else:
+            # Create new project if no saved state
+            company.project = BookProject(
+                title=db_project.title,
+                premise=db_project.premise,
+                target_word_count=db_project.target_word_count,
+                audience=db_project.audience,
+                reference_documents=db_project.reference_documents or [],
+            )
+        
+        # Reconstruct project data dict
+        project_data = {
+            "company": company,
+            "title": db_project.title,
+            "premise": db_project.premise,
+            "target_word_count": db_project.target_word_count,
+            "audience": db_project.audience,
+            "output_directory": db_project.output_directory,
+            "reference_documents": db_project.reference_documents or [],
+            "model": db_project.model,
+            "ceo_model": db_project.ceo_model,
+            "current_phase": db_project.current_phase,
+            "status": db_project.status,
+            "owner_decisions": db_project.owner_decisions or {},
+            "artifacts": db_project.artifacts or {},
+            "chat_log": db_project.chat_log or [],
+            "progress_log": db_project.progress_log or [],
+            "error_log": db_project.error_log or [],
+            "created_at": db_project.created_at.isoformat() if db_project.created_at else datetime.utcnow().isoformat(),
+            "updated_at": db_project.updated_at.isoformat() if db_project.updated_at else datetime.utcnow().isoformat(),
+        }
+        
+        return project_data
+    except Exception as e:
+        logger.error(f"Failed to load project {project_id} from database", error=str(e), exc_info=True)
+        return None
+
+
+async def log_progress(project_id: str, message: str, phase: Optional[str] = None, db: AsyncSession = None) -> None:
+    """Log progress entry for a project."""
+    if project_id in active_projects:
+        if "progress_log" not in active_projects[project_id]:
+            active_projects[project_id]["progress_log"] = []
+        active_projects[project_id]["progress_log"].append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "phase": phase or active_projects[project_id].get("current_phase"),
+            "message": message,
+        })
+    
+    if db:
+        try:
+            result = await db.execute(
+                select(BPHProject).where(BPHProject.id == project_id)
+            )
+            db_project = result.scalar_one_or_none()
+            if db_project:
+                progress_log = db_project.progress_log or []
+                progress_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "phase": phase or db_project.current_phase,
+                    "message": message,
+                })
+                db_project.progress_log = progress_log
+                await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to log progress for project {project_id}", error=str(e))
+
+
+async def log_error(project_id: str, error: str, phase: Optional[str] = None, db: AsyncSession = None) -> None:
+    """Log error entry for a project."""
+    if project_id in active_projects:
+        if "error_log" not in active_projects[project_id]:
+            active_projects[project_id]["error_log"] = []
+        active_projects[project_id]["error_log"].append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "phase": phase or active_projects[project_id].get("current_phase"),
+            "error": str(error),
+        })
+    
+    if db:
+        try:
+            result = await db.execute(
+                select(BPHProject).where(BPHProject.id == project_id)
+            )
+            db_project = result.scalar_one_or_none()
+            if db_project:
+                error_log = db_project.error_log or []
+                error_log.append({
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "phase": phase or db_project.current_phase,
+                    "error": str(error),
+                })
+                db_project.error_log = error_log
+                db_project.status = "error"
+                await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to log error for project {project_id}", error=str(e))
 
 
 class BookPublishingHouseProjectCreate(BaseModel):
@@ -58,7 +286,7 @@ class BookPublishingHouseProjectResponse(BaseModel):
 
 
 @router.post("/api/ferrari-company/projects", response_model=BookPublishingHouseProjectResponse)
-async def create_book_publishing_house_project(project: BookPublishingHouseProjectCreate):
+async def create_book_publishing_house_project(project: BookPublishingHouseProjectCreate, db: AsyncSession = Depends(get_db)):
     """Create a new Book Publishing House project."""
     try:
         # Validate input
@@ -106,7 +334,7 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
         if ceo_model not in ["llama3:latest", "qwen3:30b"]:
             ceo_model = model
         
-        active_projects[project_id] = {
+        project_data = {
             "company": company,
             "title": project.title,
             "premise": project.premise,
@@ -121,8 +349,16 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
             "owner_decisions": {},
             "artifacts": {},
             "chat_log": [],
+            "progress_log": [],
+            "error_log": [],
             "created_at": datetime.utcnow().isoformat()
         }
+        
+        active_projects[project_id] = project_data
+        
+        # Save to database
+        await save_project_to_db(project_id, project_data, db)
+        await log_progress(project_id, f"Project created: {project.title or 'Untitled'}", Phase.STRATEGY_CONCEPT.value, db)
         
         logger.info(f"Created Book Publishing House project {project_id}")
         
@@ -145,12 +381,16 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
 
 
 @router.get("/api/ferrari-company/projects/{project_id}", response_model=BookPublishingHouseProjectResponse)
-async def get_book_publishing_house_project(project_id: str):
+async def get_book_publishing_house_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Get Book Publishing House project status."""
+    # Load from memory or database
     if project_id not in active_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    project_data = active_projects[project_id]
+        project_data = await load_project_from_db(project_id, db)
+        if not project_data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        active_projects[project_id] = project_data
+    else:
+        project_data = active_projects[project_id]
     
     return BookPublishingHouseProjectResponse(
         project_id=project_id,
@@ -165,8 +405,25 @@ async def get_book_publishing_house_project(project_id: str):
     )
 
 
-async def _execute_phase_background(project_id: str, current_phase: Phase):
+async def _save_mid_phase_progress(project_id: str, project_data: Dict[str, Any], db: AsyncSession = None) -> None:
+    """Save progress during phase execution (e.g., when a chapter is approved)."""
+    try:
+        if db:
+            await save_project_to_db(project_id, project_data, db)
+        # Also update in-memory cache
+        active_projects[project_id] = project_data
+    except Exception as e:
+        logger.error(f"Failed to save mid-phase progress for project {project_id}", error=str(e), exc_info=True)
+
+
+async def _execute_phase_background(project_id: str, current_phase: Phase, db: AsyncSession = None):
     """Background task to execute phase without blocking HTTP request."""
+    # Load from database if not in memory
+    if project_id not in active_projects and db:
+        project_data = await load_project_from_db(project_id, db)
+        if project_data:
+            active_projects[project_id] = project_data
+    
     project_data = active_projects.get(project_id)
     if not project_data:
         logger.error(f"Project {project_id} not found in background task")
@@ -174,6 +431,20 @@ async def _execute_phase_background(project_id: str, current_phase: Phase):
     
     company = project_data["company"]
     status_key = f"{project_id}_{current_phase.value}"
+    
+    # Create progress callback for mid-phase saves
+    async def mid_phase_callback(message: str, sub_item: Optional[str] = None):
+        """Callback to save progress during phase execution."""
+        progress_msg = message
+        if sub_item:
+            progress_msg = f"{message} ({sub_item})"
+        await log_progress(project_id, progress_msg, current_phase.value, db)
+        # Save project state
+        project_data["company"] = company
+        await _save_mid_phase_progress(project_id, project_data, db)
+    
+    # Attach callback to company for mid-phase saves
+    company._mid_phase_save_callback = mid_phase_callback
     
     try:
         # Mark as running
@@ -184,6 +455,7 @@ async def _execute_phase_background(project_id: str, current_phase: Phase):
             "error": None
         }
         
+        await log_progress(project_id, f"Starting phase: {current_phase.value}", current_phase.value, db)
         logger.info(f"Background: Executing phase {current_phase.value} for project {project_id}")
         
         # Execute phase (same as CLI) - no timeout in background
@@ -192,6 +464,10 @@ async def _execute_phase_background(project_id: str, current_phase: Phase):
         # Update project state
         project_data["company"] = company
         project_data["current_phase"] = current_phase.value
+        
+        # Save to database
+        if db:
+            await save_project_to_db(project_id, project_data, db)
         
         # Mark as completed
         phase_execution_status[status_key] = {
@@ -202,24 +478,39 @@ async def _execute_phase_background(project_id: str, current_phase: Phase):
             "error": None
         }
         
+        await log_progress(project_id, f"Completed phase: {current_phase.value}", current_phase.value, db)
         logger.info(f"Background: Phase {current_phase.value} completed for project {project_id}")
         
     except Exception as phase_error:
-        logger.error(f"Background phase execution error: {str(phase_error)}", error=str(phase_error), exc_info=True)
+        error_msg = str(phase_error)
+        logger.error(f"Background phase execution error: {error_msg}", error=error_msg, exc_info=True)
+        await log_error(project_id, error_msg, current_phase.value, db)
         # Mark as failed
         phase_execution_status[status_key] = {
             "status": "failed",
             "phase": current_phase.value,
             "started_at": phase_execution_status.get(status_key, {}).get("started_at", datetime.utcnow().isoformat()),
-            "error": str(phase_error)
+            "error": error_msg
         }
+        # Save error state to database
+        if db and project_id in active_projects:
+            project_data["status"] = "error"
+            await save_project_to_db(project_id, project_data, db)
+    finally:
+        # Clean up callback
+        if hasattr(company, '_mid_phase_save_callback'):
+            delattr(company, '_mid_phase_save_callback')
 
 
 @router.post("/api/ferrari-company/projects/{project_id}/execute-phase")
-async def execute_phase(project_id: str, background_tasks: BackgroundTasks):
+async def execute_phase(project_id: str, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Start phase execution in background and return immediately."""
+    # Load from database if not in memory
     if project_id not in active_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
+        project_data = await load_project_from_db(project_id, db)
+        if not project_data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        active_projects[project_id] = project_data
     
     project_data = active_projects[project_id]
     
@@ -249,8 +540,8 @@ async def execute_phase(project_id: str, background_tasks: BackgroundTasks):
                     "phase": current_phase.value
                 }
         
-        # Start background task
-        background_tasks.add_task(_execute_phase_background, project_id, current_phase)
+        # Start background task with db session
+        background_tasks.add_task(_execute_phase_background, project_id, current_phase, db)
         
         logger.info(f"Started background phase execution for {current_phase.value} in project {project_id}")
         
@@ -268,10 +559,14 @@ async def execute_phase(project_id: str, background_tasks: BackgroundTasks):
 
 
 @router.get("/api/ferrari-company/projects/{project_id}/phase-status")
-async def get_phase_status(project_id: str):
+async def get_phase_status(project_id: str, db: AsyncSession = Depends(get_db)):
     """Get status of phase execution."""
+    # Load from database if not in memory
     if project_id not in active_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
+        project_data = await load_project_from_db(project_id, db)
+        if not project_data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        active_projects[project_id] = project_data
     
     project_data = active_projects[project_id]
     current_phase = project_data.get("current_phase")
@@ -370,10 +665,14 @@ async def get_phase_status(project_id: str):
 
 
 @router.post("/api/ferrari-company/projects/{project_id}/decide")
-async def make_decision(project_id: str, decision: PhaseDecision):
+async def make_decision(project_id: str, decision: PhaseDecision, db: AsyncSession = Depends(get_db)):
     """Make owner decision on current phase."""
+    # Load from database if not in memory
     if project_id not in active_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
+        project_data = await load_project_from_db(project_id, db)
+        if not project_data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        active_projects[project_id] = project_data
     
     project_data = active_projects[project_id]
     
@@ -404,6 +703,8 @@ async def make_decision(project_id: str, decision: PhaseDecision):
         
         if owner_decision == OwnerDecision.STOP:
             project_data["status"] = "stopped"
+            await log_progress(project_id, f"Project stopped by owner at phase {current_phase.value}", current_phase.value, db)
+            await save_project_to_db(project_id, project_data, db)
             logger.info(f"Project {project_id} stopped by owner")
             return {
                 "success": True,
@@ -413,16 +714,21 @@ async def make_decision(project_id: str, decision: PhaseDecision):
             }
         elif owner_decision == OwnerDecision.REQUEST_CHANGES:
             # Re-run phase - no timeout, let it run until completion or user cancellation
+            await log_progress(project_id, f"Requesting changes for phase {current_phase.value}, re-executing", current_phase.value, db)
             try:
                 await company._execute_phase(current_phase)
             except Exception as e:
-                logger.error(f"Error re-executing phase: {str(e)}", exc_info=True)
+                error_msg = str(e)
+                await log_error(project_id, f"Error re-executing phase: {error_msg}", current_phase.value, db)
+                logger.error(f"Error re-executing phase: {error_msg}", exc_info=True)
                 raise HTTPException(
                     status_code=500,
-                    detail=f"Failed to re-execute phase: {str(e)}"
+                    detail=f"Failed to re-execute phase: {error_msg}"
                 )
             
             project_data["company"] = company
+            await log_progress(project_id, f"Phase {current_phase.value} re-executed with changes", current_phase.value, db)
+            await save_project_to_db(project_id, project_data, db)
             return {
                 "success": True,
                 "decision": decision.decision,
@@ -483,20 +789,25 @@ async def make_decision(project_id: str, decision: PhaseDecision):
             if current_index < len(phases) - 1:
                 next_phase = phases[current_index + 1]
                 project_data["current_phase"] = next_phase.value
+                await log_progress(project_id, f"Phase {current_phase.value} approved, moving to {next_phase.value}", next_phase.value, db)
                 logger.info(f"Project {project_id} approved phase {current_phase.value}, moving to {next_phase.value}")
             else:
                 # All phases complete
                 project_data["status"] = "complete"
                 project_data["current_phase"] = Phase.COMPLETE.value
+                await log_progress(project_id, "All phases completed successfully", Phase.COMPLETE.value, db)
                 
                 # Save final files
                 try:
                     await save_final_files(project_id, company, project_data)
                 except Exception as save_error:
-                    logger.error(f"Error saving final files: {str(save_error)}", exc_info=True)
+                    error_msg = str(save_error)
+                    await log_error(project_id, f"Error saving final files: {error_msg}", Phase.COMPLETE.value, db)
+                    logger.error(f"Error saving final files: {error_msg}", exc_info=True)
                     # Don't fail the request, but log the error
                     # Files can be regenerated if needed
             
+            await save_project_to_db(project_id, project_data, db)
             return {
                 "success": True,
                 "decision": decision.decision,
@@ -855,10 +1166,14 @@ async def save_final_files(project_id: str, company: FerrariBookCompany, project
 
 
 @router.get("/api/ferrari-company/projects/{project_id}/chat-log")
-async def get_chat_log(project_id: str, phase: Optional[str] = None):
+async def get_chat_log(project_id: str, phase: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """Get chat log for project."""
+    # Load from database if not in memory
     if project_id not in active_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
+        project_data = await load_project_from_db(project_id, db)
+        if not project_data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        active_projects[project_id] = project_data
     
     project_data = active_projects[project_id]
     company = project_data["company"]
@@ -873,10 +1188,14 @@ async def get_chat_log(project_id: str, phase: Optional[str] = None):
 
 
 @router.get("/api/ferrari-company/projects/{project_id}/download/{file_type}")
-async def download_file(project_id: str, file_type: str):
+async def download_file(project_id: str, file_type: str, db: AsyncSession = Depends(get_db)):
     """Download generated files."""
+    # Load from database if not in memory
     if project_id not in active_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
+        project_data = await load_project_from_db(project_id, db)
+        if not project_data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        active_projects[project_id] = project_data
     
     project_data = active_projects[project_id]
     
@@ -935,65 +1254,239 @@ async def download_file(project_id: str, file_type: str):
 
 
 @router.get("/api/ferrari-company/projects")
-async def list_book_publishing_house_projects():
-    """List all Book Publishing House projects with their PDF files."""
+async def list_book_publishing_house_projects(db: AsyncSession = Depends(get_db)):
+    """List all Book Publishing House projects from database."""
     try:
+        result = await db.execute(
+            select(BPHProject).order_by(BPHProject.updated_at.desc())
+        )
+        db_projects = result.scalars().all()
+        
         projects = []
-        for project_id, project_data in active_projects.items():
-            files = project_data.get("files", {})
-            pdf_path = files.get("pdf")
+        for db_project in db_projects:
+            # Check for PDF file
+            output_dir = Path(db_project.output_directory) / db_project.id
+            pdf_path = output_dir / "book.pdf" if output_dir.exists() else None
+            has_pdf = pdf_path and pdf_path.exists()
             
             projects.append({
-                "project_id": project_id,
-                "title": project_data.get("title", "Untitled"),
-                "status": project_data.get("status", "unknown"),
-                "has_pdf": pdf_path is not None and os.path.exists(pdf_path) if pdf_path else False,
-                "pdf_path": pdf_path,
-                "pdf_filename": Path(pdf_path).name if pdf_path and os.path.exists(pdf_path) else None,
-                "created_at": project_data.get("created_at", "")
+                "project_id": db_project.id,
+                "title": db_project.title or "Untitled",
+                "premise": db_project.premise[:100] + "..." if len(db_project.premise) > 100 else db_project.premise,
+                "status": db_project.status,
+                "current_phase": db_project.current_phase,
+                "has_pdf": has_pdf,
+                "pdf_path": str(pdf_path) if has_pdf else None,
+                "pdf_filename": pdf_path.name if has_pdf else None,
+                "created_at": db_project.created_at.isoformat() if db_project.created_at else "",
+                "updated_at": db_project.updated_at.isoformat() if db_project.updated_at else "",
+                "model": db_project.model,
+                "ceo_model": db_project.ceo_model,
             })
         
         return {"success": True, "projects": projects}
     except Exception as e:
-        logger.error("Failed to list Book Publishing House projects", error=str(e))
+        logger.error("Failed to list Book Publishing House projects", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/api/ferrari-company/projects/{project_id}/files")
-async def get_file_info(project_id: str):
+async def get_file_info(project_id: str, db: AsyncSession = Depends(get_db)):
     """Get information about generated files."""
-    if project_id not in active_projects:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    project_data = active_projects[project_id]
-    
-    if project_data["status"] != "complete":
+    try:
+        # Load from database if not in memory
+        if project_id not in active_projects:
+            project_data = await load_project_from_db(project_id, db)
+            if not project_data:
+                raise HTTPException(status_code=404, detail="Project not found")
+            active_projects[project_id] = project_data
+        
+        project_data = active_projects[project_id]
+        
+        if project_data["status"] != "complete":
+            return {
+                "status": "in_progress",
+                "files": None
+            }
+        
+        files = project_data.get("files", {})
+        
         return {
-            "status": "in_progress",
-            "files": None
-        }
-    
-    files = project_data.get("files", {})
-    
-    return {
-        "status": "complete",
-        "files": {
-            "json": {
-                "path": files.get("json"),
-                "exists": os.path.exists(files.get("json", "")) if files.get("json") else False
-            },
-            "pdf": {
-                "path": files.get("pdf"),
-                "exists": os.path.exists(files.get("pdf", "")) if files.get("pdf") else False
-            },
-            "zip": {
-                "path": files.get("zip"),
-                "exists": os.path.exists(files.get("zip", "")) if files.get("zip") else False
-            },
-            "chat_log": {
-                "path": files.get("chat_log"),
-                "exists": os.path.exists(files.get("chat_log", "")) if files.get("chat_log") else False
+            "status": "complete",
+            "files": {
+                "json": {
+                    "path": files.get("json"),
+                    "exists": os.path.exists(files.get("json", "")) if files.get("json") else False
+                },
+                "pdf": {
+                    "path": files.get("pdf"),
+                    "exists": os.path.exists(files.get("pdf", "")) if files.get("pdf") else False
+                },
+                "zip": {
+                    "path": files.get("zip"),
+                    "exists": os.path.exists(files.get("zip", "")) if files.get("zip") else False
+                },
+                "chat_log": {
+                    "path": files.get("chat_log"),
+                    "exists": os.path.exists(files.get("chat_log", "")) if files.get("chat_log") else False
+                }
             }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get file info", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/ferrari-company/projects/{project_id}/progress-report")
+async def get_progress_report(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate and download a comprehensive progress report for a project."""
+    # Load from database
+    result = await db.execute(
+        select(BPHProject).where(BPHProject.id == project_id)
+    )
+    db_project = result.scalar_one_or_none()
+    
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    try:
+        # Generate report content
+        report_lines = []
+        report_lines.append("=" * 80)
+        report_lines.append("BOOK PUBLISHING HOUSE - PROGRESS REPORT")
+        report_lines.append("=" * 80)
+        report_lines.append("")
+        
+        # Project Information
+        report_lines.append("PROJECT INFORMATION")
+        report_lines.append("-" * 80)
+        report_lines.append(f"Project ID: {db_project.id}")
+        report_lines.append(f"Title: {db_project.title or 'Untitled'}")
+        report_lines.append(f"Premise: {db_project.premise}")
+        if db_project.target_word_count:
+            report_lines.append(f"Target Word Count: {db_project.target_word_count:,}")
+        if db_project.audience:
+            report_lines.append(f"Target Audience: {db_project.audience}")
+        report_lines.append(f"Status: {db_project.status.upper()}")
+        report_lines.append(f"Current Phase: {db_project.current_phase}")
+        report_lines.append(f"Worker Model: {db_project.model}")
+        if db_project.ceo_model:
+            report_lines.append(f"CEO/Manager Model: {db_project.ceo_model}")
+        report_lines.append(f"Created: {db_project.created_at}")
+        report_lines.append(f"Last Updated: {db_project.updated_at}")
+        report_lines.append("")
+        
+        # Progress Log
+        if db_project.progress_log:
+            report_lines.append("PROGRESS LOG")
+            report_lines.append("-" * 80)
+            for entry in db_project.progress_log:
+                timestamp = entry.get("timestamp", "Unknown")
+                phase = entry.get("phase", "Unknown")
+                message = entry.get("message", "")
+                report_lines.append(f"[{timestamp}] [{phase}] {message}")
+            report_lines.append("")
+        
+        # Error Log
+        if db_project.error_log:
+            report_lines.append("ERROR LOG")
+            report_lines.append("-" * 80)
+            for entry in db_project.error_log:
+                timestamp = entry.get("timestamp", "Unknown")
+                phase = entry.get("phase", "Unknown")
+                error = entry.get("error", "")
+                report_lines.append(f"[{timestamp}] [{phase}] ERROR: {error}")
+            report_lines.append("")
+        
+        # Phase Artifacts Summary
+        if db_project.artifacts:
+            report_lines.append("PHASE ARTIFACTS SUMMARY")
+            report_lines.append("-" * 80)
+            for phase, artifact_data in db_project.artifacts.items():
+                report_lines.append(f"\nPhase: {phase}")
+                if isinstance(artifact_data, dict):
+                    for key, value in artifact_data.items():
+                        if isinstance(value, str):
+                            preview = value[:200] + "..." if len(value) > 200 else value
+                            report_lines.append(f"  {key}: {preview}")
+                        elif isinstance(value, (dict, list)):
+                            report_lines.append(f"  {key}: {type(value).__name__} ({len(value) if isinstance(value, list) else 'N/A'} items)")
+                report_lines.append("")
+        
+        # Owner Decisions
+        if db_project.owner_decisions:
+            report_lines.append("OWNER DECISIONS")
+            report_lines.append("-" * 80)
+            for phase, decision in db_project.owner_decisions.items():
+                report_lines.append(f"{phase}: {decision}")
+            report_lines.append("")
+        
+        # Project Data Summary
+        if db_project.project_data:
+            report_lines.append("PROJECT DATA SUMMARY")
+            report_lines.append("-" * 80)
+            pd = db_project.project_data
+            if pd.get("book_brief"):
+                report_lines.append("✓ Book Brief: Completed")
+            if pd.get("world_dossier"):
+                report_lines.append("✓ World Dossier: Completed")
+            if pd.get("character_bible"):
+                report_lines.append("✓ Character Bible: Completed")
+            if pd.get("plot_arc"):
+                report_lines.append("✓ Plot Arc: Completed")
+            if pd.get("outline"):
+                outline_len = len(pd.get("outline", []))
+                report_lines.append(f"✓ Outline: {outline_len} chapters")
+                # Show detailed chapter progress if available
+                if outline_len > 0:
+                    approved_count = sum(1 for ch in pd.get("outline", []) if ch.get("approved") or ch.get("status") == "approved")
+                    if approved_count > 0:
+                        report_lines.append(f"  - Approved chapters: {approved_count} of {outline_len}")
+            if pd.get("draft_chapters"):
+                chapters_count = len(pd.get("draft_chapters", {}))
+                report_lines.append(f"✓ Draft Chapters: {chapters_count} chapters completed")
+                # Show which chapters are completed
+                if chapters_count > 0:
+                    chapter_nums = sorted(pd.get("draft_chapters", {}).keys())
+                    if len(chapter_nums) <= 10:
+                        report_lines.append(f"  - Completed: {', '.join(map(str, chapter_nums))}")
+                    else:
+                        report_lines.append(f"  - Completed: {', '.join(map(str, chapter_nums[:10]))} ... and {len(chapter_nums) - 10} more")
+            if pd.get("full_draft"):
+                report_lines.append("✓ Full Draft: Completed")
+            if pd.get("revision_report"):
+                report_lines.append("✓ Revision Report: Completed")
+            if pd.get("formatted_manuscript"):
+                report_lines.append("✓ Formatted Manuscript: Completed")
+            if pd.get("launch_package"):
+                report_lines.append("✓ Launch Package: Completed")
+            report_lines.append("")
+        
+        # Chat Log Summary
+        if db_project.chat_log:
+            report_lines.append("CHAT LOG SUMMARY")
+            report_lines.append("-" * 80)
+            report_lines.append(f"Total Messages: {len(db_project.chat_log)}")
+            report_lines.append("")
+        
+        report_lines.append("=" * 80)
+        report_lines.append("END OF REPORT")
+        report_lines.append("=" * 80)
+        
+        report_content = "\n".join(report_lines)
+        
+        # Return as text file
+        from fastapi.responses import Response
+        return Response(
+            content=report_content,
+            media_type="text/plain",
+            headers={
+                "Content-Disposition": f'attachment; filename="progress_report_{project_id}.txt"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate progress report for project {project_id}", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate progress report: {str(e)}")
 

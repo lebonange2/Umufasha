@@ -545,7 +545,8 @@ class MultiAgentBookGenerator:
     """
     
     def __init__(self, title: str, premise: str, target_word_count: Optional[int] = None, 
-                 num_chapters: int = 25, tone: str = "narrative", style: str = "third person"):
+                 num_chapters: int = 25, tone: str = "narrative", style: str = "third person",
+                 mid_phase_callback: Optional[callable] = None):
         """Initialize the book generation system."""
         agent_config = get_config()
         
@@ -570,6 +571,9 @@ class MultiAgentBookGenerator:
         # Create agents
         self.manager = ManagerAgent(self.llm_client, self.book_state)
         self.writer = WriterAgent(self.llm_client)
+        
+        # Store callback for mid-phase progress saving
+        self.mid_phase_callback = mid_phase_callback
     
     async def generate_book(self, generate_prose: bool = False) -> Dict[str, Any]:
         """
@@ -638,6 +642,13 @@ class MultiAgentBookGenerator:
                     self.book_state.outline.append(chapter_data)
                     print(f"    ✓ Chapter {chapter_num} outline approved")
                     approved = True
+                    
+                    # Save progress after each chapter is approved
+                    if self.mid_phase_callback:
+                        await self.mid_phase_callback(
+                            f"Chapter {chapter_num} outline approved",
+                            f"Chapter {chapter_num} of {self.book_state.num_chapters}"
+                        )
                 else:
                     revision_count += 1
                     print(f"    ⚠ Revision {revision_count} needed: {review.get('feedback', 'N/A')[:100]}")

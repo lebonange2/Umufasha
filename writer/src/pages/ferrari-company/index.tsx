@@ -51,6 +51,9 @@ export default function BookPublishingHousePage() {
   const [chatLog, setChatLog] = useState<any[]>([]);
   const [showChatLog, setShowChatLog] = useState(false);
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
+  const [previousProjects, setPreviousProjects] = useState<any[]>([]);
+  const [showPreviousProjects, setShowPreviousProjects] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(false);
   
   // Form state
   const [title, setTitle] = useState('');
@@ -439,6 +442,98 @@ export default function BookPublishingHousePage() {
     }
   };
 
+  const fetchPreviousProjects = async () => {
+    setLoadingProjects(true);
+    try {
+      const response = await fetch('/api/ferrari-company/projects');
+      if (response.ok) {
+        const responseText = await response.text();
+        try {
+          const data = JSON.parse(responseText);
+          setPreviousProjects(data.projects || []);
+          setShowPreviousProjects(true);
+        } catch (parseErr) {
+          console.error('Failed to parse projects list:', parseErr);
+          setError('Failed to load previous projects');
+        }
+      } else {
+        const responseText = await response.text();
+        console.error('Failed to fetch projects:', response.status, responseText);
+        setError('Failed to load previous projects');
+      }
+    } catch (err) {
+      console.error('Failed to fetch projects:', err);
+      setError('Failed to load previous projects');
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const resumeProject = async (projectId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/ferrari-company/projects/${projectId}`);
+      if (response.ok) {
+        const responseText = await response.text();
+        try {
+          const projectData = JSON.parse(responseText);
+          setProject(projectData);
+          setShowPreviousProjects(false);
+          // Refresh phase status if in progress
+          if (projectData.status === 'in_progress') {
+            await pollPhaseStatus();
+          }
+        } catch (parseErr) {
+          console.error('Failed to parse project data:', parseErr);
+          setError('Failed to load project');
+        }
+      } else {
+        const responseText = await response.text();
+        console.error('Failed to load project:', response.status, responseText);
+        setError('Failed to load project');
+      }
+    } catch (err: any) {
+      console.error('Failed to resume project:', err);
+      setError(err.message || 'Failed to resume project');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadProgressReport = async () => {
+    if (!project) return;
+
+    try {
+      const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/progress-report`);
+      if (!response.ok) {
+        const responseText = await response.text();
+        let errorMessage = 'Download failed';
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.detail || errorMessage;
+        } catch (e) {
+          errorMessage = responseText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Get the blob and create download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `progress_report_${project.project_id}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      console.error('Download progress report error:', err);
+      setError(err.message || 'Failed to download progress report');
+    }
+  };
+
   const checkFiles = async () => {
     if (!project) return;
 
@@ -530,6 +625,17 @@ export default function BookPublishingHousePage() {
   };
 
   useEffect(() => {
+    // Check for project ID in URL params
+    const params = new URLSearchParams(window.location.search);
+    const projectId = params.get('project_id');
+    if (projectId && !project) {
+      // Load existing project
+      resumeProject(projectId);
+    }
+    // Fetch previous projects on mount
+    if (!project) {
+      fetchPreviousProjects();
+    }
     if (project) {
       loadChatLog();
       if (project.status === 'complete') {
@@ -545,13 +651,79 @@ export default function BookPublishingHousePage() {
           <div className="bg-white rounded-lg shadow-lg p-8">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-3xl font-bold">Book Publishing House</h1>
-              <button
-                onClick={() => navigate('/')}
-                className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-              >
-                Back to Writer
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={fetchPreviousProjects}
+                  disabled={loadingProjects}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                >
+                  {loadingProjects ? 'Loading...' : '📚 Previous Projects'}
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+                >
+                  Back to Writer
+                </button>
+              </div>
             </div>
+
+            {showPreviousProjects && (
+              <div className="mb-6 bg-gray-50 border rounded-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold">Previous Projects</h2>
+                  <button
+                    onClick={() => setShowPreviousProjects(false)}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+                {previousProjects.length === 0 ? (
+                  <p className="text-gray-500">No previous projects found.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {previousProjects.map((proj) => (
+                      <div
+                        key={proj.project_id}
+                        className="border rounded p-4 hover:bg-white bg-white"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-lg">
+                              {proj.title || 'Untitled Book'}
+                            </h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {proj.premise}
+                            </p>
+                            <div className="mt-2 flex gap-4 text-xs text-gray-500">
+                              <span>Status: <strong className="text-gray-700">{proj.status}</strong></span>
+                              <span>Phase: <strong className="text-gray-700">{PHASE_NAMES[proj.current_phase] || proj.current_phase}</strong></span>
+                              <span>Created: <strong className="text-gray-700">{new Date(proj.created_at).toLocaleDateString()}</strong></span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <button
+                              onClick={() => resumeProject(proj.project_id)}
+                              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                            >
+                              ▶ Resume
+                            </button>
+                            <a
+                              href={`/api/ferrari-company/projects/${proj.project_id}/progress-report`}
+                              download
+                              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm inline-block text-center"
+                            >
+                              📄 Report
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-4">
               <div>
@@ -722,12 +894,20 @@ export default function BookPublishingHousePage() {
               <h1 className="text-3xl font-bold">{project.title || 'Untitled Book'}</h1>
               <p className="text-gray-600 mt-2">{project.premise}</p>
             </div>
-            <button
-              onClick={() => navigate('/')}
-              className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-            >
-              Back to Writer
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={downloadProgressReport}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                📄 Progress Report
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+              >
+                Back to Writer
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-4 mb-4">

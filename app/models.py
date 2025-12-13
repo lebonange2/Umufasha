@@ -286,3 +286,46 @@ class BookChapter(Base):
         Index("idx_chapters_number", "project_id", "chapter_number"),
         UniqueConstraint("project_id", "chapter_number", name="uq_project_chapter"),
     )
+
+
+class BookPublishingHouseProject(Base):
+    """Book Publishing House project model for persistence."""
+    __tablename__ = "book_publishing_house_projects"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=True)
+    premise = Column(Text, nullable=False)
+    target_word_count = Column(Integer, nullable=True)
+    audience = Column(String(255), nullable=True)
+    output_directory = Column(String(255), default="book_outputs")
+    model = Column(String(50), default="qwen3:30b")  # Worker agent model
+    ceo_model = Column(String(50), nullable=True)  # CEO/manager model
+    
+    # Project state
+    current_phase = Column(String(50), default="strategy_concept")
+    status = Column(String(50), default="in_progress")  # in_progress, complete, stopped, error
+    
+    # Project data (stored as JSON for flexibility)
+    project_data = Column(JSON, nullable=True)  # Full BookProject state
+    artifacts = Column(JSON, nullable=True)  # Phase artifacts
+    owner_decisions = Column(JSON, nullable=True)  # Owner decisions per phase
+    chat_log = Column(JSON, nullable=True)  # Agent communication log
+    
+    # Progress tracking
+    progress_log = Column(JSON, nullable=True)  # List of progress entries with timestamps
+    error_log = Column(JSON, nullable=True)  # List of errors with timestamps
+    
+    # Reference documents
+    reference_documents = Column(JSON, nullable=True)  # List of document IDs
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_activity_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_bph_status", "status"),
+        Index("idx_bph_updated", "updated_at"),
+        Index("idx_bph_phase", "current_phase"),
+    )

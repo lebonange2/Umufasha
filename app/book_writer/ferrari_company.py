@@ -618,7 +618,7 @@ class NarrativeEngineeringDirectorAgent(BaseAgent):
         super().__init__("NarrativeEngineeringDirector", "Narrative Engineering Director", 
                         llm_client, message_bus)
     
-    async def create_outline(self, project: BookProject) -> List[Dict[str, Any]]:
+    async def create_outline(self, project: BookProject, mid_phase_callback: Optional[callable] = None) -> List[Dict[str, Any]]:
         """Create full hierarchical outline using engineering team."""
         try:
             # Use the existing multi-agent system for outline generation
@@ -637,7 +637,8 @@ class NarrativeEngineeringDirectorAgent(BaseAgent):
                 target_word_count=project.target_word_count,
                 num_chapters=num_chapters,
                 tone=project.book_brief.get('tone', 'narrative') if project.book_brief else 'narrative',
-                style=project.book_brief.get('style', 'third person') if project.book_brief else 'third person'
+                style=project.book_brief.get('style', 'third person') if project.book_brief else 'third person',
+                mid_phase_callback=mid_phase_callback
             )
             
             # Generate outline
@@ -665,14 +666,15 @@ class ProductionDirectorAgent(BaseAgent):
         self.drafting_agents = []
         self.assembly_agents = []
     
-    async def create_draft(self, project: BookProject) -> Dict[int, str]:
+    async def create_draft(self, project: BookProject, mid_phase_callback: Optional[callable] = None) -> Dict[int, str]:
         """Create full draft using drafting agents."""
         draft_chapters = {}
         
         if not project.outline:
             return draft_chapters
         
-        for chapter_data in project.outline:
+        total_chapters = len(project.outline)
+        for idx, chapter_data in enumerate(project.outline, 1):
             chapter_num = chapter_data.get('chapter_number', 0)
             
             # Drafting agent writes chapter
@@ -681,6 +683,10 @@ class ProductionDirectorAgent(BaseAgent):
             
             await self.send_message("CEO", Phase.PROTOTYPES_TESTING, 
                                   f"Drafted Chapter {chapter_num}")
+            
+            # Save progress after each chapter is completed
+            if mid_phase_callback:
+                await mid_phase_callback(f"Chapter {chapter_num} draft completed", f"Chapter {idx} of {total_chapters}")
         
         # Assembly agent combines chapters
         full_draft = await self._assemble_draft(draft_chapters)
@@ -1339,6 +1345,9 @@ class FerrariBookCompany:
         # Create message bus
         self.message_bus = MessageBus()
         
+        # Mid-phase progress saving callback (set by routes when executing phases)
+        self._mid_phase_save_callback: Optional[callable] = None
+        
         # Create all agents - CEO uses separate model
         self.ceo = CEOAgent(self.ceo_llm_client, self.message_bus)
         self.cpso = CPSOAgent(self.llm_client, self.message_bus)
@@ -1459,13 +1468,23 @@ class FerrariBookCompany:
         
         elif phase == Phase.DETAILED_ENGINEERING:
             # Narrative Engineering Director creates outline
-            outline = await self.narrative_engineering_director.create_outline(self.project)
+            # Pass mid-phase callback if available
+            mid_phase_callback = getattr(self, '_mid_phase_save_callback', None)
+            outline = await self.narrative_engineering_director.create_outline(self.project, mid_phase_callback)
             self.project.outline = outline
+            # Save progress after outline is updated
+            if mid_phase_callback:
+                await mid_phase_callback(f"Outline updated: {len(outline)} chapters total")
         
         elif phase == Phase.PROTOTYPES_TESTING:
             # Production Director creates draft
-            draft_chapters = await self.production_director.create_draft(self.project)
+            # Pass mid-phase callback if available
+            mid_phase_callback = getattr(self, '_mid_phase_save_callback', None)
+            draft_chapters = await self.production_director.create_draft(self.project, mid_phase_callback)
             self.project.draft_chapters = draft_chapters
+            # Save progress after draft chapters are updated
+            if mid_phase_callback:
+                await mid_phase_callback(f"Draft chapters updated: {len(draft_chapters)} chapters completed")
             
             # QA Director tests
             revision_report = await self.qa_director.test_and_review(self.project)
