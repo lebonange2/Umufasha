@@ -129,17 +129,24 @@ if command -v apt-get &> /dev/null; then
             INSTALL_EXIT_CODE=${PIPESTATUS[0]}
         fi
         
-        # RUBRIC STEP 3: Success Detection - Check exit code AND output patterns
+        # RUBRIC STEP 3: Success Detection - Check output patterns FIRST (critical for containers)
+        # In Docker containers without systemd, apt-get may return non-zero even on success
+        # Priority: Check output patterns > dpkg verification > exit code
         local INSTALL_SUCCESS=false
-        if [ "$INSTALL_EXIT_CODE" -eq 0 ]; then
-            # Success indicators: exit code 0 AND one of these patterns
-            if echo "$INSTALL_OUTPUT" | grep -qE "(Setting up docker-compose|Setting up.*docker-compose|is already the newest version|already the newest|docker-compose.*is already|docker-compose.*already.*newest)"; then
-                INSTALL_SUCCESS=true
-            fi
+        
+        # Check for success indicators in output REGARDLESS of exit code
+        if echo "$INSTALL_OUTPUT" | grep -qE "(Setting up docker-compose|Setting up.*docker-compose|is already the newest version|already the newest|docker-compose.*is already|docker-compose.*already.*newest)"; then
+            print_status "Installation output indicates success (package setup detected)"
+            INSTALL_SUCCESS=true
+        elif [ "$INSTALL_EXIT_CODE" -eq 0 ]; then
+            # Exit code 0 without explicit success message - still likely successful
+            print_status "Installation completed with exit code 0"
+            INSTALL_SUCCESS=true
         fi
         
-        # RUBRIC STEP 4: Post-installation Verification
-        if [ "$INSTALL_SUCCESS" = "true" ] || [ "$INSTALL_EXIT_CODE" -eq 0 ]; then
+        # RUBRIC STEP 4: Post-installation Verification (dpkg is most reliable)
+        # Always check dpkg after installation attempt, even if exit code was non-zero
+        if [ "$INSTALL_SUCCESS" = "true" ] || [ "$INSTALL_EXIT_CODE" -eq 0 ] || echo "$INSTALL_OUTPUT" | grep -qE "Setting up docker-compose"; then
             # Wait for system to update
             sleep 2
             hash -r 2>/dev/null || true
@@ -367,8 +374,16 @@ if command -v apt-get &> /dev/null; then
         
         # Final fallback: Check dpkg even if INSTALLED=false
         # This handles the case where installation succeeded but detection failed
+        # Critical for container environments where binary detection may fail
         if dpkg -l | grep -qE "^ii.*docker-compose"; then
-            print_status "Docker Compose package found via dpkg (installation succeeded)"
+            print_status "Docker Compose package found via dpkg (installation succeeded despite detection issues)"
+            echo "true"
+            return 0
+        fi
+        
+        # Extra check: If docker-compose-plugin is installed (V2 as plugin)
+        if dpkg -l | grep -qE "^ii.*docker-compose-plugin"; then
+            print_status "Docker Compose plugin found via dpkg (V2 installed)"
             echo "true"
             return 0
         fi
