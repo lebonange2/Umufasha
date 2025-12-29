@@ -28,9 +28,8 @@ def get_neo4j_driver() -> Driver:
             logger.info("Neo4j connection established", uri=uri, user=user)
         except Exception as e:
             logger.error("Failed to connect to Neo4j", error=str(e), uri=uri)
-            # Don't raise - let callers handle gracefully
-            # This allows the app to work even if Neo4j is down
-            raise
+            # Raise ConnectionError so callers can handle it
+            raise ConnectionError(f"Neo4j is not available: {str(e)}") from e
     
     return _neo4j_driver
 
@@ -52,10 +51,24 @@ def close_neo4j_driver():
 @contextmanager
 def get_neo4j_session(database: str = "neo4j"):
     """Get a Neo4j session with automatic cleanup."""
-    driver = get_neo4j_driver()
-    session = driver.session(database=database)
     try:
-        yield session
-    finally:
-        session.close()
+        driver = get_neo4j_driver()
+        session = driver.session(database=database)
+        try:
+            yield session
+        finally:
+            session.close()
+    except ConnectionError:
+        # Re-raise connection errors
+        raise
+    except ConnectionError:
+        # Re-raise connection errors
+        raise
+    except Exception as e:
+        # If we can't get a driver or session, raise a more specific error
+        # that can be caught by callers
+        error_msg = str(e)
+        if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
+            raise ConnectionError(f"Neo4j is not available: {error_msg}") from e
+        raise
 

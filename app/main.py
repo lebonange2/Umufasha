@@ -52,8 +52,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from app.graph.schema import create_constraints_and_indexes
         create_constraints_and_indexes()
         logger.info("Neo4j schema initialized")
+    except ConnectionError as e:
+        logger.warning("Neo4j is not available, skipping schema initialization", error=str(e))
     except Exception as e:
-        logger.warning("Failed to initialize Neo4j schema", error=str(e))
+        error_msg = str(e)
+        if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
+            logger.warning("Neo4j is not available, skipping schema initialization", error=error_msg)
+        else:
+            logger.warning("Failed to initialize Neo4j schema", error=str(e))
     
     # Initialize scheduler
     scheduler = get_scheduler()

@@ -41,11 +41,16 @@ class GraphSyncer:
         """Sync directly from artifacts dictionary."""
         try:
             # Ensure project exists
-            GraphRepository.create_project(
-                project_id=project_id,
-                title=artifacts.get("title", "Untitled"),
-                genre=None
-            )
+            try:
+                GraphRepository.create_project(
+                    project_id=project_id,
+                    title=artifacts.get("title", "Untitled"),
+                    genre=None
+                )
+            except ConnectionError:
+                # Neo4j not available - skip sync
+                logger.warning(f"Neo4j not available, skipping sync for project {project_id}")
+                return
             
             # Sync characters
             if artifacts.get("character_bible"):
@@ -60,8 +65,14 @@ class GraphSyncer:
                 GraphSyncer._sync_chapters_scenes(project_id, artifacts["outline"], artifacts.get("draft_chapters"))
             
             logger.info(f"Synced project {project_id} from artifacts")
+        except ConnectionError as e:
+            logger.warning(f"Neo4j not available, skipping sync from artifacts for project {project_id}")
         except Exception as e:
-            logger.error(f"Failed to sync from artifacts", error=str(e), project_id=project_id)
+            error_msg = str(e)
+            if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
+                logger.warning(f"Neo4j connection issue, skipping sync from artifacts for project {project_id}")
+            else:
+                logger.error(f"Failed to sync from artifacts", error=str(e), project_id=project_id)
     
     @staticmethod
     def _sync_characters(project_id: str, character_bible: Dict[str, Any]):

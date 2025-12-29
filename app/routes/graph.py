@@ -115,7 +115,11 @@ async def get_subgraph(
                 logger.error("Failed to initialize missing project", error=str(init_err))
         
         # For connection errors, return empty graph instead of failing
-        if "connection" in error_msg.lower() or "neo4j" in error_msg.lower():
+        if ("connection" in error_msg.lower() or 
+            "neo4j" in error_msg.lower() or 
+            "ConnectionError" in error_msg or 
+            "ServiceUnavailable" in error_msg or
+            "refused" in error_msg.lower()):
             logger.warning(f"Neo4j connection issue for project {project_id}, returning empty graph")
             return {"nodes": [], "edges": []}
         
