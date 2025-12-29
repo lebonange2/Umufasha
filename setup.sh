@@ -57,6 +57,111 @@ INSTALLED_DEPS=false
 if command -v apt-get &> /dev/null; then
     # Debian/Ubuntu
     print_status "Detected Debian/Ubuntu - installing build dependencies and Docker Compose..."
+    INSTALL_DOCKER_COMPOSE=false
+    
+    # Function to install docker-compose
+    install_docker_compose_ubuntu() {
+        local USE_SUDO=$1
+        local INSTALLED=false
+        
+        # Method 1: Try docker-compose package (most common)
+        print_status "Attempting to install docker-compose via apt..."
+        if [ "$USE_SUDO" = "true" ] && command -v sudo &> /dev/null; then
+            if sudo apt-get install -y docker-compose 2>&1 | tee /tmp/docker-compose-install.log | grep -qE "(Setting up|already the newest|is already|0 upgraded)"; then
+                if command -v docker-compose &> /dev/null; then
+                    print_success "Docker Compose installed via apt"
+                    INSTALLED=true
+                else
+                    print_warning "Package installed but command not found in PATH"
+                fi
+            else
+                print_warning "apt-get install failed, trying alternative methods..."
+            fi
+        else
+            if apt-get install -y docker-compose 2>&1 | tee /tmp/docker-compose-install.log | grep -qE "(Setting up|already the newest|is already|0 upgraded)"; then
+                if command -v docker-compose &> /dev/null; then
+                    print_success "Docker Compose installed via apt"
+                    INSTALLED=true
+                else
+                    print_warning "Package installed but command not found in PATH"
+                fi
+            else
+                print_warning "apt-get install failed, trying alternative methods..."
+            fi
+        fi
+        
+        # Method 2: Try docker-compose-plugin (Docker Compose V2 as plugin)
+        if [ "$INSTALLED" = "false" ]; then
+            print_status "Attempting to install docker-compose-plugin..."
+            if [ "$USE_SUDO" = "true" ] && command -v sudo &> /dev/null; then
+                if sudo apt-get install -y docker-compose-plugin 2>&1 | grep -qE "(Setting up|already the newest|is already)"; then
+                    if docker compose version &> /dev/null; then
+                        print_success "Docker Compose plugin installed (use 'docker compose' command)"
+                        INSTALLED=true
+                    fi
+                fi
+            else
+                if apt-get install -y docker-compose-plugin 2>&1 | grep -qE "(Setting up|already the newest|is already)"; then
+                    if docker compose version &> /dev/null; then
+                        print_success "Docker Compose plugin installed (use 'docker compose' command)"
+                        INSTALLED=true
+                    fi
+                fi
+            fi
+        fi
+        
+        # Method 3: Install via pip as fallback
+        if [ "$INSTALLED" = "false" ]; then
+            print_status "Attempting to install docker-compose via pip..."
+            if pip3 install --user docker-compose 2>&1 | grep -qE "(Successfully installed|Requirement already satisfied)"; then
+                # Add pip user bin to PATH if not already there
+                export PATH="$HOME/.local/bin:$PATH"
+                if command -v docker-compose &> /dev/null; then
+                    print_success "Docker Compose installed via pip"
+                    INSTALLED=true
+                fi
+            fi
+        fi
+        
+        # Method 4: Download binary directly from GitHub (last resort)
+        if [ "$INSTALLED" = "false" ]; then
+            print_status "Downloading docker-compose binary from GitHub..."
+            local COMPOSE_VERSION="v2.24.0"
+            local ARCH=$(uname -m)
+            local OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+            
+            # Map architecture
+            case "$ARCH" in
+                x86_64) ARCH="x86_64" ;;
+                aarch64|arm64) ARCH="aarch64" ;;
+                *) print_warning "Unsupported architecture: $ARCH"; return 1 ;;
+            esac
+            
+            local DOWNLOAD_URL="https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-${OS}-${ARCH}"
+            local INSTALL_PATH="/usr/local/bin/docker-compose"
+            
+            if [ "$USE_SUDO" = "true" ] && command -v sudo &> /dev/null; then
+                if sudo curl -L "$DOWNLOAD_URL" -o "$INSTALL_PATH" 2>/dev/null && \
+                   sudo chmod +x "$INSTALL_PATH" 2>/dev/null; then
+                    if command -v docker-compose &> /dev/null; then
+                        print_success "Docker Compose installed from GitHub"
+                        INSTALLED=true
+                    fi
+                fi
+            else
+                if curl -L "$DOWNLOAD_URL" -o "$INSTALL_PATH" 2>/dev/null && \
+                   chmod +x "$INSTALL_PATH" 2>/dev/null; then
+                    if command -v docker-compose &> /dev/null; then
+                        print_success "Docker Compose installed from GitHub"
+                        INSTALLED=true
+                    fi
+                fi
+            fi
+        fi
+        
+        echo "$INSTALLED"
+    }
+    
     if command -v sudo &> /dev/null; then
         if sudo apt-get update -qq > /dev/null 2>&1 && \
            sudo apt-get install -y -qq \
@@ -69,12 +174,27 @@ if command -v apt-get &> /dev/null; then
                libswresample-dev \
                libavfilter-dev \
                build-essential \
-               docker-compose \
+               curl \
                > /dev/null 2>&1; then
-            print_success "System dependencies installed"
+            print_success "Build dependencies installed"
             INSTALLED_DEPS=true
         else
-            print_warning "Failed to install system dependencies (may need root/sudo)"
+            print_warning "Failed to install build dependencies (may need root/sudo)"
+        fi
+        
+        # Install docker-compose separately with better error handling
+        print_status "Installing Docker Compose..."
+        if [ "$(install_docker_compose_ubuntu true)" = "true" ]; then
+            INSTALL_DOCKER_COMPOSE=true
+            print_success "Docker Compose installation completed"
+        else
+            print_error "Docker Compose installation failed. Check /tmp/docker-compose-install.log for details"
+            if [ -f /tmp/docker-compose-install.log ]; then
+                print_warning "Last few lines of install log:"
+                tail -5 /tmp/docker-compose-install.log | while read line; do
+                    print_warning "  $line"
+                done
+            fi
         fi
     else
         # Try without sudo (for Docker containers running as root)
@@ -89,12 +209,27 @@ if command -v apt-get &> /dev/null; then
                libswresample-dev \
                libavfilter-dev \
                build-essential \
-               docker-compose \
+               curl \
                > /dev/null 2>&1; then
-            print_success "System dependencies installed"
+            print_success "Build dependencies installed"
             INSTALLED_DEPS=true
         else
-            print_warning "Failed to install system dependencies"
+            print_warning "Failed to install build dependencies"
+        fi
+        
+        # Install docker-compose separately
+        print_status "Installing Docker Compose..."
+        if [ "$(install_docker_compose_ubuntu false)" = "true" ]; then
+            INSTALL_DOCKER_COMPOSE=true
+            print_success "Docker Compose installation completed"
+        else
+            print_error "Docker Compose installation failed. Check /tmp/docker-compose-install.log for details"
+            if [ -f /tmp/docker-compose-install.log ]; then
+                print_warning "Last few lines of install log:"
+                tail -5 /tmp/docker-compose-install.log | while read line; do
+                    print_warning "  $line"
+                done
+            fi
         fi
     fi
 elif command -v yum &> /dev/null; then
@@ -176,21 +311,34 @@ fi
 # Check for Docker Compose (required for Neo4j)
 print_status "Checking Docker Compose installation..."
 DOCKER_COMPOSE_AVAILABLE=false
+
+# Add pip user bin to PATH if docker-compose was installed via pip
+if [ -d "$HOME/.local/bin" ] && [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
 if command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE_VERSION=$(docker-compose --version 2>/dev/null | head -n1)
     print_success "Docker Compose found: $DOCKER_COMPOSE_VERSION"
     DOCKER_COMPOSE_AVAILABLE=true
-elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
+elif command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
     DOCKER_COMPOSE_VERSION=$(docker compose version 2>/dev/null | head -n1)
     print_success "Docker Compose (V2) found: $DOCKER_COMPOSE_VERSION"
     DOCKER_COMPOSE_AVAILABLE=true
 else
     print_error "Docker Compose is not installed or not available in PATH"
     print_error "Docker Compose is REQUIRED for Neo4j graph database functionality"
-    print_error "Please install Docker Compose:"
-    print_error "  Debian/Ubuntu: sudo apt-get install docker-compose"
-    print_error "  Or install Docker Desktop which includes Docker Compose V2"
-    print_error "  Or install standalone: https://docs.docker.com/compose/install/"
+    print_error ""
+    print_error "Installation options:"
+    print_error "  1. Via package manager:"
+    print_error "     Debian/Ubuntu: sudo apt-get install docker-compose-plugin"
+    print_error "     Or: sudo apt-get install docker-compose"
+    print_error "  2. Via pip: pip3 install --user docker-compose"
+    print_error "  3. Download binary:"
+    print_error "     sudo curl -L \"https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose"
+    print_error "     sudo chmod +x /usr/local/bin/docker-compose"
+    print_error "  4. Install Docker Desktop which includes Docker Compose V2"
+    print_error ""
     print_warning "The application will use memory store fallback, but Neo4j features will be limited"
 fi
 
