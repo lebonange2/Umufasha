@@ -82,11 +82,11 @@ class GraphRepository:
             with get_neo4j_session() as session:
                 # Build query based on filters
                 if focus_node_id:
-                    # Start from specific node
-                    query = """
-                    MATCH (project:Project {id: $project_id})
-                    MATCH (start {id: $focus_node_id})
-                    MATCH path = (start)-[*0..$depth]-(connected)
+                    # Start from specific node (depth must be literal, not parameter)
+                    query = f"""
+                    MATCH (project:Project {{id: $project_id}})
+                    MATCH (start {{id: $focus_node_id}})
+                    MATCH path = (start)-[*0..{depth}]-(connected)
                     WHERE (start)-[*]-(project) OR start = project
                     WITH project, nodes(path) as nodes_in_path, relationships(path) as rels_in_path
                     UNWIND nodes_in_path as n
@@ -95,7 +95,7 @@ class GraphRepository:
                     WITH project, all_nodes, collect(DISTINCT r) as all_rels
                     RETURN all_nodes, all_rels
                     """
-                    result = session.run(query, project_id=project_id, focus_node_id=focus_node_id, depth=depth)
+                    result = session.run(query, project_id=project_id, focus_node_id=focus_node_id)
                 else:
                     # Get all nodes connected to project
                     label_filters = []
@@ -114,10 +114,11 @@ class GraphRepository:
                         WITH project, collect(DISTINCT s) as stage_scenes
                         """
                     
+                    # Note: depth must be a literal in Cypher, not a parameter
                     query = f"""
                     MATCH (project:Project {{id: $project_id}})
                     {stage_filter}
-                    OPTIONAL MATCH (project)-[*0..$depth]-(n)
+                    OPTIONAL MATCH (project)-[*0..{depth}]-(n)
                     WHERE n IS NOT NULL {label_filter}
                     WITH project, collect(DISTINCT n) as all_nodes
                     UNWIND all_nodes as n1
@@ -126,17 +127,17 @@ class GraphRepository:
                     WITH project, all_nodes, collect(DISTINCT r) as all_rels
                     RETURN project, all_nodes, all_rels
                     """
-                    params = {"project_id": project_id, "depth": depth}
+                    params = {"project_id": project_id}
                     if stage:
                         params["stage"] = stage
                     if chapter is not None:
-                        # Filter by chapter
+                        # Filter by chapter (replace the depth pattern with chapter filter)
                         query = query.replace(
-                            "OPTIONAL MATCH (project)-[*0..$depth]-(n)",
+                            f"OPTIONAL MATCH (project)-[*0..{depth}]-(n)",
                             "OPTIONAL MATCH (project)-[:HAS_CHAPTER]->(ch:Chapter {number: $chapter})-[:HAS_SCENE]->(s:Scene)"
                         )
                         query = query.replace("WHERE n IS NOT NULL", "WHERE n IS NOT NULL AND (n = ch OR n = s OR n IN all_nodes)")
-                    params["chapter"] = chapter
+                        params["chapter"] = chapter
                 result = session.run(query, **params)
                 
                 record = result.single()
