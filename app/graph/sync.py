@@ -15,11 +15,16 @@ class GraphSyncer:
         """Sync project data from Book Publishing House to Neo4j graph."""
         try:
             # Ensure project exists in graph
-            GraphRepository.create_project(
-                project_id=project_id,
-                title=project_data.get("title", "Untitled"),
-                genre=None
-            )
+            try:
+                GraphRepository.create_project(
+                    project_id=project_id,
+                    title=project_data.get("title", "Untitled"),
+                    genre=None
+                )
+            except ConnectionError:
+                # Neo4j not available - skip sync
+                logger.warning(f"Neo4j not available, skipping sync for project {project_id}")
+                return
             
             # Sync characters from character_bible
             if project_data.get("company") and hasattr(project_data["company"], "project"):
@@ -33,8 +38,14 @@ class GraphSyncer:
                 pass
             
             logger.info(f"Synced project {project_id} to graph")
+        except ConnectionError as e:
+            logger.warning(f"Neo4j not available, skipping sync for project {project_id}")
         except Exception as e:
-            logger.error(f"Failed to sync project to graph", error=str(e), project_id=project_id)
+            error_msg = str(e)
+            if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
+                logger.warning(f"Neo4j connection issue, skipping sync for project {project_id}")
+            else:
+                logger.error(f"Failed to sync project to graph", error=str(e), project_id=project_id)
     
     @staticmethod
     def sync_from_artifacts(project_id: str, artifacts: Dict[str, Any]):

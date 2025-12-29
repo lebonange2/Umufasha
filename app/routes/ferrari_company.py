@@ -1377,7 +1377,7 @@ async def sync_project_graph(project_id: str, db: AsyncSession = Depends(get_db)
     try:
         # Load project from database
         result = await db.execute(
-            select(BPHProject).where(BPHProject.project_id == project_id)
+            select(BPHProject).where(BPHProject.id == project_id)
         )
         db_project = result.scalar_one_or_none()
         
