@@ -182,19 +182,31 @@ if command -v apt-get &> /dev/null; then
             print_warning "Failed to install build dependencies (may need root/sudo)"
         fi
         
-        # Install docker-compose separately with better error handling
-        print_status "Installing Docker Compose..."
+        # Install docker-compose separately with better error handling (REQUIRED)
+        print_status "Installing Docker Compose (REQUIRED)..."
         if [ "$(install_docker_compose_ubuntu true)" = "true" ]; then
             INSTALL_DOCKER_COMPOSE=true
             print_success "Docker Compose installation completed"
         else
-            print_error "Docker Compose installation failed. Check /tmp/docker-compose-install.log for details"
+            print_error "=========================================="
+            print_error "CRITICAL ERROR: Docker Compose installation FAILED"
+            print_error "=========================================="
+            print_error ""
+            print_error "Docker Compose is a MANDATORY dependency and installation failed."
+            print_error "Check /tmp/docker-compose-install.log for details:"
             if [ -f /tmp/docker-compose-install.log ]; then
-                print_warning "Last few lines of install log:"
-                tail -5 /tmp/docker-compose-install.log | while read line; do
-                    print_warning "  $line"
+                print_error ""
+                tail -10 /tmp/docker-compose-install.log | while read line; do
+                    print_error "  $line"
                 done
+                print_error ""
             fi
+            print_error "Please install Docker Compose manually and run setup again:"
+            print_error "  sudo apt-get install -y docker-compose"
+            print_error "  Or: sudo apt-get install -y docker-compose-plugin"
+            print_error ""
+            print_error "Setup ABORTED."
+            exit 1
         fi
     else
         # Try without sudo (for Docker containers running as root)
@@ -217,19 +229,31 @@ if command -v apt-get &> /dev/null; then
             print_warning "Failed to install build dependencies"
         fi
         
-        # Install docker-compose separately
-        print_status "Installing Docker Compose..."
+        # Install docker-compose separately (REQUIRED)
+        print_status "Installing Docker Compose (REQUIRED)..."
         if [ "$(install_docker_compose_ubuntu false)" = "true" ]; then
             INSTALL_DOCKER_COMPOSE=true
             print_success "Docker Compose installation completed"
         else
-            print_error "Docker Compose installation failed. Check /tmp/docker-compose-install.log for details"
+            print_error "=========================================="
+            print_error "CRITICAL ERROR: Docker Compose installation FAILED"
+            print_error "=========================================="
+            print_error ""
+            print_error "Docker Compose is a MANDATORY dependency and installation failed."
+            print_error "Check /tmp/docker-compose-install.log for details:"
             if [ -f /tmp/docker-compose-install.log ]; then
-                print_warning "Last few lines of install log:"
-                tail -5 /tmp/docker-compose-install.log | while read line; do
-                    print_warning "  $line"
+                print_error ""
+                tail -10 /tmp/docker-compose-install.log | while read line; do
+                    print_error "  $line"
                 done
+                print_error ""
             fi
+            print_error "Please install Docker Compose manually and run setup again:"
+            print_error "  apt-get install -y docker-compose"
+            print_error "  Or: apt-get install -y docker-compose-plugin"
+            print_error ""
+            print_error "Setup ABORTED."
+            exit 1
         fi
     fi
 elif command -v yum &> /dev/null; then
@@ -308,8 +332,8 @@ if [ "$INSTALLED_DEPS" = false ]; then
     print_warning "  Or make faster-whisper optional by removing it from requirements.txt"
 fi
 
-# Check for Docker Compose (required for Neo4j)
-print_status "Checking Docker Compose installation..."
+# Check for Docker Compose (REQUIRED - setup will fail if not found)
+print_status "Checking Docker Compose installation (REQUIRED)..."
 DOCKER_COMPOSE_AVAILABLE=false
 
 # Add pip user bin to PATH if docker-compose was installed via pip
@@ -326,20 +350,34 @@ elif command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1;
     print_success "Docker Compose (V2) found: $DOCKER_COMPOSE_VERSION"
     DOCKER_COMPOSE_AVAILABLE=true
 else
-    print_error "Docker Compose is not installed or not available in PATH"
-    print_error "Docker Compose is REQUIRED for Neo4j graph database functionality"
+    print_error "=========================================="
+    print_error "CRITICAL ERROR: Docker Compose is REQUIRED"
+    print_error "=========================================="
     print_error ""
-    print_error "Installation options:"
-    print_error "  1. Via package manager:"
-    print_error "     Debian/Ubuntu: sudo apt-get install docker-compose-plugin"
-    print_error "     Or: sudo apt-get install docker-compose"
-    print_error "  2. Via pip: pip3 install --user docker-compose"
-    print_error "  3. Download binary:"
-    print_error "     sudo curl -L \"https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose"
-    print_error "     sudo chmod +x /usr/local/bin/docker-compose"
-    print_error "  4. Install Docker Desktop which includes Docker Compose V2"
+    print_error "Docker Compose is a MANDATORY dependency for this application."
+    print_error "The setup process CANNOT continue without it."
     print_error ""
-    print_warning "The application will use memory store fallback, but Neo4j features will be limited"
+    print_error "Installation options (choose one):"
+    print_error ""
+    print_error "Option 1 - Via package manager (recommended):"
+    print_error "  Debian/Ubuntu: sudo apt-get update && sudo apt-get install -y docker-compose"
+    print_error "  Or: sudo apt-get install -y docker-compose-plugin"
+    print_error ""
+    print_error "Option 2 - Via pip:"
+    print_error "  pip3 install --user docker-compose"
+    print_error "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    print_error ""
+    print_error "Option 3 - Download binary directly:"
+    print_error "  sudo curl -L \"https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose"
+    print_error "  sudo chmod +x /usr/local/bin/docker-compose"
+    print_error ""
+    print_error "Option 4 - Install Docker Desktop:"
+    print_error "  Docker Desktop includes Docker Compose V2"
+    print_error ""
+    print_error "After installing, run this setup script again."
+    print_error ""
+    print_error "Setup ABORTED."
+    exit 1
 fi
 
 # Create virtual environment if it doesn't exist

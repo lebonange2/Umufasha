@@ -44,15 +44,25 @@ An intelligent personal assistant that calls or emails you about appointments, p
 
 ## 🚀 Quick Start
 
+### Prerequisites
+- **Python 3.8+** (required)
+- **Docker Compose** (REQUIRED - setup will fail without it)
+  - Install via: `sudo apt-get install -y docker-compose` (Debian/Ubuntu)
+  - Or: `sudo apt-get install -y docker-compose-plugin`
+  - Or: `pip3 install --user docker-compose`
+  - Or: Install Docker Desktop (includes Docker Compose V2)
+
 ### One-Command Setup
 ```bash
 ./setup.sh
 ```
+**Note**: Setup will fail if Docker Compose is not installed. Install it first if needed.
 
 ### Start the Application
 ```bash
 ./start.sh
 ```
+**Note**: Application startup will fail if Docker Compose is not available.
 
 ### Access Admin Interface
 - **URL**: http://localhost:8000/admin

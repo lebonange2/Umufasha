@@ -45,12 +45,25 @@ else
     echo "⚠️ Install with: curl -fsSL https://ollama.com/install.sh | sh"
 fi
 
-# Start Neo4j if docker-compose is available
+# Check for Docker Compose (REQUIRED)
 COMPOSE_CMD=""
 if command -v docker-compose &> /dev/null; then
     COMPOSE_CMD="docker-compose"
 elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
     COMPOSE_CMD="docker compose"
+fi
+
+if [ -z "$COMPOSE_CMD" ]; then
+    echo "❌ ERROR: Docker Compose is REQUIRED but not found!"
+    echo ""
+    echo "Docker Compose is a mandatory dependency for this application."
+    echo "Please install Docker Compose and try again:"
+    echo "  Debian/Ubuntu: sudo apt-get install -y docker-compose"
+    echo "  Or: sudo apt-get install -y docker-compose-plugin"
+    echo "  Or: pip3 install --user docker-compose"
+    echo ""
+    echo "Application startup ABORTED."
+    exit 1
 fi
 
 if [ -n "$COMPOSE_CMD" ]; then
