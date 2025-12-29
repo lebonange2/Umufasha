@@ -27,10 +27,41 @@ class GraphSyncer:
                 GraphSyncer._sync_characters(project_id, bp.character_bible)
                 GraphSyncer._sync_locations(project_id, bp.world_dossier)
                 GraphSyncer._sync_chapters_scenes(project_id, bp.outline, bp.draft_chapters)
+            else:
+                # Try to sync from artifacts if company not available
+                # This happens when syncing from database
+                pass
             
             logger.info(f"Synced project {project_id} to graph")
         except Exception as e:
             logger.error(f"Failed to sync project to graph", error=str(e), project_id=project_id)
+    
+    @staticmethod
+    def sync_from_artifacts(project_id: str, artifacts: Dict[str, Any]):
+        """Sync directly from artifacts dictionary."""
+        try:
+            # Ensure project exists
+            GraphRepository.create_project(
+                project_id=project_id,
+                title=artifacts.get("title", "Untitled"),
+                genre=None
+            )
+            
+            # Sync characters
+            if artifacts.get("character_bible"):
+                GraphSyncer._sync_characters(project_id, artifacts["character_bible"])
+            
+            # Sync locations
+            if artifacts.get("world_dossier"):
+                GraphSyncer._sync_locations(project_id, artifacts["world_dossier"])
+            
+            # Sync chapters/scenes
+            if artifacts.get("outline"):
+                GraphSyncer._sync_chapters_scenes(project_id, artifacts["outline"], artifacts.get("draft_chapters"))
+            
+            logger.info(f"Synced project {project_id} from artifacts")
+        except Exception as e:
+            logger.error(f"Failed to sync from artifacts", error=str(e), project_id=project_id)
     
     @staticmethod
     def _sync_characters(project_id: str, character_bible: Dict[str, Any]):

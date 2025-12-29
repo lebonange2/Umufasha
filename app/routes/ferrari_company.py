@@ -1359,6 +1359,65 @@ async def get_file_info(project_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/ferrari-company/projects/{project_id}/sync-graph")
+async def sync_project_graph(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Sync project data to Neo4j graph."""
+    try:
+        # Load project from database
+        result = await db.execute(
+            select(BPHProject).where(BPHProject.project_id == project_id)
+        )
+        db_project = result.scalar_one_or_none()
+        
+        if not db_project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Convert to dict format
+        project_data = {
+            "title": db_project.title,
+            "premise": db_project.premise,
+            "company": None,  # Will be loaded if needed
+        }
+        
+        # Load company instance if project_data exists
+        if db_project.project_data:
+            try:
+                project_data_dict = json.loads(db_project.project_data) if isinstance(db_project.project_data, str) else db_project.project_data
+                # Try to reconstruct company from project_data
+                # For now, just sync what we have
+                pass
+            except Exception as e:
+                logger.warning(f"Failed to load company from project_data", error=str(e))
+        
+        # Sync to graph - try to get artifacts from current phase
+        try:
+            from app.graph.sync import GraphSyncer
+            
+            # Get current artifacts if available
+            project_data_dict = {}
+            if db_project.project_data:
+                project_data_dict = json.loads(db_project.project_data) if isinstance(db_project.project_data, str) else db_project.project_data
+            
+            # Try to sync from artifacts
+            artifacts = project_data_dict.get("artifacts", {})
+            if artifacts:
+                GraphSyncer.sync_from_artifacts(project_id, artifacts)
+            else:
+                # Fallback to basic sync
+                GraphSyncer.sync_project_to_graph(project_id, project_data)
+            
+            return {"success": True, "message": "Graph synced successfully"}
+        except Exception as e:
+            logger.error(f"Failed to sync graph", error=str(e), project_id=project_id)
+            # Don't fail the request if graph sync fails
+            return {"success": False, "message": f"Graph sync warning: {str(e)}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error syncing graph", error=str(e), project_id=project_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/ferrari-company/projects/{project_id}/progress-report")
 async def get_progress_report(project_id: str, db: AsyncSession = Depends(get_db)):
     """Generate and download a comprehensive progress report for a project."""

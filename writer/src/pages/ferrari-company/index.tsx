@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import EmbeddedGraph from '../../components/EmbeddedGraph';
 
 interface BookPublishingHouseProject {
   project_id: string;
@@ -54,6 +55,8 @@ export default function BookPublishingHousePage() {
   const [previousProjects, setPreviousProjects] = useState<any[]>([]);
   const [showPreviousProjects, setShowPreviousProjects] = useState(false);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [showGraph, setShowGraph] = useState(true); // Show graph by default
+  const [graphKey, setGraphKey] = useState(0); // Force graph refresh
   
   // Form state
   const [title, setTitle] = useState('');
@@ -287,6 +290,10 @@ export default function BookPublishingHousePage() {
           setChatLog(status.chat_log || []);
           setLoading(false);
           await refreshProject();
+          // Sync graph after phase completion
+          await syncGraphAfterPhase();
+          // Force graph refresh
+          setGraphKey(prev => prev + 1);
         } else if (status.status === 'failed') {
           setError(status.error || 'Phase execution failed');
           setLoading(false);
@@ -396,6 +403,10 @@ export default function BookPublishingHousePage() {
       // Refresh project
       await refreshProject();
       
+      // Sync graph after decision
+      await syncGraphAfterPhase();
+      setGraphKey(prev => prev + 1);
+      
       // If approved and not complete, execute next phase automatically
       if (decision === 'approve' && result.status !== 'complete') {
         // Auto-execute next phase (same as CLI flow)
@@ -439,6 +450,24 @@ export default function BookPublishingHousePage() {
       }
     } catch (err) {
       console.error('Failed to refresh project:', err);
+    }
+  };
+
+  const syncGraphAfterPhase = async () => {
+    if (!project) return;
+    
+    try {
+      // Trigger graph sync on backend
+      const response = await fetch(`/api/ferrari-company/projects/${project.project_id}/sync-graph`, {
+        method: 'POST',
+      });
+      if (response.ok) {
+        console.log('Graph synced successfully');
+      } else {
+        console.warn('Graph sync failed, but continuing');
+      }
+    } catch (err) {
+      console.warn('Graph sync error (non-critical):', err);
     }
   };
 
@@ -1019,6 +1048,30 @@ export default function BookPublishingHousePage() {
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
               <p className="font-semibold">Processing phase...</p>
               <p className="text-sm text-gray-600 mt-1">This may take a few moments. Please wait.</p>
+            </div>
+          )}
+
+          {/* Knowledge Graph - Always visible when project exists */}
+          {project && !isComplete && (
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold">📊 Knowledge Graph</h3>
+                <button
+                  onClick={() => setShowGraph(!showGraph)}
+                  className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                >
+                  {showGraph ? 'Hide' : 'Show'} Graph
+                </button>
+              </div>
+              {showGraph && (
+                <EmbeddedGraph 
+                  key={graphKey}
+                  projectId={project.project_id} 
+                  height="500px"
+                  autoRefresh={true}
+                  refreshInterval={5000}
+                />
+              )}
             </div>
           )}
 

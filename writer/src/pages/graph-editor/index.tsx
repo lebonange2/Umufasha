@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 // @ts-ignore - 3d-force-graph doesn't have perfect TypeScript support
 import ForceGraph3D from '3d-force-graph';
@@ -62,13 +62,12 @@ export default function GraphEditorPage() {
   const [schema, setSchema] = useState<any>(null);
   const [validationIssues, setValidationIssues] = useState<any[]>([]);
   const [showCreateNode, setShowCreateNode] = useState(false);
-  const [newNodeLabels, setNewNodeLabels] = useState<string[]>([]);
-  const [newNodeProperties, setNewNodeProperties] = useState<Record<string, any>>({});
 
   // Initialize graph
   useEffect(() => {
     if (!containerRef.current || !projectId) return;
 
+    // @ts-ignore - 3d-force-graph typing issue
     const Graph = ForceGraph3D()(containerRef.current)
       .nodeLabel((node: any) => {
         const props = node.properties || {};
@@ -391,13 +390,9 @@ export default function GraphEditorPage() {
               onCreate={(labels, properties) => {
                 handleCreateNode(labels, properties);
                 setShowCreateNode(false);
-                setNewNodeLabels([]);
-                setNewNodeProperties({});
               }}
               onCancel={() => {
                 setShowCreateNode(false);
-                setNewNodeLabels([]);
-                setNewNodeProperties({});
               }}
             />
           ) : selectedNode ? (
@@ -489,6 +484,7 @@ interface RelationshipTypeSelectorProps {
 }
 
 function RelationshipTypeSelector({ schema, sourceNode, targetNode, onSelect, onCancel }: RelationshipTypeSelectorProps) {
+  // schema is used in getAllowedTypes function below
   const [selectedType, setSelectedType] = useState('');
   
   // Get allowed relationship types based on source and target labels
@@ -698,13 +694,13 @@ function NodeCreator({ schema, onCreate, onCancel }: NodeCreatorProps) {
 
 interface NodeInspectorProps {
   node: GraphNode;
-  schema: any;
+  schema?: any;
   onUpdate: (nodeId: string, properties: Record<string, any>) => void;
   onDelete: (nodeId: string) => void;
   onClose: () => void;
 }
 
-function NodeInspector({ node, schema, onUpdate, onDelete, onClose }: NodeInspectorProps) {
+function NodeInspector({ node, onUpdate, onDelete, onClose }: NodeInspectorProps) {
   const [editing, setEditing] = useState(false);
   const [properties, setProperties] = useState(node.properties);
 
