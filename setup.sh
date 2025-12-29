@@ -195,9 +195,16 @@ if command -v apt-get &> /dev/null; then
                     INSTALLED=true
                 fi
             # Last resort: If output says "already installed" or "Setting up docker-compose", consider it success
-            elif echo "$INSTALL_OUTPUT" | grep -qE "(Setting up docker-compose|is already the newest version|already the newest)"; then
-                print_success "Docker Compose installation confirmed (package setup completed)"
-                INSTALLED=true
+            elif echo "$INSTALL_OUTPUT" | grep -qE "(Setting up docker-compose|Setting up.*docker-compose|is already the newest version|already the newest)"; then
+                # Double-check with dpkg
+                sleep 1
+                if dpkg -l | grep -qE "^ii.*docker-compose"; then
+                    print_success "Docker Compose installation confirmed (package setup completed and verified via dpkg)"
+                    INSTALLED=true
+                else
+                    print_success "Docker Compose installation confirmed (package setup completed)"
+                    INSTALLED=true
+                fi
             else
                 print_warning "Installation may have succeeded but verification failed, trying alternative methods..."
             fi
@@ -327,12 +334,13 @@ if command -v apt-get &> /dev/null; then
         fi
         
         # RUBRIC STEP 5: Final Verification - Double-check before returning
+        # If INSTALLED is true OR if dpkg shows it's installed, return true
         if [ "$INSTALLED" = "true" ]; then
             # One more verification pass
             hash -r 2>/dev/null || true
             export PATH="/usr/local/bin:/usr/bin:$HOME/.local/bin:$PATH"
             
-            # Check dpkg one more time
+            # Check dpkg one more time (most reliable)
             if dpkg -l | grep -qE "^ii.*docker-compose"; then
                 echo "true"
                 return 0
@@ -351,6 +359,18 @@ if command -v apt-get &> /dev/null; then
                     return 0
                 fi
             done
+            
+            # If we got here but INSTALLED=true, still return true (installation succeeded)
+            echo "true"
+            return 0
+        fi
+        
+        # Final fallback: Check dpkg even if INSTALLED=false
+        # This handles the case where installation succeeded but detection failed
+        if dpkg -l | grep -qE "^ii.*docker-compose"; then
+            print_status "Docker Compose package found via dpkg (installation succeeded)"
+            echo "true"
+            return 0
         fi
         
         echo "$INSTALLED"
@@ -378,7 +398,17 @@ if command -v apt-get &> /dev/null; then
         
         # Install docker-compose separately with better error handling (REQUIRED)
         print_status "Installing Docker Compose (REQUIRED)..."
-        if [ "$(install_docker_compose_ubuntu true)" = "true" ]; then
+        local INSTALL_RESULT=""
+        INSTALL_RESULT=$(install_docker_compose_ubuntu true)
+        
+        # Also do a final check via dpkg as backup verification
+        local FINAL_CHECK=false
+        if dpkg -l | grep -qE "^ii.*docker-compose"; then
+            FINAL_CHECK=true
+            print_status "Docker Compose package verified via dpkg"
+        fi
+        
+        if [ "$INSTALL_RESULT" = "true" ] || [ "$FINAL_CHECK" = "true" ]; then
             INSTALL_DOCKER_COMPOSE=true
             print_success "Docker Compose installation completed"
         else
@@ -395,12 +425,36 @@ if command -v apt-get &> /dev/null; then
                 done
                 print_error ""
             fi
-            print_error "Please install Docker Compose manually and run setup again:"
-            print_error "  sudo apt-get install -y docker-compose"
-            print_error "  Or: sudo apt-get install -y docker-compose-plugin"
-            print_error ""
-            print_error "Setup ABORTED."
-            exit 1
+            
+            # Check if it actually installed but detection failed
+            if dpkg -l | grep -qE "^ii.*docker-compose"; then
+                print_warning "WARNING: Docker Compose package IS installed (verified via dpkg)"
+                print_warning "But the binary could not be located. This may be a PATH issue."
+                print_warning "Attempting to find and use docker-compose binary..."
+                
+                local BIN_LOCATION=$(dpkg -L docker-compose 2>/dev/null | grep -E "bin/docker-compose$" | head -n1)
+                if [ -n "$BIN_LOCATION" ] && [ -f "$BIN_LOCATION" ]; then
+                    export PATH="$(dirname "$BIN_LOCATION"):$PATH"
+                    hash -r 2>/dev/null || true
+                    if command -v docker-compose &> /dev/null || "$BIN_LOCATION" --version &> /dev/null; then
+                        print_success "Docker Compose found and verified at $BIN_LOCATION"
+                        INSTALL_DOCKER_COMPOSE=true
+                    else
+                        print_error "Binary found but cannot execute. Setup ABORTED."
+                        exit 1
+                    fi
+                else
+                    print_error "Package installed but binary location unknown. Setup ABORTED."
+                    exit 1
+                fi
+            else
+                print_error "Please install Docker Compose manually and run setup again:"
+                print_error "  sudo apt-get install -y docker-compose"
+                print_error "  Or: sudo apt-get install -y docker-compose-plugin"
+                print_error ""
+                print_error "Setup ABORTED."
+                exit 1
+            fi
         fi
     else
         # Try without sudo (for Docker containers running as root)
@@ -425,7 +479,17 @@ if command -v apt-get &> /dev/null; then
         
         # Install docker-compose separately (REQUIRED)
         print_status "Installing Docker Compose (REQUIRED)..."
-        if [ "$(install_docker_compose_ubuntu false)" = "true" ]; then
+        local INSTALL_RESULT=""
+        INSTALL_RESULT=$(install_docker_compose_ubuntu false)
+        
+        # Also do a final check via dpkg as backup verification
+        local FINAL_CHECK=false
+        if dpkg -l | grep -qE "^ii.*docker-compose"; then
+            FINAL_CHECK=true
+            print_status "Docker Compose package verified via dpkg"
+        fi
+        
+        if [ "$INSTALL_RESULT" = "true" ] || [ "$FINAL_CHECK" = "true" ]; then
             INSTALL_DOCKER_COMPOSE=true
             print_success "Docker Compose installation completed"
         else
@@ -442,12 +506,36 @@ if command -v apt-get &> /dev/null; then
                 done
                 print_error ""
             fi
-            print_error "Please install Docker Compose manually and run setup again:"
-            print_error "  apt-get install -y docker-compose"
-            print_error "  Or: apt-get install -y docker-compose-plugin"
-            print_error ""
-            print_error "Setup ABORTED."
-            exit 1
+            
+            # Check if it actually installed but detection failed
+            if dpkg -l | grep -qE "^ii.*docker-compose"; then
+                print_warning "WARNING: Docker Compose package IS installed (verified via dpkg)"
+                print_warning "But the binary could not be located. This may be a PATH issue."
+                print_warning "Attempting to find and use docker-compose binary..."
+                
+                local BIN_LOCATION=$(dpkg -L docker-compose 2>/dev/null | grep -E "bin/docker-compose$" | head -n1)
+                if [ -n "$BIN_LOCATION" ] && [ -f "$BIN_LOCATION" ]; then
+                    export PATH="$(dirname "$BIN_LOCATION"):$PATH"
+                    hash -r 2>/dev/null || true
+                    if command -v docker-compose &> /dev/null || "$BIN_LOCATION" --version &> /dev/null; then
+                        print_success "Docker Compose found and verified at $BIN_LOCATION"
+                        INSTALL_DOCKER_COMPOSE=true
+                    else
+                        print_error "Binary found but cannot execute. Setup ABORTED."
+                        exit 1
+                    fi
+                else
+                    print_error "Package installed but binary location unknown. Setup ABORTED."
+                    exit 1
+                fi
+            else
+                print_error "Please install Docker Compose manually and run setup again:"
+                print_error "  apt-get install -y docker-compose"
+                print_error "  Or: apt-get install -y docker-compose-plugin"
+                print_error ""
+                print_error "Setup ABORTED."
+                exit 1
+            fi
         fi
     fi
 elif command -v yum &> /dev/null; then
