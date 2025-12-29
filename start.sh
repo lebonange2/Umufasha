@@ -45,6 +45,50 @@ else
     echo "⚠️ Install with: curl -fsSL https://ollama.com/install.sh | sh"
 fi
 
+# Start Neo4j if docker-compose is available
+if command -v docker-compose &> /dev/null || command -v docker &> /dev/null; then
+    # Determine docker-compose command
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        COMPOSE_CMD="docker compose"
+    fi
+    
+    # Check if Neo4j is already running
+    if $COMPOSE_CMD ps neo4j 2>/dev/null | grep -q "Up"; then
+        echo "✅ Neo4j is already running"
+    else
+        echo "🕸️ Starting Neo4j..."
+        if $COMPOSE_CMD up -d neo4j 2>/dev/null; then
+            echo "⏳ Waiting for Neo4j to be ready..."
+            max_attempts=15
+            attempt=0
+            neo4j_ready=false
+            
+            while [ $attempt -lt $max_attempts ]; do
+                if $COMPOSE_CMD exec -T neo4j cypher-shell -u neo4j -p neo4jpassword "RETURN 1" > /dev/null 2>&1; then
+                    echo "✅ Neo4j is ready!"
+                    neo4j_ready=true
+                    break
+                fi
+                attempt=$((attempt + 1))
+                sleep 2
+            done
+            
+            if [ "$neo4j_ready" = false ]; then
+                echo "⚠️ Neo4j is starting but not ready yet (will continue in background)"
+                echo "   The application will use memory store until Neo4j is ready"
+            fi
+        else
+            echo "⚠️ Failed to start Neo4j with docker-compose"
+            echo "   The application will use memory store fallback"
+        fi
+    fi
+else
+    echo "⚠️ Docker not found. Neo4j will not be started."
+    echo "   The application will use memory store fallback"
+fi
+
 # Display startup information
 echo ""
 echo "🌐 Starting Personal Assistant on http://localhost:8000"
