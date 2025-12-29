@@ -945,6 +945,221 @@ print_status "Running internal tests..."
 python3 scripts/test_internal.py
 print_success "Internal tests passed"
 
+# Setup Neo4j (either via Docker or direct installation)
+print_status "Setting up Neo4j graph database..."
+NEO4J_INSTALLED=false
+NEO4J_VIA_DOCKER=false
+
+# Check if Docker is available
+if command -v docker &> /dev/null && docker ps &> /dev/null 2>&1; then
+    print_status "Docker is available - checking for docker-compose..."
+    
+    # Check if docker-compose is available
+    if command -v docker-compose &> /dev/null; then
+        print_status "Starting Neo4j via Docker Compose..."
+        
+        # Set default environment variables for docker-compose
+        export OPENAI_API_KEY=${OPENAI_API_KEY:-""}
+        export NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-""}
+        
+        # Start Neo4j container
+        if docker-compose up -d neo4j 2>&1 | tee /tmp/neo4j_docker_start.log; then
+            # Wait for Neo4j to be ready
+            print_status "Waiting for Neo4j to be ready..."
+            for i in {1..30}; do
+                if curl -s http://localhost:7474 > /dev/null 2>&1; then
+                    print_success "Neo4j is ready via Docker!"
+                    NEO4J_INSTALLED=true
+                    NEO4J_VIA_DOCKER=true
+                    break
+                fi
+                echo -n "."
+                sleep 2
+            done
+            echo ""
+            
+            if [ "$NEO4J_INSTALLED" = false ]; then
+                print_warning "Neo4j container started but not responding yet"
+                print_warning "Check status with: docker-compose ps neo4j"
+                print_warning "Check logs with: docker-compose logs neo4j"
+            fi
+        else
+            print_warning "Failed to start Neo4j via Docker Compose"
+            print_warning "Will try direct installation instead..."
+        fi
+    else
+        print_warning "docker-compose not available, will try direct installation"
+    fi
+else
+    print_warning "Docker is not available or not running"
+fi
+
+# If Docker method failed or wasn't available, install Neo4j directly
+if [ "$NEO4J_INSTALLED" = false ]; then
+    print_status "Installing Neo4j directly (without Docker)..."
+    
+    # Check if Neo4j is already installed
+    if command -v neo4j &> /dev/null; then
+        print_status "Neo4j is already installed"
+        
+        # Check if it's running
+        if neo4j status 2>&1 | grep -q "Neo4j is running"; then
+            print_success "Neo4j is already running"
+            NEO4J_INSTALLED=true
+        else
+            # Try to start it
+            print_status "Starting existing Neo4j installation..."
+            if neo4j start; then
+                sleep 5
+                if curl -s http://localhost:7474 > /dev/null 2>&1; then
+                    print_success "Neo4j started successfully"
+                    NEO4J_INSTALLED=true
+                fi
+            fi
+        fi
+    fi
+    
+    # Install Neo4j if not already installed
+    if [ "$NEO4J_INSTALLED" = false ]; then
+        print_status "Installing Java (required for Neo4j)..."
+        if command -v apt-get &> /dev/null; then
+            if apt-get update -qq > /dev/null 2>&1 && \
+               apt-get install -y -qq openjdk-17-jdk wget gnupg curl > /dev/null 2>&1; then
+                print_success "Java installed"
+            else
+                print_error "Failed to install Java"
+                print_error "Neo4j requires Java. Please install manually:"
+                print_error "  apt-get install -y openjdk-17-jdk"
+                print_warning "Continuing setup without Neo4j..."
+            fi
+        else
+            print_error "apt-get not available. Cannot install Neo4j automatically."
+            print_warning "Continuing setup without Neo4j..."
+        fi
+        
+        # Only proceed if Java was installed successfully
+        if command -v java &> /dev/null; then
+            print_status "Installing Neo4j Community Edition..."
+            
+            # Add Neo4j repository
+            if wget -O - https://debian.neo4j.com/neotechnology.gpg.key 2>/dev/null | apt-key add - && \
+               echo 'deb https://debian.neo4j.com stable latest' > /etc/apt/sources.list.d/neo4j.list && \
+               apt-get update -qq > /dev/null 2>&1 && \
+               apt-get install -y -qq neo4j > /dev/null 2>&1; then
+                
+                print_success "Neo4j installed"
+                
+                # Configure Neo4j
+                print_status "Configuring Neo4j..."
+                
+                # Set initial password
+                NEO4J_PASSWORD="neo4jpassword"
+                # Try new command format first (Neo4j 5+), then fall back to old format (Neo4j 4)
+                if neo4j-admin dbms set-initial-password "$NEO4J_PASSWORD" 2>/dev/null; then
+                    print_success "Neo4j password set"
+                elif neo4j-admin set-initial-password "$NEO4J_PASSWORD" 2>/dev/null; then
+                    print_success "Neo4j password set"
+                else
+                    print_warning "Could not set Neo4j password (may already be set)"
+                    print_warning "If Neo4j fails to start, reset password with:"
+                    print_warning "  neo4j-admin dbms set-initial-password neo4jpassword"
+                fi
+                
+                # Enable remote connections
+                if [ -f /etc/neo4j/neo4j.conf ]; then
+                    sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/' /etc/neo4j/neo4j.conf 2>/dev/null || true
+                fi
+                
+                # Start Neo4j
+                print_status "Starting Neo4j..."
+                if neo4j start; then
+                    # Wait for Neo4j to be ready
+                    print_status "Waiting for Neo4j to be ready..."
+                    for i in {1..30}; do
+                        if curl -s http://localhost:7474 > /dev/null 2>&1; then
+                            print_success "Neo4j is ready!"
+                            NEO4J_INSTALLED=true
+                            break
+                        fi
+                        echo -n "."
+                        sleep 2
+                    done
+                    echo ""
+                    
+                    if [ "$NEO4J_INSTALLED" = false ]; then
+                        print_warning "Neo4j started but not responding yet"
+                        print_warning "Check status with: neo4j status"
+                        print_warning "Check logs with: journalctl -u neo4j"
+                    fi
+                else
+                    print_error "Failed to start Neo4j"
+                    print_error "Try manually with: neo4j start"
+                fi
+            else
+                print_error "Failed to install Neo4j"
+                print_warning "You can install manually or use Neo4j Aura: https://neo4j.com/cloud/aura/"
+            fi
+        fi
+    fi
+fi
+
+# Update .env with Neo4j configuration
+if [ "$NEO4J_INSTALLED" = true ] && [ -f ".env" ]; then
+    print_status "Updating .env with Neo4j configuration..."
+    
+    # Remove existing Neo4j settings
+    sed -i '/^NEO4J_URI=/d' .env 2>/dev/null || true
+    sed -i '/^NEO4J_USER=/d' .env 2>/dev/null || true
+    sed -i '/^NEO4J_PASSWORD=/d' .env 2>/dev/null || true
+    
+    # Add Neo4j configuration
+    cat >> .env << 'NEOF'
+
+# Neo4j Graph Database
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=neo4jpassword
+NEOF
+    
+    print_success ".env file updated with Neo4j configuration"
+fi
+
+# Summary of Neo4j setup
+if [ "$NEO4J_INSTALLED" = true ]; then
+    print_success "=========================================="
+    print_success "Neo4j setup completed!"
+    print_success "=========================================="
+    echo ""
+    if [ "$NEO4J_VIA_DOCKER" = true ]; then
+        echo "Neo4j is running via Docker:"
+    else
+        echo "Neo4j is running directly on system:"
+    fi
+    echo "  Browser UI: http://localhost:7474"
+    echo "  Bolt Protocol: bolt://localhost:7687"
+    echo "  Username: neo4j"
+    echo "  Password: neo4jpassword"
+    echo ""
+else
+    print_warning "=========================================="
+    print_warning "Neo4j was not set up automatically"
+    print_warning "=========================================="
+    echo ""
+    echo "Graph database features may not work without Neo4j."
+    echo ""
+    echo "Options to set up Neo4j:"
+    echo ""
+    echo "1. Use Docker (if available):"
+    echo "   docker-compose up -d neo4j"
+    echo ""
+    echo "2. Install manually:"
+    echo "   ./scripts/setup_runpod_services.sh"
+    echo ""
+    echo "3. Use Neo4j Aura (cloud):"
+    echo "   https://neo4j.com/cloud/aura/"
+    echo ""
+fi
+
 # Create start script
 print_status "Creating start script..."
 cat > start.sh << 'EOF'
@@ -972,6 +1187,33 @@ fi
 if [ ! -f "assistant.db" ]; then
     echo "🗄️ Database not found. Initializing..."
     python3 scripts/init_db.py
+fi
+
+# Start Neo4j if installed and not running
+if command -v neo4j &> /dev/null; then
+    if neo4j status 2>&1 | grep -q "Neo4j is running"; then
+        echo "✅ Neo4j is already running"
+    else
+        echo "🗄️ Starting Neo4j..."
+        if neo4j start; then
+            sleep 3
+            if curl -s http://localhost:7474 > /dev/null 2>&1; then
+                echo "✅ Neo4j started successfully"
+                echo "   Browser: http://localhost:7474"
+                echo "   Bolt: bolt://localhost:7687"
+            else
+                echo "⚠️ Neo4j may be starting up. Check status with: neo4j status"
+            fi
+        else
+            echo "⚠️ Failed to start Neo4j. Try manually with: neo4j start"
+        fi
+    fi
+elif docker ps 2>/dev/null | grep -q neo4j; then
+    echo "✅ Neo4j is running via Docker"
+else
+    echo "⚠️ Neo4j not found. Graph features may not work."
+    echo "⚠️ Set up with: docker-compose up -d neo4j"
+    echo "   Or run ./setup.sh to install Neo4j"
 fi
 
 # Start Ollama if installed and not running

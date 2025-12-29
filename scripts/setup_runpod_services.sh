@@ -99,7 +99,14 @@ if [ "$DOCKER_AVAILABLE" = false ]; then
         
         # Set initial password
         NEO4J_PASSWORD="neo4jpassword"
-        neo4j-admin set-initial-password "$NEO4J_PASSWORD"
+        # Try new command format first (Neo4j 5+), then fall back to old format (Neo4j 4)
+        if ! neo4j-admin dbms set-initial-password "$NEO4J_PASSWORD" 2>/dev/null; then
+            if ! neo4j-admin set-initial-password "$NEO4J_PASSWORD" 2>/dev/null; then
+                print_warning "Could not set Neo4j password (may already be set)"
+                print_warning "If Neo4j fails to start, reset password with:"
+                print_warning "  neo4j-admin dbms set-initial-password neo4jpassword"
+            fi
+        fi
         
         # Enable remote connections
         sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/' /etc/neo4j/neo4j.conf
