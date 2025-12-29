@@ -74,3 +74,11 @@ prometheus-client==0.19.0
 
 # Neo4j Graph Database
 neo4j==5.15.0
+
+# System Dependencies (install via package manager, not pip):
+# - docker-compose (REQUIRED for Neo4j)
+#   Install via: sudo apt-get install docker-compose (Debian/Ubuntu)
+#                sudo yum install docker-compose (RHEL/CentOS)
+#                sudo apk add docker-compose (Alpine)
+#   Or use Docker Desktop which includes Docker Compose V2
+#   Note: The setup.sh script will attempt to install docker-compose automatically

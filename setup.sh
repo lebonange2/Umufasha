@@ -51,12 +51,12 @@ fi
 print_success "pip3 found"
 
 # Install system dependencies for building Python packages
-print_status "Installing system dependencies (for faster-whisper/av package)..."
+print_status "Installing system dependencies (for faster-whisper/av package and Docker Compose)..."
 INSTALLED_DEPS=false
 
 if command -v apt-get &> /dev/null; then
     # Debian/Ubuntu
-    print_status "Detected Debian/Ubuntu - installing build dependencies..."
+    print_status "Detected Debian/Ubuntu - installing build dependencies and Docker Compose..."
     if command -v sudo &> /dev/null; then
         if sudo apt-get update -qq > /dev/null 2>&1 && \
            sudo apt-get install -y -qq \
@@ -69,6 +69,7 @@ if command -v apt-get &> /dev/null; then
                libswresample-dev \
                libavfilter-dev \
                build-essential \
+               docker-compose \
                > /dev/null 2>&1; then
             print_success "System dependencies installed"
             INSTALLED_DEPS=true
@@ -88,6 +89,7 @@ if command -v apt-get &> /dev/null; then
                libswresample-dev \
                libavfilter-dev \
                build-essential \
+               docker-compose \
                > /dev/null 2>&1; then
             print_success "System dependencies installed"
             INSTALLED_DEPS=true
@@ -97,7 +99,7 @@ if command -v apt-get &> /dev/null; then
     fi
 elif command -v yum &> /dev/null; then
     # RHEL/CentOS
-    print_status "Detected RHEL/CentOS - installing build dependencies..."
+    print_status "Detected RHEL/CentOS - installing build dependencies and Docker Compose..."
     if command -v sudo &> /dev/null; then
         if sudo yum install -y -q \
                pkgconfig \
@@ -105,6 +107,7 @@ elif command -v yum &> /dev/null; then
                gcc \
                gcc-c++ \
                make \
+               docker-compose \
                > /dev/null 2>&1; then
             print_success "System dependencies installed"
             INSTALLED_DEPS=true
@@ -118,6 +121,7 @@ elif command -v yum &> /dev/null; then
                gcc \
                gcc-c++ \
                make \
+               docker-compose \
                > /dev/null 2>&1; then
             print_success "System dependencies installed"
             INSTALLED_DEPS=true
@@ -127,13 +131,14 @@ elif command -v yum &> /dev/null; then
     fi
 elif command -v apk &> /dev/null; then
     # Alpine
-    print_status "Detected Alpine - installing build dependencies..."
+    print_status "Detected Alpine - installing build dependencies and Docker Compose..."
     if command -v sudo &> /dev/null; then
         if sudo apk add --quiet \
                pkgconfig \
                ffmpeg-dev \
                gcc \
                musl-dev \
+               docker-compose \
                > /dev/null 2>&1; then
             print_success "System dependencies installed"
             INSTALLED_DEPS=true
@@ -146,6 +151,7 @@ elif command -v apk &> /dev/null; then
                ffmpeg-dev \
                gcc \
                musl-dev \
+               docker-compose \
                > /dev/null 2>&1; then
             print_success "System dependencies installed"
             INSTALLED_DEPS=true
@@ -155,14 +161,37 @@ elif command -v apk &> /dev/null; then
     fi
 else
     print_warning "Unknown package manager - system dependencies may need manual installation"
-    print_warning "Required: pkg-config, ffmpeg development libraries, build tools"
+    print_warning "Required: pkg-config, ffmpeg development libraries, build tools, docker-compose"
 fi
 
 if [ "$INSTALLED_DEPS" = false ]; then
     print_warning "System dependencies not installed. faster-whisper may fail to build."
     print_warning "Install manually:"
-    print_warning "  Debian/Ubuntu: sudo apt-get install pkg-config libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev build-essential"
+    print_warning "  Debian/Ubuntu: sudo apt-get install pkg-config libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev build-essential docker-compose"
+    print_warning "  RHEL/CentOS: sudo yum install pkgconfig ffmpeg-devel gcc gcc-c++ make docker-compose"
+    print_warning "  Alpine: sudo apk add pkgconfig ffmpeg-dev gcc musl-dev docker-compose"
     print_warning "  Or make faster-whisper optional by removing it from requirements.txt"
+fi
+
+# Check for Docker Compose (required for Neo4j)
+print_status "Checking Docker Compose installation..."
+DOCKER_COMPOSE_AVAILABLE=false
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_VERSION=$(docker-compose --version 2>/dev/null | head -n1)
+    print_success "Docker Compose found: $DOCKER_COMPOSE_VERSION"
+    DOCKER_COMPOSE_AVAILABLE=true
+elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_VERSION=$(docker compose version 2>/dev/null | head -n1)
+    print_success "Docker Compose (V2) found: $DOCKER_COMPOSE_VERSION"
+    DOCKER_COMPOSE_AVAILABLE=true
+else
+    print_error "Docker Compose is not installed or not available in PATH"
+    print_error "Docker Compose is REQUIRED for Neo4j graph database functionality"
+    print_error "Please install Docker Compose:"
+    print_error "  Debian/Ubuntu: sudo apt-get install docker-compose"
+    print_error "  Or install Docker Desktop which includes Docker Compose V2"
+    print_error "  Or install standalone: https://docs.docker.com/compose/install/"
+    print_warning "The application will use memory store fallback, but Neo4j features will be limited"
 fi
 
 # Create virtual environment if it doesn't exist

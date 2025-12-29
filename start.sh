@@ -46,14 +46,14 @@ else
 fi
 
 # Start Neo4j if docker-compose is available
-if command -v docker-compose &> /dev/null || command -v docker &> /dev/null; then
-    # Determine docker-compose command
-    if command -v docker-compose &> /dev/null; then
-        COMPOSE_CMD="docker-compose"
-    else
-        COMPOSE_CMD="docker compose"
-    fi
-    
+COMPOSE_CMD=""
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+fi
+
+if [ -n "$COMPOSE_CMD" ]; then
     # Check if Neo4j is already running
     if $COMPOSE_CMD ps neo4j 2>/dev/null | grep -q "Up"; then
         echo "✅ Neo4j is already running"
@@ -80,13 +80,13 @@ if command -v docker-compose &> /dev/null || command -v docker &> /dev/null; the
                 echo "   The application will use memory store until Neo4j is ready"
             fi
         else
-            echo "⚠️ Failed to start Neo4j with docker-compose"
+            echo "⚠️ Failed to start Neo4j with $COMPOSE_CMD"
             echo "   The application will use memory store fallback"
         fi
     fi
 else
-    echo "⚠️ Docker not found. Neo4j will not be started."
-    echo "   The application will use memory store fallback"
+    echo "ℹ️  Docker Compose not found. Neo4j will not be started."
+    echo "   The application will use memory store fallback (this is fine)"
 fi
 
 # Display startup information
