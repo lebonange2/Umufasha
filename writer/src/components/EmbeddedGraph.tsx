@@ -103,17 +103,40 @@ export default function EmbeddedGraph({
       
       const data = await response.json();
       
-      // Ensure data has nodes and edges arrays
+      console.log('Graph data received:', data);
+      
+      // Transform data to 3d-force-graph format
+      // The library expects 'links' with 'source' and 'target', not 'edges' with 'from' and 'to'
       const graphData = {
-        nodes: data.nodes || [],
-        edges: data.edges || []
+        nodes: (data.nodes || []).map((node: any) => ({
+          id: node.id,
+          labels: node.labels || [],
+          properties: node.properties || {},
+          ...node  // Include all other properties
+        })),
+        links: (data.edges || []).map((edge: any) => ({
+          source: edge.from,
+          target: edge.to,
+          type: edge.type,
+          properties: edge.properties || {}
+        }))
       };
       
-      setGraphData(graphData);
+      console.log('Transformed graph data:', {
+        nodeCount: graphData.nodes.length,
+        linkCount: graphData.links.length,
+        nodes: graphData.nodes,
+        links: graphData.links
+      });
+      
+      // Keep original format in state for display
+      setGraphData({ nodes: graphData.nodes, edges: data.edges || [] });
       setNodeCount(graphData.nodes.length);
-      setEdgeCount(graphData.edges.length);
+      setEdgeCount(graphData.links.length);
       
       if (graphRef.current) {
+        // Pass transformed data to 3D graph
+        console.log('Updating graph with data');
         graphRef.current.graphData(graphData);
       }
       
@@ -121,7 +144,7 @@ export default function EmbeddedGraph({
       setError(null);
       
       // If graph is empty, try to initialize it
-      if (graphData.nodes.length === 0 && graphData.edges.length === 0) {
+      if (graphData.nodes.length === 0 && graphData.links.length === 0) {
         // Silently try to initialize - don't show error for empty graph
         try {
           const initResponse = await fetch(`/api/projects/${projectId}/graph/init?title=Project&genre=`, {
@@ -171,14 +194,19 @@ export default function EmbeddedGraph({
         return 0x888888;
       })
       .nodeOpacity(0.9)
+      .nodeRelSize(8)  // Increased from 6 to 8 for better visibility
+      .nodeResolution(16)  // Higher resolution for smoother spheres
       .linkColor(() => 0xaaaaaa)
-      .linkWidth(1.5)
-      .linkDirectionalArrowLength(4)
+      .linkWidth(2)  // Increased from 1.5 to 2
+      .linkDirectionalArrowLength(6)  // Increased from 4 to 6
       .linkDirectionalArrowRelPos(1)
       .linkCurvature(0.2)
-      .nodeRelSize(6)
+      .linkOpacity(0.6)
       .enableNodeDrag(true)
-      .showNavInfo(false);
+      .showNavInfo(false)
+      .backgroundColor('#1a1a1a')  // Dark background for better contrast
+      .d3AlphaDecay(0.01)  // Slower physics decay for smoother settling
+      .d3VelocityDecay(0.3);  // Control velocity for better stability
 
     graphRef.current = Graph;
 
