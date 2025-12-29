@@ -60,8 +60,8 @@ def get_neo4j_driver() -> Driver:
         
         try:
             _neo4j_driver = GraphDatabase.driver(uri, auth=(user, password))
-            # Verify connection with timeout
-            _neo4j_driver.verify_connectivity(timeout=5)
+            # Verify connection (timeout parameter not supported in all versions)
+            _neo4j_driver.verify_connectivity()
             logger.info("Neo4j connection established", uri=uri, user=user)
         except Exception as e:
             error_msg = str(e)
@@ -79,6 +79,13 @@ def get_neo4j_driver() -> Driver:
                 raise ConnectionError(
                     f"Neo4j is not running on {host}:{port}. "
                     f"Memory store will be used instead."
+                ) from e
+            elif "Unauthorized" in error_msg or "authentication" in error_msg.lower():
+                # Authentication failed - wrong password
+                raise ConnectionError(
+                    f"Neo4j authentication failed. "
+                    f"Wrong username or password. "
+                    f"Run: ./scripts/fix_neo4j_password.sh to reset password"
                 ) from e
             else:
                 raise ConnectionError(f"Neo4j connection failed: {error_msg}") from e

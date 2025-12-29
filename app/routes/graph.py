@@ -363,7 +363,7 @@ async def get_neo4j_status():
         
         try:
             driver = get_neo4j_driver()
-            driver.verify_connectivity(timeout=3)
+            driver.verify_connectivity()
             status["neo4j_available"] = True
             status["message"] = "Neo4j is connected and running"
             logger.info("Neo4j status check: connected")
