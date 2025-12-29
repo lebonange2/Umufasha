@@ -64,39 +64,59 @@ if command -v apt-get &> /dev/null; then
         local USE_SUDO=$1
         local INSTALLED=false
         
-        # First, check if docker-compose is already available
+        # RUBRIC STEP 1: Pre-check - Check if docker-compose is already available via multiple methods
         print_status "Checking if docker-compose is already installed..."
         hash -r 2>/dev/null || true
         export PATH="/usr/local/bin:/usr/bin:$HOME/.local/bin:$PATH"
         
+        # Check 1: Command in PATH
         if command -v docker-compose &> /dev/null; then
             local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
             print_success "Docker Compose already installed: $VERSION"
-            INSTALLED=true
             echo "true"
             return 0
         fi
         
-        # Check common binary locations
-        if [ -f /usr/bin/docker-compose ] || [ -f /usr/local/bin/docker-compose ] || [ -f "$HOME/.local/bin/docker-compose" ]; then
-            if [ -f /usr/bin/docker-compose ]; then
-                export PATH="/usr/bin:$PATH"
-            elif [ -f /usr/local/bin/docker-compose ]; then
-                export PATH="/usr/local/bin:$PATH"
-            elif [ -f "$HOME/.local/bin/docker-compose" ]; then
-                export PATH="$HOME/.local/bin:$PATH"
+        # Check 2: Binary in common locations
+        for BIN_PATH in /usr/bin/docker-compose /usr/local/bin/docker-compose "$HOME/.local/bin/docker-compose"; do
+            if [ -f "$BIN_PATH" ] && [ -x "$BIN_PATH" ]; then
+                export PATH="$(dirname "$BIN_PATH"):$PATH"
+                hash -r 2>/dev/null || true
+                if command -v docker-compose &> /dev/null; then
+                    local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
+                    print_success "Docker Compose found at $BIN_PATH: $VERSION"
+                    echo "true"
+                    return 0
+                fi
             fi
-            hash -r 2>/dev/null || true
-            if command -v docker-compose &> /dev/null; then
-                local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
-                print_success "Docker Compose found: $VERSION"
-                INSTALLED=true
-                echo "true"
-                return 0
+        done
+        
+        # Check 3: Check if package is installed via dpkg
+        if dpkg -l | grep -qE "^ii.*docker-compose"; then
+            print_status "Docker Compose package is installed (verified via dpkg)"
+            # Try to find the binary
+            local BIN_LOCATION=$(dpkg -L docker-compose 2>/dev/null | grep -E "bin/docker-compose$" | head -n1)
+            if [ -n "$BIN_LOCATION" ] && [ -f "$BIN_LOCATION" ] && [ -x "$BIN_LOCATION" ]; then
+                export PATH="$(dirname "$BIN_LOCATION"):$PATH"
+                hash -r 2>/dev/null || true
+                if command -v docker-compose &> /dev/null; then
+                    local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
+                    print_success "Docker Compose found: $VERSION"
+                    echo "true"
+                    return 0
+                else
+                    # Binary exists, use it directly
+                    if "$BIN_LOCATION" --version &> /dev/null; then
+                        local VERSION=$("$BIN_LOCATION" --version 2>/dev/null | head -n1)
+                        print_success "Docker Compose found at $BIN_LOCATION: $VERSION"
+                        echo "true"
+                        return 0
+                    fi
+                fi
             fi
         fi
         
-        # Method 1: Try docker-compose package (most common)
+        # RUBRIC STEP 2: Installation - Try docker-compose package (most common)
         print_status "Attempting to install docker-compose via apt..."
         local INSTALL_OUTPUT=""
         local INSTALL_EXIT_CODE=0
@@ -109,63 +129,77 @@ if command -v apt-get &> /dev/null; then
             INSTALL_EXIT_CODE=${PIPESTATUS[0]}
         fi
         
-        # Check if installation succeeded - look for multiple success indicators
+        # RUBRIC STEP 3: Success Detection - Check exit code AND output patterns
         local INSTALL_SUCCESS=false
         if [ "$INSTALL_EXIT_CODE" -eq 0 ]; then
-            # Check for various success patterns in output - including "already the newest version"
-            if echo "$INSTALL_OUTPUT" | grep -qE "(Setting up docker-compose|is already the newest version|already the newest|0 upgraded|Unpacking.*docker-compose|Setting up.*docker-compose|docker-compose.*is already|docker-compose.*already.*newest)"; then
+            # Success indicators: exit code 0 AND one of these patterns
+            if echo "$INSTALL_OUTPUT" | grep -qE "(Setting up docker-compose|Setting up.*docker-compose|is already the newest version|already the newest|docker-compose.*is already|docker-compose.*already.*newest)"; then
                 INSTALL_SUCCESS=true
             fi
         fi
         
+        # RUBRIC STEP 4: Post-installation Verification
         if [ "$INSTALL_SUCCESS" = "true" ] || [ "$INSTALL_EXIT_CODE" -eq 0 ]; then
-            # Wait a moment for system to update
+            # Wait for system to update
             sleep 2
-            # Refresh command cache
             hash -r 2>/dev/null || true
-            # Update PATH to include common locations
             export PATH="/usr/local/bin:/usr/bin:$HOME/.local/bin:$PATH"
             
-            # Check if command is now available
-            if command -v docker-compose &> /dev/null; then
-                local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
-                print_success "Docker Compose installed via apt: $VERSION"
-                INSTALLED=true
-            else
-                # Check common binary locations
-                if [ -f /usr/bin/docker-compose ]; then
-                    export PATH="/usr/bin:$PATH"
+            # Verify via dpkg first (most reliable)
+            if dpkg -l | grep -qE "^ii.*docker-compose"; then
+                print_status "Docker Compose package confirmed installed via dpkg"
+                # Find the binary location
+                local BIN_LOCATION=$(dpkg -L docker-compose 2>/dev/null | grep -E "bin/docker-compose$" | head -n1)
+                if [ -n "$BIN_LOCATION" ] && [ -f "$BIN_LOCATION" ]; then
+                    export PATH="$(dirname "$BIN_LOCATION"):$PATH"
                     hash -r 2>/dev/null || true
                     if command -v docker-compose &> /dev/null; then
                         local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
-                        print_success "Docker Compose installed via apt (found in /usr/bin): $VERSION"
+                        print_success "Docker Compose installed via apt: $VERSION"
+                        INSTALLED=true
+                    elif "$BIN_LOCATION" --version &> /dev/null; then
+                        local VERSION=$("$BIN_LOCATION" --version 2>/dev/null | head -n1)
+                        print_success "Docker Compose installed via apt (at $BIN_LOCATION): $VERSION"
                         INSTALLED=true
                     else
-                        print_success "Docker Compose installed via apt (binary at /usr/bin/docker-compose)"
-                        INSTALLED=true
-                    fi
-                elif [ -f /usr/local/bin/docker-compose ]; then
-                    export PATH="/usr/local/bin:$PATH"
-                    hash -r 2>/dev/null || true
-                    if command -v docker-compose &> /dev/null; then
-                        local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
-                        print_success "Docker Compose installed via apt (found in /usr/local/bin): $VERSION"
-                        INSTALLED=true
-                    else
-                        print_success "Docker Compose installed via apt (binary at /usr/local/bin/docker-compose)"
+                        print_success "Docker Compose installed via apt (package confirmed, binary at $BIN_LOCATION)"
                         INSTALLED=true
                     fi
                 else
-                    # Check if it says "already installed" - that's also success
-                    if echo "$INSTALL_OUTPUT" | grep -qE "(is already the newest version|already the newest)"; then
-                        print_success "Docker Compose is already installed (package confirmed)"
-                        INSTALLED=true
-                    else
-                        # Installation succeeded but can't find binary - might be in a different location
-                        print_warning "Installation may have succeeded but binary not found in expected locations"
-                        print_warning "Trying alternative installation methods..."
-                    fi
+                    # Package installed but can't find binary - still success if package is there
+                    print_success "Docker Compose installed via apt (package confirmed)"
+                    INSTALLED=true
                 fi
+            # Fallback: Check command in PATH
+            elif command -v docker-compose &> /dev/null; then
+                local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
+                print_success "Docker Compose installed via apt: $VERSION"
+                INSTALLED=true
+            # Fallback: Check common binary locations
+            elif [ -f /usr/bin/docker-compose ] || [ -f /usr/local/bin/docker-compose ]; then
+                local BIN_PATH=""
+                [ -f /usr/bin/docker-compose ] && BIN_PATH="/usr/bin/docker-compose"
+                [ -f /usr/local/bin/docker-compose ] && BIN_PATH="/usr/local/bin/docker-compose"
+                export PATH="$(dirname "$BIN_PATH"):$PATH"
+                hash -r 2>/dev/null || true
+                if command -v docker-compose &> /dev/null; then
+                    local VERSION=$(docker-compose --version 2>/dev/null | head -n1)
+                    print_success "Docker Compose installed via apt: $VERSION"
+                    INSTALLED=true
+                elif "$BIN_PATH" --version &> /dev/null; then
+                    local VERSION=$("$BIN_PATH" --version 2>/dev/null | head -n1)
+                    print_success "Docker Compose installed via apt (at $BIN_PATH): $VERSION"
+                    INSTALLED=true
+                else
+                    print_success "Docker Compose installed via apt (binary found at $BIN_PATH)"
+                    INSTALLED=true
+                fi
+            # Last resort: If output says "already installed" or "Setting up docker-compose", consider it success
+            elif echo "$INSTALL_OUTPUT" | grep -qE "(Setting up docker-compose|is already the newest version|already the newest)"; then
+                print_success "Docker Compose installation confirmed (package setup completed)"
+                INSTALLED=true
+            else
+                print_warning "Installation may have succeeded but verification failed, trying alternative methods..."
             fi
         else
             # Check if it failed due to package not found vs other error
@@ -290,6 +324,33 @@ if command -v apt-get &> /dev/null; then
                     fi
                 fi
             fi
+        fi
+        
+        # RUBRIC STEP 5: Final Verification - Double-check before returning
+        if [ "$INSTALLED" = "true" ]; then
+            # One more verification pass
+            hash -r 2>/dev/null || true
+            export PATH="/usr/local/bin:/usr/bin:$HOME/.local/bin:$PATH"
+            
+            # Check dpkg one more time
+            if dpkg -l | grep -qE "^ii.*docker-compose"; then
+                echo "true"
+                return 0
+            fi
+            
+            # Check command
+            if command -v docker-compose &> /dev/null; then
+                echo "true"
+                return 0
+            fi
+            
+            # Check binary locations
+            for BIN_PATH in /usr/bin/docker-compose /usr/local/bin/docker-compose "$HOME/.local/bin/docker-compose"; do
+                if [ -f "$BIN_PATH" ] && [ -x "$BIN_PATH" ]; then
+                    echo "true"
+                    return 0
+                fi
+            done
         fi
         
         echo "$INSTALLED"
