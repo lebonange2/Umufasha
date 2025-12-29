@@ -1,9 +1,16 @@
 """Neo4j schema setup: constraints, indexes, and initial structure."""
 from typing import List
 import structlog
-from app.graph.connection import get_neo4j_session
 
 logger = structlog.get_logger(__name__)
+
+# Try to import Neo4j connection, but don't fail if it's not available
+try:
+    from app.graph.connection import get_neo4j_session
+    NEO4J_AVAILABLE = True
+except (ImportError, Exception):
+    NEO4J_AVAILABLE = False
+    logger.info("Neo4j not available, schema operations will be skipped")
 
 
 # Node labels
@@ -119,6 +126,10 @@ ALLOWED_RELATIONSHIPS = {
 
 def create_constraints_and_indexes():
     """Create all constraints and indexes for the graph schema."""
+    if not NEO4J_AVAILABLE:
+        logger.info("Neo4j not available, skipping schema initialization")
+        return
+    
     with get_neo4j_session() as session:
         constraints = [
             # Unique constraints on id property for each label

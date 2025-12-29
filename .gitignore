@@ -78,3 +78,5 @@ assistant.db
 sessions/
 out/
 test_bark_output.wav
+graph_data/
+graph_data/

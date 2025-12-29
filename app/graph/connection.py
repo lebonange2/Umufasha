@@ -61,9 +61,6 @@ def get_neo4j_session(database: str = "neo4j"):
     except ConnectionError:
         # Re-raise connection errors
         raise
-    except ConnectionError:
-        # Re-raise connection errors
-        raise
     except Exception as e:
         # If we can't get a driver or session, raise a more specific error
         # that can be caught by callers

@@ -1,11 +1,21 @@
-"""Neo4j repository for graph operations."""
+"""Neo4j repository for graph operations with fallback to memory store."""
 from typing import List, Dict, Any, Optional
-from neo4j import Session
 import structlog
-from app.graph.connection import get_neo4j_session
-from app.graph.schema import validate_relationship, NODE_LABELS, RELATIONSHIP_TYPES
 
 logger = structlog.get_logger(__name__)
+
+# Try to import Neo4j, but don't fail if it's not available
+try:
+    from neo4j import Session
+    from app.graph.connection import get_neo4j_session
+    NEO4J_AVAILABLE = True
+except (ImportError, Exception):
+    NEO4J_AVAILABLE = False
+    logger.info("Neo4j not available, will use memory store fallback")
+
+# Import memory store as fallback
+from app.graph.memory_store import get_memory_store
+from app.graph.schema import validate_relationship, NODE_LABELS, RELATIONSHIP_TYPES
 
 
 class GraphRepository:
@@ -13,7 +23,12 @@ class GraphRepository:
     
     @staticmethod
     def create_project(project_id: str, title: str, genre: Optional[str] = None) -> Dict[str, Any]:
-        """Create a new project node in Neo4j."""
+        """Create a new project node in Neo4j or memory store."""
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.create_project(project_id, title, genre)
+        
         try:
             with get_neo4j_session() as session:
                 query = """
@@ -35,13 +50,17 @@ class GraphRepository:
                     }
                 raise ValueError(f"Failed to create project {project_id}")
         except ConnectionError as e:
-            # Re-raise connection errors
-            raise
+            # Fallback to memory store on connection error
+            logger.info(f"Neo4j connection failed, using memory store fallback for project {project_id}")
+            memory_store = get_memory_store()
+            return memory_store.create_project(project_id, title, genre)
         except Exception as e:
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                logger.warning(f"Neo4j not available, cannot create project node: {error_msg}")
-                raise ConnectionError(f"Neo4j is not available: {error_msg}") from e
+                # Fallback to memory store
+                logger.info(f"Neo4j not available, using memory store fallback for project {project_id}")
+                memory_store = get_memory_store()
+                return memory_store.create_project(project_id, title, genre)
             raise
     
     @staticmethod
@@ -54,6 +73,11 @@ class GraphRepository:
         chapter: Optional[int] = None
     ) -> Dict[str, Any]:
         """Fetch a subgraph based on filters."""
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.get_subgraph(project_id, focus_node_id, depth, labels, stage, chapter)
+        
         try:
             with get_neo4j_session() as session:
                 # Build query based on filters
@@ -150,15 +174,17 @@ class GraphRepository:
                 
                 return {"nodes": nodes, "edges": edges}
         except ConnectionError:
-            # Neo4j is not available - return empty graph
-            logger.warning(f"Neo4j connection failed, returning empty graph for project {project_id}")
-            return {"nodes": [], "edges": []}
+            # Fallback to memory store on connection error
+            logger.info(f"Neo4j connection failed, using memory store fallback for project {project_id}")
+            memory_store = get_memory_store()
+            return memory_store.get_subgraph(project_id, focus_node_id, depth, labels, stage, chapter)
         except Exception as e:
-            # Other errors - log and return empty graph
+            # Other errors - try memory store fallback
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                logger.warning(f"Neo4j connection issue for project {project_id}, returning empty graph")
-                return {"nodes": [], "edges": []}
+                logger.info(f"Neo4j not available, using memory store fallback for project {project_id}")
+                memory_store = get_memory_store()
+                return memory_store.get_subgraph(project_id, focus_node_id, depth, labels, stage, chapter)
             # Re-raise unexpected errors
             raise
     
@@ -173,6 +199,11 @@ class GraphRepository:
         for label in labels:
             if label not in NODE_LABELS:
                 raise ValueError(f"Invalid label: {label}")
+        
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.create_node(project_id, labels, properties)
         
         try:
             with get_neo4j_session() as session:
@@ -195,17 +226,26 @@ class GraphRepository:
                     }
                 raise ValueError("Failed to create node")
         except ConnectionError as e:
-            logger.warning(f"Neo4j not available, cannot create node: {e}")
-            raise
+            # Fallback to memory store
+            logger.info(f"Neo4j connection failed, using memory store fallback for create_node")
+            memory_store = get_memory_store()
+            return memory_store.create_node(project_id, labels, properties)
         except Exception as e:
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                raise ConnectionError(f"Neo4j is not available: {error_msg}") from e
+                logger.info(f"Neo4j not available, using memory store fallback for create_node")
+                memory_store = get_memory_store()
+                return memory_store.create_node(project_id, labels, properties)
             raise
     
     @staticmethod
     def update_node(node_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
         """Update node properties."""
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.update_node(node_id, properties)
+        
         try:
             with get_neo4j_session() as session:
                 query = """
@@ -225,17 +265,26 @@ class GraphRepository:
                     }
                 raise ValueError(f"Node not found: {node_id}")
         except ConnectionError as e:
-            logger.warning(f"Neo4j not available, cannot update node: {e}")
-            raise
+            # Fallback to memory store
+            logger.info(f"Neo4j connection failed, using memory store fallback for update_node")
+            memory_store = get_memory_store()
+            return memory_store.update_node(node_id, properties)
         except Exception as e:
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                raise ConnectionError(f"Neo4j is not available: {error_msg}") from e
+                logger.info(f"Neo4j not available, using memory store fallback for update_node")
+                memory_store = get_memory_store()
+                return memory_store.update_node(node_id, properties)
             raise
     
     @staticmethod
     def delete_node(node_id: str) -> bool:
         """Delete a node and its relationships."""
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.delete_node(node_id)
+        
         try:
             with get_neo4j_session() as session:
                 query = """
@@ -247,12 +296,16 @@ class GraphRepository:
                 record = result.single()
                 return record["deleted"] > 0 if record else False
         except ConnectionError as e:
-            logger.warning(f"Neo4j not available, cannot delete node: {e}")
-            raise
+            # Fallback to memory store
+            logger.info(f"Neo4j connection failed, using memory store fallback for delete_node")
+            memory_store = get_memory_store()
+            return memory_store.delete_node(node_id)
         except Exception as e:
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                raise ConnectionError(f"Neo4j is not available: {error_msg}") from e
+                logger.info(f"Neo4j not available, using memory store fallback for delete_node")
+                memory_store = get_memory_store()
+                return memory_store.delete_node(node_id)
             raise
     
     @staticmethod
@@ -263,6 +316,11 @@ class GraphRepository:
         properties: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Create a relationship between two nodes."""
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.create_relationship(source_id, target_id, rel_type, properties)
+        
         # Get source and target labels to validate
         try:
             with get_neo4j_session() as session:
@@ -305,17 +363,26 @@ class GraphRepository:
                     }
                 raise ValueError("Failed to create relationship")
         except ConnectionError as e:
-            logger.warning(f"Neo4j not available, cannot create relationship: {e}")
-            raise
+            # Fallback to memory store
+            logger.info(f"Neo4j connection failed, using memory store fallback for create_relationship")
+            memory_store = get_memory_store()
+            return memory_store.create_relationship(source_id, target_id, rel_type, properties)
         except Exception as e:
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                raise ConnectionError(f"Neo4j is not available: {error_msg}") from e
+                logger.info(f"Neo4j not available, using memory store fallback for create_relationship")
+                memory_store = get_memory_store()
+                return memory_store.create_relationship(source_id, target_id, rel_type, properties)
             raise
     
     @staticmethod
     def delete_relationship(source_id: str, target_id: str, rel_type: str) -> bool:
         """Delete a relationship."""
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.delete_relationship(source_id, target_id, rel_type)
+        
         try:
             with get_neo4j_session() as session:
                 query = f"""
@@ -327,17 +394,26 @@ class GraphRepository:
                 record = result.single()
                 return record["deleted"] > 0 if record else False
         except ConnectionError as e:
-            logger.warning(f"Neo4j not available, cannot delete relationship: {e}")
-            raise
+            # Fallback to memory store
+            logger.info(f"Neo4j connection failed, using memory store fallback for delete_relationship")
+            memory_store = get_memory_store()
+            return memory_store.delete_relationship(source_id, target_id, rel_type)
         except Exception as e:
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                raise ConnectionError(f"Neo4j is not available: {error_msg}") from e
+                logger.info(f"Neo4j not available, using memory store fallback for delete_relationship")
+                memory_store = get_memory_store()
+                return memory_store.delete_relationship(source_id, target_id, rel_type)
             raise
     
     @staticmethod
     def search(project_id: str, query: str, labels: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Search nodes using fulltext index."""
+        # Use memory store if Neo4j is not available
+        if not NEO4J_AVAILABLE:
+            memory_store = get_memory_store()
+            return memory_store.search(project_id, query, labels)
+        
         try:
             with get_neo4j_session() as session:
                 label_filter = ""
@@ -366,12 +442,15 @@ class GraphRepository:
                     })
                 return nodes
         except ConnectionError:
-            logger.warning(f"Neo4j not available, returning empty search results")
-            return []
+            # Fallback to memory store
+            logger.info(f"Neo4j connection failed, using memory store fallback for search")
+            memory_store = get_memory_store()
+            return memory_store.search(project_id, query, labels)
         except Exception as e:
             error_msg = str(e)
             if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-                logger.warning(f"Neo4j connection issue, returning empty search results")
-                return []
+                logger.info(f"Neo4j not available, using memory store fallback for search")
+                memory_store = get_memory_store()
+                return memory_store.search(project_id, query, labels)
             raise
 
