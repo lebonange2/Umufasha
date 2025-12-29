@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://assistant:assistant@db:5432/assistant"
     REDIS_URL: str = "redis://redis:6379/0"
     
+    # Neo4j Graph Database
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "neo4jpassword"
+    
     # LLM - Local models only (Ollama)
     LLM_MODEL: str = "qwen3:30b"  # Default local model
     LLM_PROVIDER: str = "local"  # Always local (Ollama) - no API keys needed

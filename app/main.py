@@ -29,7 +29,8 @@ from app.routes import (
     book_writer,
     ferrari_company,
     product_debate,
-    mindmaps
+    mindmaps,
+    graph
 )
 from app.core.config import settings
 
@@ -46,6 +47,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
+    # Initialize Neo4j schema
+    try:
+        from app.graph.schema import create_constraints_and_indexes
+        create_constraints_and_indexes()
+        logger.info("Neo4j schema initialized")
+    except Exception as e:
+        logger.warning("Failed to initialize Neo4j schema", error=str(e))
+    
     # Initialize scheduler
     scheduler = get_scheduler()
     if scheduler:
@@ -59,6 +68,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if scheduler:
         scheduler.stop()
         logger.info("Scheduler stopped")
+    
+    # Close Neo4j connection
+    try:
+        from app.graph.connection import close_neo4j_driver
+        close_neo4j_driver()
+    except Exception as e:
+        logger.warning("Error closing Neo4j connection", error=str(e))
 
 
 # Create FastAPI app
@@ -111,6 +127,7 @@ app.include_router(book_writer.router, tags=["book-writer"])
 app.include_router(ferrari_company.router, tags=["ferrari-company"])
 app.include_router(product_debate.router, tags=["product-debate"])
 app.include_router(mindmaps.router, tags=["mindmaps"])
+app.include_router(graph.router, tags=["graph"])
 
 
 @app.get("/", response_class=HTMLResponse)

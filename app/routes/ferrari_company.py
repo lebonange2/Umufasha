@@ -360,6 +360,19 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
         await save_project_to_db(project_id, project_data, db)
         await log_progress(project_id, f"Project created: {project.title or 'Untitled'}", Phase.STRATEGY_CONCEPT.value, db)
         
+        # Initialize Neo4j graph for this project
+        try:
+            from app.graph.repository import GraphRepository
+            GraphRepository.create_project(
+                project_id=project_id,
+                title=project.title or "Untitled",
+                genre=None
+            )
+            logger.info(f"Initialized Neo4j graph for project {project_id}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Neo4j graph for project {project_id}", error=str(e))
+            # Don't fail project creation if graph init fails
+        
         logger.info(f"Created Book Publishing House project {project_id}")
         
         return BookPublishingHouseProjectResponse(
@@ -468,6 +481,13 @@ async def _execute_phase_background(project_id: str, current_phase: Phase, db: A
         # Save to database
         if db:
             await save_project_to_db(project_id, project_data, db)
+        
+        # Sync to Neo4j graph
+        try:
+            from app.graph.sync import GraphSyncer
+            GraphSyncer.sync_project_to_graph(project_id, project_data)
+        except Exception as e:
+            logger.warning(f"Failed to sync to graph", error=str(e), project_id=project_id)
         
         # Mark as completed
         phase_execution_status[status_key] = {

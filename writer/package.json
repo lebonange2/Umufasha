@@ -19,13 +19,17 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.9.5",
-    "react-window": "^2.2.3"
+    "react-window": "^2.2.3",
+    "3d-force-graph": "^1.70.19",
+    "three": "^0.160.0",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/three": "^0.160.0",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
     "jsdom": "^23.0.0",

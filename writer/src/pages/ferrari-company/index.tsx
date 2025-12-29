@@ -922,6 +922,12 @@ export default function BookPublishingHousePage() {
             </div>
             <div className="flex gap-2">
               <button
+                onClick={() => navigate(`/writer/graph/${project.project_id}`)}
+                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+              >
+                🕸️ Knowledge Graph
+              </button>
+              <button
                 onClick={downloadProgressReport}
                 className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
               >

@@ -4,6 +4,7 @@ import OutlinePreviewPage from './pages/outline-preview';
 import BookWriterPage from './pages/book-writer';
 import BookPublishingHousePage from './pages/ferrari-company';
 import PDFToAudioPage from './pages/pdf-to-audio';
+import GraphEditorPage from './pages/graph-editor';
 
 function App() {
   // Determine base path based on current location
@@ -32,6 +33,7 @@ function App() {
         <Route path="book-writer" element={<BookWriterPage />} />
         <Route path="ferrari-company" element={<BookPublishingHousePage />} />
         <Route path="pdf-to-audio" element={<PDFToAudioPage />} />
+        <Route path="graph/:projectId" element={<GraphEditorPage />} />
       </Routes>
     </BrowserRouter>
   );
