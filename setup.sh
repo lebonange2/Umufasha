@@ -413,11 +413,11 @@ if command -v apt-get &> /dev/null; then
         
         # Install docker-compose separately with better error handling (REQUIRED)
         print_status "Installing Docker Compose (REQUIRED)..."
-        local INSTALL_RESULT=""
+        INSTALL_RESULT=""
         INSTALL_RESULT=$(install_docker_compose_ubuntu true)
         
         # Also do a final check via dpkg as backup verification
-        local FINAL_CHECK=false
+        FINAL_CHECK=false
         if dpkg -l | grep -qE "^ii.*docker-compose"; then
             FINAL_CHECK=true
             print_status "Docker Compose package verified via dpkg"
@@ -494,11 +494,11 @@ if command -v apt-get &> /dev/null; then
         
         # Install docker-compose separately (REQUIRED)
         print_status "Installing Docker Compose (REQUIRED)..."
-        local INSTALL_RESULT=""
+        INSTALL_RESULT=""
         INSTALL_RESULT=$(install_docker_compose_ubuntu false)
         
         # Also do a final check via dpkg as backup verification
-        local FINAL_CHECK=false
+        FINAL_CHECK=false
         if dpkg -l | grep -qE "^ii.*docker-compose"; then
             FINAL_CHECK=true
             print_status "Docker Compose package verified via dpkg"
