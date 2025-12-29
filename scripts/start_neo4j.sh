@@ -8,7 +8,15 @@ cd "$(dirname "$0")/.."
 
 # Check if docker-compose is available
 if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
-    echo "Error: docker-compose or docker is not installed"
+    echo "⚠️  Error: docker-compose or docker is not installed"
+    echo ""
+    echo "If you're running inside a Docker container, you need to run this from the host machine:"
+    echo "  docker-compose up -d neo4j"
+    echo ""
+    echo "Or if you're on the host machine, install Docker:"
+    echo "  https://docs.docker.com/get-docker/"
+    echo ""
+    echo "Note: The application will work without Neo4j using the memory store fallback."
     exit 1
 fi
 

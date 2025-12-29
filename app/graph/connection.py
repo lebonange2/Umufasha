@@ -38,14 +38,15 @@ def get_neo4j_driver() -> Driver:
             
             if result != 0:
                 # Port is not open, Neo4j is likely not running
-                logger.warning(
+                # This is expected - we'll use memory store fallback
+                logger.info(
                     f"Neo4j port {port} on {host} is not accessible. "
-                    f"Neo4j is not running. "
-                    f"To start Neo4j, run: docker-compose up -d neo4j"
+                    f"Using memory store fallback. "
+                    f"(To use Neo4j, start it with: docker-compose up -d neo4j)"
                 )
                 raise ConnectionError(
                     f"Neo4j is not running on {host}:{port}. "
-                    f"Please start Neo4j with: docker-compose up -d neo4j"
+                    f"Memory store will be used instead."
                 )
         except socket.gaierror as e:
             logger.warning(f"Could not resolve Neo4j host {host}: {e}")
@@ -74,13 +75,10 @@ def get_neo4j_driver() -> Driver:
             
             # Provide helpful error message
             if "Connection refused" in error_msg or "refused" in error_msg.lower():
+                # This is expected - memory store will be used
                 raise ConnectionError(
                     f"Neo4j is not running on {host}:{port}. "
-                    f"To start Neo4j:\n"
-                    f"  1. Ensure docker-compose.yml has neo4j service\n"
-                    f"  2. Run: docker-compose up -d neo4j\n"
-                    f"  3. Wait for Neo4j to start (check logs: docker-compose logs neo4j)\n"
-                    f"  4. Verify Neo4j is running: docker-compose ps neo4j"
+                    f"Memory store will be used instead."
                 ) from e
             else:
                 raise ConnectionError(f"Neo4j connection failed: {error_msg}") from e

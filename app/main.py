@@ -54,20 +54,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Neo4j schema initialized")
     except ConnectionError as e:
         error_msg = str(e)
-        logger.warning(
-            "Neo4j is not available, skipping schema initialization",
+        # This is expected - memory store will be used, so just log as info
+        logger.info(
+            "Neo4j is not available, using memory store fallback",
             error=error_msg
         )
-        # Provide helpful message if Neo4j is not running
-        if "not running" in error_msg.lower() or "refused" in error_msg.lower():
-            logger.info(
-                "To start Neo4j, run: ./scripts/start_neo4j.sh or docker-compose up -d neo4j"
-            )
     except Exception as e:
         error_msg = str(e)
         if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "ServiceUnavailable" in error_msg:
-            logger.warning("Neo4j is not available, skipping schema initialization", error=error_msg)
-            logger.info("To start Neo4j, run: ./scripts/start_neo4j.sh or docker-compose up -d neo4j")
+            # This is expected - memory store will be used
+            logger.info("Neo4j is not available, using memory store fallback", error=error_msg)
         else:
             logger.warning("Failed to initialize Neo4j schema", error=str(e))
     
