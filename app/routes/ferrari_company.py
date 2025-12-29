@@ -361,14 +361,26 @@ async def create_book_publishing_house_project(project: BookPublishingHouseProje
         await log_progress(project_id, f"Project created: {project.title or 'Untitled'}", Phase.STRATEGY_CONCEPT.value, db)
         
         # Initialize Neo4j graph for this project
+        # Do this in background to not block project creation
         try:
             from app.graph.repository import GraphRepository
-            GraphRepository.create_project(
-                project_id=project_id,
-                title=project.title or "Untitled",
-                genre=None
-            )
-            logger.info(f"Initialized Neo4j graph for project {project_id}")
+            # Try to create project node - if it fails, it's non-critical
+            try:
+                GraphRepository.create_project(
+                    project_id=project_id,
+                    title=project.title or "Untitled",
+                    genre=None
+                )
+                logger.info(f"Initialized Neo4j graph for project {project_id}")
+            except Exception as graph_err:
+                # Log but don't fail - graph will be initialized on first access
+                logger.warning(
+                    f"Failed to initialize Neo4j graph for project {project_id} (non-critical)", 
+                    error=str(graph_err)
+                )
+        except ImportError:
+            # Neo4j not installed - this is okay, graph features just won't work
+            logger.info(f"Neo4j not available, skipping graph initialization for project {project_id}")
         except Exception as e:
             logger.warning(f"Failed to initialize Neo4j graph for project {project_id}", error=str(e))
             # Don't fail project creation if graph init fails

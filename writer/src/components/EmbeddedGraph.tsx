@@ -65,26 +65,62 @@ export default function EmbeddedGraph({
   const loadGraph = async () => {
     if (!projectId) return;
     
+    setLoading(true);
+    setError(null);
+    
     try {
       const response = await fetch(`/api/projects/${projectId}/graph?depth=2`);
       
       if (!response.ok) {
-        throw new Error('Failed to load graph');
+        // Try to get error message from response
+        let errorMessage = 'Failed to load graph';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch (e) {
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
-      setGraphData(data);
-      setNodeCount(data.nodes?.length || 0);
-      setEdgeCount(data.edges?.length || 0);
+      
+      // Ensure data has nodes and edges arrays
+      const graphData = {
+        nodes: data.nodes || [],
+        edges: data.edges || []
+      };
+      
+      setGraphData(graphData);
+      setNodeCount(graphData.nodes.length);
+      setEdgeCount(graphData.edges.length);
       
       if (graphRef.current) {
-        graphRef.current.graphData(data);
+        graphRef.current.graphData(graphData);
       }
       
       setLoading(false);
       setError(null);
+      
+      // If graph is empty, try to initialize it
+      if (graphData.nodes.length === 0 && graphData.edges.length === 0) {
+        // Silently try to initialize - don't show error for empty graph
+        try {
+          await fetch(`/api/projects/${projectId}/graph/init?title=Project&genre=`, {
+            method: 'POST',
+          });
+          // Reload after a short delay
+          setTimeout(() => {
+            loadGraph();
+          }, 500);
+        } catch (initErr) {
+          // Ignore initialization errors - empty graph is acceptable
+          console.log('Graph initialization skipped or failed (non-critical):', initErr);
+        }
+      }
     } catch (err: any) {
-      setError(err.message);
+      const errorMessage = err.message || 'Failed to load graph';
+      setError(errorMessage);
       setLoading(false);
       console.error('Failed to load graph:', err);
     }
@@ -139,26 +175,15 @@ export default function EmbeddedGraph({
 
   // Manual refresh function
   const handleRefresh = () => {
+    setError(null);
     setLoading(true);
     loadGraph();
   };
 
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded p-4" style={{ height }}>
-        <p className="text-red-700">Error loading graph: {error}</p>
-        <button
-          onClick={handleRefresh}
-          className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+  // Error display is handled in the main return below
 
   return (
-    <div className="bg-gray-900 rounded-lg overflow-hidden border-2 border-gray-700" style={{ height }}>
+    <div className="bg-gray-900 rounded-lg overflow-hidden border-2 border-gray-700 relative" style={{ height }}>
       <div className="bg-gray-800 text-white px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <h3 className="font-semibold">📊 Knowledge Graph</h3>
@@ -172,7 +197,8 @@ export default function EmbeddedGraph({
           )}
           <button
             onClick={handleRefresh}
-            className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm"
+            disabled={loading}
+            className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm disabled:opacity-50"
             title="Refresh graph"
           >
             🔄
@@ -180,9 +206,44 @@ export default function EmbeddedGraph({
         </div>
       </div>
       <div ref={containerRef} style={{ width: '100%', height: 'calc(100% - 48px)' }} />
-      {loading && graphData.nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
+      {loading && graphData.nodes.length === 0 && !error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-0">
           <div className="text-white">Loading graph...</div>
+        </div>
+      )}
+      {!loading && graphData.nodes.length === 0 && !error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50 z-0">
+          <div className="text-white text-center">
+            <p className="mb-2">Graph is empty</p>
+            <p className="text-sm text-gray-400">Nodes will appear as the book writing progresses</p>
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 bg-red-50 border-2 border-red-300 rounded-lg flex flex-col items-center justify-center p-4 z-10">
+          <p className="text-red-700 font-semibold mb-2">Error loading graph</p>
+          <p className="text-red-600 text-sm mb-4 text-center max-w-md">{error}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRefresh}
+              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 font-semibold"
+            >
+              🔄 Retry
+            </button>
+            <button
+              onClick={() => {
+                setError(null);
+                setLoading(false);
+              }}
+              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+            >
+              Dismiss
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-4 text-center max-w-md">
+            Note: Graph requires Neo4j to be running. If Neo4j is not available,<br />
+            the graph will be empty but the book writing process will continue normally.
+          </p>
         </div>
       )}
     </div>

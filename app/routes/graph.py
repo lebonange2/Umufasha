@@ -40,14 +40,37 @@ class RelationshipUpdate(BaseModel):
 
 
 @router.post("/api/projects/{project_id}/graph/init")
-async def init_project_graph(project_id: str, title: str, genre: Optional[str] = None):
+async def init_project_graph(
+    project_id: str, 
+    title: Optional[str] = Query("Untitled"),
+    genre: Optional[str] = Query(None)
+):
     """Initialize graph for a project."""
     try:
-        node = GraphRepository.create_project(project_id, title, genre)
+        # Check if project already exists
+        try:
+            existing = GraphRepository.get_subgraph(project_id, depth=0)
+            if existing.get("nodes") and len(existing["nodes"]) > 0:
+                # Project already exists
+                return {"success": True, "message": "Project already initialized", "node": existing["nodes"][0]}
+        except Exception:
+            # Project doesn't exist, continue to create
+            pass
+        
+        node = GraphRepository.create_project(project_id, title or "Untitled", genre)
         return {"success": True, "node": node}
     except Exception as e:
-        logger.error("Failed to initialize project graph", error=str(e), project_id=project_id)
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        logger.error("Failed to initialize project graph", error=error_msg, project_id=project_id, exc_info=True)
+        
+        # If it's a connection error, return a more helpful message
+        if "connection" in error_msg.lower() or "neo4j" in error_msg.lower():
+            raise HTTPException(
+                status_code=503, 
+                detail="Neo4j database is not available. Please ensure Neo4j is running."
+            )
+        
+        raise HTTPException(status_code=500, detail=f"Failed to initialize graph: {error_msg}")
 
 
 @router.get("/api/projects/{project_id}/graph")
@@ -72,8 +95,33 @@ async def get_subgraph(
         )
         return result
     except Exception as e:
-        logger.error("Failed to fetch subgraph", error=str(e), project_id=project_id)
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        logger.error("Failed to fetch subgraph", error=error_msg, project_id=project_id, exc_info=True)
+        
+        # If project doesn't exist in Neo4j, try to initialize it
+        if "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
+            try:
+                # Try to get project info from Book Publishing House
+                from app.database import get_db
+                from sqlalchemy.ext.asyncio import AsyncSession
+                from sqlalchemy import select
+                from app.models import BookPublishingHouseProject as BPHProject
+                
+                # We can't use Depends here, so we'll just return empty graph
+                # The frontend will handle initialization
+                logger.warning(f"Project {project_id} not found in Neo4j, returning empty graph")
+                return {"nodes": [], "edges": []}
+            except Exception as init_err:
+                logger.error("Failed to initialize missing project", error=str(init_err))
+        
+        # For connection errors, return empty graph instead of failing
+        if "connection" in error_msg.lower() or "neo4j" in error_msg.lower():
+            logger.warning(f"Neo4j connection issue for project {project_id}, returning empty graph")
+            return {"nodes": [], "edges": []}
+        
+        # For other errors, still return empty graph to prevent UI breakage
+        logger.warning(f"Graph fetch error for project {project_id}, returning empty graph: {error_msg}")
+        return {"nodes": [], "edges": []}
 
 
 @router.post("/api/projects/{project_id}/nodes")

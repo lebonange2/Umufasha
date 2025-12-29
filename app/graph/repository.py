@@ -82,14 +82,14 @@ class GraphRepository:
                 query = f"""
                 MATCH (project:Project {{id: $project_id}})
                 {stage_filter}
-                MATCH (project)-[*0..$depth]-(n)
+                OPTIONAL MATCH (project)-[*0..$depth]-(n)
                 WHERE n IS NOT NULL {label_filter}
                 WITH project, collect(DISTINCT n) as all_nodes
                 UNWIND all_nodes as n1
-                MATCH (n1)-[r]-(n2)
-                WHERE n2 IN all_nodes
+                OPTIONAL MATCH (n1)-[r]-(n2)
+                WHERE n2 IN all_nodes AND n1 IS NOT NULL
                 WITH project, all_nodes, collect(DISTINCT r) as all_rels
-                RETURN all_nodes, all_rels
+                RETURN project, all_nodes, all_rels
                 """
                 params = {"project_id": project_id, "depth": depth}
                 if stage:
@@ -97,15 +97,16 @@ class GraphRepository:
                 if chapter is not None:
                     # Filter by chapter
                     query = query.replace(
-                        "MATCH (project)-[*0..$depth]-(n)",
-                        "MATCH (project)-[:HAS_CHAPTER]->(ch:Chapter {number: $chapter})-[:HAS_SCENE]->(s:Scene)"
+                        "OPTIONAL MATCH (project)-[*0..$depth]-(n)",
+                        "OPTIONAL MATCH (project)-[:HAS_CHAPTER]->(ch:Chapter {number: $chapter})-[:HAS_SCENE]->(s:Scene)"
                     )
                     query = query.replace("WHERE n IS NOT NULL", "WHERE n IS NOT NULL AND (n = ch OR n = s OR n IN all_nodes)")
                     params["chapter"] = chapter
                 result = session.run(query, **params)
             
             record = result.single()
-            if not record:
+            if not record or not record.get("project"):
+                # Project doesn't exist in Neo4j - return empty graph
                 return {"nodes": [], "edges": []}
             
             nodes = []

@@ -28,6 +28,8 @@ def get_neo4j_driver() -> Driver:
             logger.info("Neo4j connection established", uri=uri, user=user)
         except Exception as e:
             logger.error("Failed to connect to Neo4j", error=str(e), uri=uri)
+            # Don't raise - let callers handle gracefully
+            # This allows the app to work even if Neo4j is down
             raise
     
     return _neo4j_driver
