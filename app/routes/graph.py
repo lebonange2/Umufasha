@@ -345,3 +345,45 @@ async def get_schema():
         "allowed_relationships": ALLOWED_RELATIONSHIPS
     }
 
+
+@router.get("/api/graph/status")
+async def get_neo4j_status():
+    """Check Neo4j connection status."""
+    try:
+        from app.graph.connection import get_neo4j_driver
+        from app.core.config import settings
+        
+        status = {
+            "neo4j_available": False,
+            "neo4j_uri": settings.NEO4J_URI,
+            "neo4j_user": settings.NEO4J_USER,
+            "error": None,
+            "message": None
+        }
+        
+        try:
+            driver = get_neo4j_driver()
+            driver.verify_connectivity(timeout=3)
+            status["neo4j_available"] = True
+            status["message"] = "Neo4j is connected and running"
+            logger.info("Neo4j status check: connected")
+        except ConnectionError as e:
+            status["neo4j_available"] = False
+            status["error"] = str(e)
+            status["message"] = "Neo4j is not running. Start it with: neo4j start or docker-compose up -d neo4j"
+            logger.warning(f"Neo4j status check: not available - {e}")
+        except Exception as e:
+            status["neo4j_available"] = False
+            status["error"] = str(e)
+            status["message"] = f"Neo4j connection error: {str(e)}"
+            logger.error(f"Neo4j status check failed: {e}")
+        
+        return status
+    except Exception as e:
+        logger.error(f"Failed to check Neo4j status: {e}")
+        return {
+            "neo4j_available": False,
+            "error": str(e),
+            "message": "Failed to check Neo4j status"
+        }
+

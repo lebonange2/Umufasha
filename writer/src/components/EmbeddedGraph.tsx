@@ -61,12 +61,30 @@ export default function EmbeddedGraph({
   const [error, setError] = useState<string | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
   const [edgeCount, setEdgeCount] = useState(0);
+  const [neo4jAvailable, setNeo4jAvailable] = useState<boolean | null>(null);
+
+  const checkNeo4jStatus = async () => {
+    try {
+      const response = await fetch('/api/graph/status');
+      if (response.ok) {
+        const status = await response.json();
+        setNeo4jAvailable(status.neo4j_available);
+        return status.neo4j_available;
+      }
+    } catch (err) {
+      console.error('Failed to check Neo4j status:', err);
+    }
+    return null;
+  };
 
   const loadGraph = async () => {
     if (!projectId) return;
     
     setLoading(true);
     setError(null);
+    
+    // Check Neo4j status first
+    await checkNeo4jStatus();
     
     try {
       const response = await fetch(`/api/projects/${projectId}/graph?depth=2`);
@@ -221,16 +239,46 @@ export default function EmbeddedGraph({
       )}
       {!loading && graphData.nodes.length === 0 && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50 z-0">
-          <div className="text-white text-center">
-            <p className="mb-2">Graph is empty</p>
-            <p className="text-sm text-gray-400">Nodes will appear as the book writing progresses</p>
+          <div className="text-white text-center px-4">
+            {neo4jAvailable === false ? (
+              <>
+                <p className="mb-2 text-yellow-400 font-semibold">⚠️ Neo4j Not Running</p>
+                <p className="text-sm text-gray-300 mb-3">
+                  The knowledge graph requires Neo4j to be running.
+                </p>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p>To start Neo4j:</p>
+                  <code className="block bg-gray-800 px-3 py-2 rounded mt-2">neo4j start</code>
+                  <p className="mt-2">or</p>
+                  <code className="block bg-gray-800 px-3 py-2 rounded mt-2">docker-compose up -d neo4j</code>
+                </div>
+                <p className="text-xs text-gray-500 mt-4">
+                  Note: The book writing process works without Neo4j.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mb-2">Graph is empty</p>
+                <p className="text-sm text-gray-400">Nodes will appear as the book writing progresses</p>
+              </>
+            )}
           </div>
         </div>
       )}
       {error && (
         <div className="absolute inset-0 bg-red-50 border-2 border-red-300 rounded-lg flex flex-col items-center justify-center p-4 z-10">
-          <p className="text-red-700 font-semibold mb-2">Error loading graph</p>
+          <p className="text-red-700 font-semibold mb-2">
+            {neo4jAvailable === false ? '⚠️ Neo4j Not Running' : 'Error loading graph'}
+          </p>
           <p className="text-red-600 text-sm mb-4 text-center max-w-md">{error}</p>
+          {neo4jAvailable === false && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded p-3 mb-4 text-xs text-gray-700 max-w-md">
+              <p className="font-semibold mb-2">To start Neo4j:</p>
+              <code className="block bg-gray-800 text-white px-2 py-1 rounded mb-1">neo4j start</code>
+              <p className="my-1">or if using Docker:</p>
+              <code className="block bg-gray-800 text-white px-2 py-1 rounded">docker-compose up -d neo4j</code>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               onClick={handleRefresh}
@@ -249,8 +297,8 @@ export default function EmbeddedGraph({
             </button>
           </div>
           <p className="text-xs text-gray-500 mt-4 text-center max-w-md">
-            Note: Graph requires Neo4j to be running. If Neo4j is not available,<br />
-            the graph will be empty but the book writing process will continue normally.
+            Note: The book writing process works without Neo4j.<br />
+            The graph is optional and provides visual knowledge mapping.
           </p>
         </div>
       )}
