@@ -53,22 +53,43 @@ async def init_project_graph(
             if existing.get("nodes") and len(existing["nodes"]) > 0:
                 # Project already exists
                 return {"success": True, "message": "Project already initialized", "node": existing["nodes"][0]}
+        except ConnectionError:
+            # Neo4j is not available - return success but indicate Neo4j is unavailable
+            logger.warning(f"Neo4j not available, cannot check if project exists: {project_id}")
+            return {
+                "success": True, 
+                "message": "Neo4j is not available. Graph will be initialized when Neo4j is available.",
+                "neo4j_unavailable": True
+            }
         except Exception:
             # Project doesn't exist, continue to create
             pass
         
-        node = GraphRepository.create_project(project_id, title or "Untitled", genre)
-        return {"success": True, "node": node}
+        try:
+            node = GraphRepository.create_project(project_id, title or "Untitled", genre)
+            return {"success": True, "node": node}
+        except ConnectionError as e:
+            # Neo4j is not available - return success but indicate Neo4j is unavailable
+            logger.warning(f"Neo4j not available, cannot create project node: {project_id}")
+            return {
+                "success": True, 
+                "message": "Neo4j is not available. Graph will be initialized when Neo4j is available.",
+                "neo4j_unavailable": True
+            }
     except Exception as e:
         error_msg = str(e)
         logger.error("Failed to initialize project graph", error=error_msg, project_id=project_id, exc_info=True)
         
-        # If it's a connection error, return a more helpful message
-        if "connection" in error_msg.lower() or "neo4j" in error_msg.lower():
-            raise HTTPException(
-                status_code=503, 
-                detail="Neo4j database is not available. Please ensure Neo4j is running."
-            )
+        # If it's a connection error, return success with a message instead of raising
+        if ("connection" in error_msg.lower() or 
+            "neo4j" in error_msg.lower() or 
+            "ConnectionError" in error_msg or
+            "ServiceUnavailable" in error_msg):
+            return {
+                "success": True, 
+                "message": "Neo4j is not available. Graph will be initialized when Neo4j is available.",
+                "neo4j_unavailable": True
+            }
         
         raise HTTPException(status_code=500, detail=f"Failed to initialize graph: {error_msg}")
 

@@ -337,10 +337,15 @@ export default function GraphEditorPage() {
       {/* Toolbar */}
       <div className="bg-gray-800 text-white p-4 flex items-center gap-4">
         <button
-          onClick={() => navigate('/writer/ferrari-company')}
-          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
+          onClick={() => {
+            // Navigate back to Book Publishing House page
+            // The basename is /writer, so /ferrari-company resolves to /writer/ferrari-company
+            navigate('/ferrari-company');
+          }}
+          className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600 flex items-center gap-2"
+          title="Back to Book Publishing House"
         >
-          ← Back
+          ← Back to Book Publishing House
         </button>
         
         <div className="flex-1" />

@@ -106,13 +106,21 @@ export default function EmbeddedGraph({
       if (graphData.nodes.length === 0 && graphData.edges.length === 0) {
         // Silently try to initialize - don't show error for empty graph
         try {
-          await fetch(`/api/projects/${projectId}/graph/init?title=Project&genre=`, {
+          const initResponse = await fetch(`/api/projects/${projectId}/graph/init?title=Project&genre=`, {
             method: 'POST',
           });
-          // Reload after a short delay
-          setTimeout(() => {
-            loadGraph();
-          }, 500);
+          if (initResponse.ok) {
+            const initData = await initResponse.json();
+            // If Neo4j is unavailable, that's okay - graph will be empty
+            if (initData.neo4j_unavailable) {
+              console.log('Neo4j is not available - graph will remain empty until Neo4j is started');
+            } else {
+              // Reload after a short delay if initialization succeeded
+              setTimeout(() => {
+                loadGraph();
+              }, 500);
+            }
+          }
         } catch (initErr) {
           // Ignore initialization errors - empty graph is acceptable
           console.log('Graph initialization skipped or failed (non-critical):', initErr);
