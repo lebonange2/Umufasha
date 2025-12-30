@@ -138,6 +138,14 @@ export default function EmbeddedGraph({
         // Pass transformed data to 3D graph
         console.log('Updating graph with data');
         graphRef.current.graphData(graphData);
+        
+        // Center the camera on the graph after a short delay to ensure nodes are positioned
+        setTimeout(() => {
+          if (graphRef.current && graphData.nodes.length > 0) {
+            // Zoom to fit all nodes in view
+            graphRef.current.zoomToFit(400); // 400ms transition
+          }
+        }, 500);
       }
       
       setLoading(false);

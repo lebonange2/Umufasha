@@ -1051,100 +1051,104 @@ export default function BookPublishingHousePage() {
             </div>
           )}
 
-          {/* Knowledge Graph - Always visible when project exists */}
+          {/* Knowledge Graph and Phase Results - Side by side when both available */}
           {project && !isComplete && (
-            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold">📊 Knowledge Graph</h3>
-                <button
-                  onClick={() => setShowGraph(!showGraph)}
-                  className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
-                >
-                  {showGraph ? 'Hide' : 'Show'} Graph
-                </button>
-              </div>
-              {showGraph && (
-                <EmbeddedGraph 
-                  key={graphKey}
-                  projectId={project.project_id} 
-                  height="500px"
-                  autoRefresh={true}
-                  refreshInterval={5000}
-                />
-              )}
-            </div>
-          )}
-
-          {currentArtifacts && !isComplete && (
-            <div className="bg-white border-2 border-blue-200 rounded-lg p-6 mb-4 shadow-md">
-              <div className="mb-4">
-                <h3 className="text-xl font-bold mb-2">Phase Results: {currentPhaseName}</h3>
-                <p className="text-gray-600 mb-4">Review the generated content below and make your decision.</p>
-              </div>
-              
-              <div className="mb-4">
-                <div className="mb-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phase Results (Editable JSON)
-                  </label>
-                  <p className="text-xs text-gray-500 mb-2">
-                    You can edit the JSON below to modify the phase results before approving.
-                  </p>
+            <div className={currentArtifacts ? "grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6" : "mb-6"}>
+              {/* Knowledge Graph */}
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold">📊 Knowledge Graph</h3>
+                  <button
+                    onClick={() => setShowGraph(!showGraph)}
+                    className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                  >
+                    {showGraph ? 'Hide' : 'Show'} Graph
+                  </button>
                 </div>
-                <div className="bg-gray-50 border rounded p-4">
-                  <textarea
-                    value={editableArtifactsJson}
-                    onChange={(e) => handleJsonChange(e.target.value)}
-                    className="w-full h-96 p-3 font-mono text-sm bg-white border border-gray-300 rounded resize-y focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    spellCheck={false}
-                    placeholder="Loading artifacts..."
+                {showGraph && (
+                  <EmbeddedGraph 
+                    key={graphKey}
+                    projectId={project.project_id} 
+                    height="600px"
+                    autoRefresh={true}
+                    refreshInterval={5000}
                   />
-                </div>
-                {jsonParseError && (
-                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
-                    <p className="text-sm text-red-700">
-                      <strong>JSON Error:</strong> {jsonParseError}
-                    </p>
-                    <p className="text-xs text-red-600 mt-1">
-                      Please fix the JSON syntax before proceeding.
-                    </p>
-                  </div>
-                )}
-                {!jsonParseError && editableArtifactsJson && (
-                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
-                    <p className="text-sm text-green-700">
-                      ✓ Valid JSON - Ready to proceed
-                    </p>
-                  </div>
                 )}
               </div>
-              
-              <div className="border-t pt-4">
-                <p className="text-sm font-semibold mb-3">Your Decision:</p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => makeDecision('approve')}
-                    disabled={loading}
-                    className="flex-1 px-6 py-3 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 font-semibold shadow"
-                  >
-                    ✓ Approve & Continue to Next Phase
-                  </button>
-                  <button
-                    onClick={() => makeDecision('request_changes')}
-                    disabled={loading}
-                    className="px-6 py-3 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 font-semibold shadow"
-                  >
-                    ↻ Request Changes
-                  </button>
-                  <button
-                    onClick={() => makeDecision('stop')}
-                    disabled={loading}
-                    className="px-6 py-3 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 font-semibold shadow"
-                  >
-                    ✗ Stop Project
-                  </button>
+
+              {/* Phase Results - Show alongside graph when available */}
+              {currentArtifacts && (
+                <div className="bg-white border-2 border-blue-200 rounded-lg p-6 shadow-md h-full flex flex-col">
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold mb-2">Phase Results: {currentPhaseName}</h3>
+                    <p className="text-gray-600 text-sm mb-2">Review the generated content below and make your decision.</p>
+                  </div>
+                  
+                  <div className="mb-4 flex-1 min-h-0">
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phase Results (Editable JSON)
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        You can edit the JSON below to modify the phase results before approving.
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 border rounded p-2 h-full min-h-[400px] max-h-[600px] overflow-hidden">
+                      <textarea
+                        value={editableArtifactsJson}
+                        onChange={(e) => handleJsonChange(e.target.value)}
+                        className="w-full h-full p-3 font-mono text-xs bg-white border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent overflow-y-auto"
+                        spellCheck={false}
+                        placeholder="Loading artifacts..."
+                      />
+                    </div>
+                    {jsonParseError && (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                        <p className="text-sm text-red-700">
+                          <strong>JSON Error:</strong> {jsonParseError}
+                        </p>
+                        <p className="text-xs text-red-600 mt-1">
+                          Please fix the JSON syntax before proceeding.
+                        </p>
+                      </div>
+                    )}
+                    {!jsonParseError && editableArtifactsJson && (
+                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
+                        <p className="text-sm text-green-700">
+                          ✓ Valid JSON - Ready to proceed
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="border-t pt-4 mt-4">
+                    <p className="text-sm font-semibold mb-3">Your Decision:</p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => makeDecision('approve')}
+                        disabled={loading}
+                        className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 font-semibold shadow text-sm"
+                      >
+                        ✓ Approve & Continue
+                      </button>
+                      <button
+                        onClick={() => makeDecision('request_changes')}
+                        disabled={loading}
+                        className="w-full px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 disabled:opacity-50 font-semibold shadow text-sm"
+                      >
+                        ↻ Request Changes
+                      </button>
+                      <button
+                        onClick={() => makeDecision('stop')}
+                        disabled={loading}
+                        className="w-full px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 font-semibold shadow text-sm"
+                      >
+                        ✗ Stop Project
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
