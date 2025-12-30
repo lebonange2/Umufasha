@@ -192,9 +192,12 @@ class GraphSyncer:
                             order=idx
                         )
                 
-                logger.info(f"Synced book brief for project {project_id}")
+                logger.info(f"Synced book brief for project {project_id}", 
+                           themes_count=len(core_themes),
+                           constraints_count=len(constraints),
+                           success_criteria_count=len(success_criteria))
         except Exception as e:
-            logger.error(f"Failed to sync book brief", error=str(e), project_id=project_id)
+            logger.error(f"Failed to sync book brief", error=str(e), project_id=project_id, exc_info=True)
     
     @staticmethod
     def _sync_characters(project_id: str, character_bible: Dict[str, Any]):

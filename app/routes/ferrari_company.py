@@ -1401,24 +1401,26 @@ async def sync_project_graph(project_id: str, db: AsyncSession = Depends(get_db)
             except Exception as e:
                 logger.warning(f"Failed to load company from project_data", error=str(e))
         
-        # Sync to graph - try to get artifacts from current phase
+        # Sync to graph - get artifacts from db_project.artifacts field
         try:
             from app.graph.sync import GraphSyncer
             
-            # Get current artifacts if available
-            project_data_dict = {}
-            if db_project.project_data:
-                project_data_dict = json.loads(db_project.project_data) if isinstance(db_project.project_data, str) else db_project.project_data
+            # Get artifacts from the separate artifacts field in database
+            artifacts = db_project.artifacts or {}
+            if isinstance(artifacts, str):
+                artifacts = json.loads(artifacts)
             
-            # Try to sync from artifacts
-            artifacts = project_data_dict.get("artifacts", {})
+            logger.info(f"Syncing graph for project {project_id}", artifact_keys=list(artifacts.keys()) if artifacts else [])
+            
+            # Sync from artifacts if available
             if artifacts:
                 GraphSyncer.sync_from_artifacts(project_id, artifacts)
+                return {"success": True, "message": f"Graph synced successfully with {len(artifacts)} artifact types"}
             else:
                 # Fallback to basic sync
                 GraphSyncer.sync_project_to_graph(project_id, project_data)
+                return {"success": True, "message": "Graph synced (no artifacts yet)"}
             
-            return {"success": True, "message": "Graph synced successfully"}
         except Exception as e:
             logger.error(f"Failed to sync graph", error=str(e), project_id=project_id)
             # Don't fail the request if graph sync fails
