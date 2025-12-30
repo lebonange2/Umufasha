@@ -40,6 +40,14 @@ const NODE_COLORS: Record<string, number> = {
   Event: 0xe17055,
   Issue: 0xd63031,
   Source: 0x74b9ff,
+  Act: 0x9b59b6,          // Purple for acts
+  PlotEvent: 0xe74c3c,    // Red for plot events
+  PlotPoint: 0xf39c12,    // Orange for plot points
+  TurningPoint: 0xe67e22, // Dark orange for turning points
+  Climax: 0xc0392b,       // Dark red for climax
+  Resolution: 0x27ae60,   // Green for resolution
+  Constraint: 0x95a5a6,   // Gray for constraints
+  SuccessCriterion: 0x2ecc71,  // Bright green for success criteria
 };
 
 export default function GraphEditorPage() {
@@ -71,6 +79,16 @@ export default function GraphEditorPage() {
     const Graph = ForceGraph3D()(containerRef.current)
       .nodeLabel((node: any) => {
         const props = node.properties || {};
+        const labels = node.labels || [];
+        
+        // Better labels for different node types
+        if (labels.includes('Theme') || labels.includes('Constraint') || labels.includes('SuccessCriterion')) {
+          return props.description || props.name || node.id;
+        }
+        if (labels.includes('PlotEvent') || labels.includes('PlotPoint') || labels.includes('TurningPoint')) {
+          const desc = props.description || '';
+          return desc.length > 60 ? desc.substring(0, 57) + '...' : desc || node.id;
+        }
         return props.name || props.title || node.id;
       })
       .nodeColor((node: any) => {
@@ -83,11 +101,20 @@ export default function GraphEditorPage() {
         return 0x888888;
       })
       .nodeOpacity(0.9)
+      .nodeRelSize(8)  // Increased from default for better visibility
+      .nodeResolution(16)  // Higher resolution for smoother spheres
       .linkColor(() => 0xaaaaaa)
       .linkWidth(2)
       .linkDirectionalArrowLength(6)
       .linkDirectionalArrowRelPos(1)
       .linkCurvature(0.25)
+      .linkOpacity(0.6)
+      .enableNodeDrag(true)
+      .enableNavigationControls(true)  // Enable panning and zooming controls
+      .enablePointerInteraction(true)  // Enable all pointer interactions
+      .backgroundColor('#1a1a1a')  // Dark background for better contrast
+      .d3AlphaDecay(0.01)  // Slower physics decay for smoother settling
+      .d3VelocityDecay(0.3)  // Control velocity for better stability
       .onNodeClick((node: any) => {
         if (connectMode) {
           if (!sourceNode) {
@@ -151,6 +178,29 @@ export default function GraphEditorPage() {
       
       if (graphRef.current) {
         graphRef.current.graphData(data);
+        
+        // Center camera on nodes after loading
+        setTimeout(() => {
+          if (graphRef.current && data.nodes && data.nodes.length > 0) {
+            // Calculate center of all nodes
+            let sumX = 0, sumY = 0, sumZ = 0;
+            data.nodes.forEach((node: any) => {
+              sumX += node.x || 0;
+              sumY += node.y || 0;
+              sumZ += node.z || 0;
+            });
+            const centerX = sumX / data.nodes.length;
+            const centerY = sumY / data.nodes.length;
+            const centerZ = sumZ / data.nodes.length;
+
+            // Position camera to look at center point
+            graphRef.current.cameraPosition(
+              { x: centerX, y: centerY, z: centerZ + 300 }, // Position camera 300 units away
+              { x: centerX, y: centerY, z: centerZ }, // Look at center
+              1000 // 1 second transition
+            );
+          }
+        }, 1000);
       }
     } catch (err: any) {
       setError(err.message);
