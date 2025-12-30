@@ -385,7 +385,7 @@ async def get_core_devices_project(project_id: str, db: AsyncSession = Depends(g
 
 
 async def _execute_phase_background(project_id: str, current_phase: Phase, db: AsyncSession):
-    """Execute phase in background."""
+    """Execute phase in background with real-time chat transparency."""
     logger.info(f"Background: Executing phase {current_phase.value} for project {project_id}")
     
     status_key = f"{project_id}_{current_phase.value}"
@@ -406,26 +406,64 @@ async def _execute_phase_background(project_id: str, current_phase: Phase, db: A
         
         await log_progress(project_id, f"Starting phase: {current_phase.value}", current_phase.value, db)
         
-        # Execute the appropriate phase
-        result = None
-        if current_phase == Phase.STRATEGY_IDEA_INTAKE:
-            result = await company.execute_phase_1()
-        elif current_phase == Phase.CONCEPT_DIFFERENTIATION:
-            result = await company.execute_phase_2()
-        elif current_phase == Phase.UX_SYSTEM_DESIGN:
-            result = await company.execute_phase_3()
-        elif current_phase == Phase.DETAILED_ENGINEERING:
-            result = await company.execute_phase_4()
-        elif current_phase == Phase.VALIDATION_INDUSTRIALIZATION:
-            result = await company.execute_phase_5()
-        elif current_phase == Phase.POSITIONING_LAUNCH:
-            result = await company.execute_phase_6()
-        else:
-            raise ValueError(f"Unknown phase: {current_phase}")
+        # Get initial chat log count to track new messages
+        initial_chat_count = len(project_data["chat_log"])
         
-        # Update project data with results
+        # Create a callback to save messages in real-time
+        async def save_new_messages():
+            """Periodically check and save new messages from message bus."""
+            if company and company.bus:
+                new_messages = company.bus.get_messages_since(initial_chat_count)
+                if new_messages:
+                    for msg in new_messages:
+                        project_data["chat_log"].append(msg.to_dict())
+                    # Save to DB immediately for real-time updates
+                    await save_project_to_db(project_id, project_data, db)
+        
+        # Start a background task to periodically save messages
+        import asyncio
+        
+        async def message_saver():
+            while phase_execution_status.get(status_key, {}).get("status") == "running":
+                await save_new_messages()
+                await asyncio.sleep(2)  # Check every 2 seconds
+        
+        saver_task = asyncio.create_task(message_saver())
+        
+        try:
+            # Execute the appropriate phase
+            result = None
+            if current_phase == Phase.STRATEGY_IDEA_INTAKE:
+                result = await company.execute_phase_1()
+            elif current_phase == Phase.CONCEPT_DIFFERENTIATION:
+                result = await company.execute_phase_2()
+            elif current_phase == Phase.UX_SYSTEM_DESIGN:
+                result = await company.execute_phase_3()
+            elif current_phase == Phase.DETAILED_ENGINEERING:
+                result = await company.execute_phase_4()
+            elif current_phase == Phase.VALIDATION_INDUSTRIALIZATION:
+                result = await company.execute_phase_5()
+            elif current_phase == Phase.POSITIONING_LAUNCH:
+                result = await company.execute_phase_6()
+            else:
+                raise ValueError(f"Unknown phase: {current_phase}")
+        finally:
+            # Ensure final messages are saved
+            await save_new_messages()
+            saver_task.cancel()
+            try:
+                await saver_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Update project data with final results
         project_data["artifacts"][current_phase.value] = result.get("artifacts", {})
-        project_data["chat_log"].extend(result.get("chat_log", []))
+        # Add any remaining messages not yet saved
+        final_messages = result.get("chat_log", [])
+        existing_timestamps = {msg.get("timestamp") for msg in project_data["chat_log"]}
+        for msg in final_messages:
+            if msg.get("timestamp") not in existing_timestamps:
+                project_data["chat_log"].append(msg)
         
         # Save to database
         await save_project_to_db(project_id, project_data, db)
