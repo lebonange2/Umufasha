@@ -52,6 +52,8 @@ const NODE_COLORS: Record<string, number> = {
   TurningPoint: 0xe67e22, // Dark orange for turning points
   Climax: 0xc0392b,       // Dark red for climax
   Resolution: 0x27ae60,   // Green for resolution
+  Constraint: 0x95a5a6,   // Gray for constraints
+  SuccessCriterion: 0x2ecc71,  // Bright green for success criteria
 };
 
 export default function EmbeddedGraph({ 
@@ -211,6 +213,16 @@ export default function EmbeddedGraph({
     const Graph = ForceGraph3D()(containerRef.current)
       .nodeLabel((node: any) => {
         const props = node.properties || {};
+        const labels = node.labels || [];
+        
+        // Better labels for different node types
+        if (labels.includes('Theme') || labels.includes('Constraint') || labels.includes('SuccessCriterion')) {
+          return props.description || props.name || node.id;
+        }
+        if (labels.includes('PlotEvent') || labels.includes('PlotPoint') || labels.includes('TurningPoint')) {
+          const desc = props.description || '';
+          return desc.length > 60 ? desc.substring(0, 57) + '...' : desc || node.id;
+        }
         return props.name || props.title || node.id;
       })
       .nodeColor((node: any) => {
@@ -232,6 +244,8 @@ export default function EmbeddedGraph({
       .linkCurvature(0.2)
       .linkOpacity(0.6)
       .enableNodeDrag(true)
+      .enableNavigationControls(true)  // Enable panning and zooming controls
+      .enablePointerInteraction(true)  // Enable all pointer interactions
       .showNavInfo(false)
       .backgroundColor('#1a1a1a')  // Dark background for better contrast
       .d3AlphaDecay(0.01)  // Slower physics decay for smoother settling

@@ -63,6 +63,10 @@ class GraphSyncer:
                 logger.warning(f"Neo4j not available, skipping sync for project {project_id}")
                 return
             
+            # Sync book brief (themes, constraints, success criteria)
+            if artifacts.get("book_brief"):
+                GraphSyncer._sync_book_brief(project_id, artifacts["book_brief"])
+            
             # Sync characters from character_bible
             if artifacts.get("character_bible"):
                 GraphSyncer._sync_characters(project_id, artifacts["character_bible"])
@@ -88,6 +92,109 @@ class GraphSyncer:
                 logger.warning(f"Neo4j connection issue, skipping sync from artifacts for project {project_id}")
             else:
                 logger.error(f"Failed to sync from artifacts", error=str(e), project_id=project_id)
+    
+    @staticmethod
+    def _sync_book_brief(project_id: str, book_brief: Dict[str, Any]):
+        """Sync book brief data (themes, constraints, success criteria) to graph."""
+        if not book_brief:
+            return
+        
+        try:
+            with get_neo4j_session() as session:
+                # Update project with genre, tone, style
+                genre = book_brief.get("genre", "")
+                tone = book_brief.get("tone", "")
+                style = book_brief.get("style", "")
+                target_audience = book_brief.get("target_audience", "")
+                word_count = book_brief.get("recommended_word_count", 0)
+                
+                if genre or tone or style:
+                    query = """
+                    MATCH (project:Project {id: $project_id})
+                    SET project.genre = $genre,
+                        project.tone = $tone,
+                        project.style = $style,
+                        project.targetAudience = $target_audience,
+                        project.wordCount = $word_count,
+                        project.updatedAt = datetime()
+                    """
+                    session.run(
+                        query,
+                        project_id=project_id,
+                        genre=genre,
+                        tone=tone,
+                        style=style,
+                        target_audience=target_audience,
+                        word_count=word_count
+                    )
+                
+                # Sync core themes
+                core_themes = book_brief.get("core_themes", [])
+                for idx, theme in enumerate(core_themes):
+                    if isinstance(theme, str) and theme.strip():
+                        theme_id = f"theme_{idx}"
+                        query = """
+                        MATCH (project:Project {id: $project_id})
+                        MERGE (theme:Theme {id: $theme_id})
+                        SET theme.name = $name,
+                            theme.description = $name,
+                            theme.order = $order,
+                            theme.updatedAt = datetime()
+                        MERGE (project)-[:HAS_THEME {order: $order}]->(theme)
+                        """
+                        session.run(
+                            query,
+                            project_id=project_id,
+                            theme_id=theme_id,
+                            name=theme,
+                            order=idx
+                        )
+                
+                # Sync constraints
+                constraints = book_brief.get("constraints", [])
+                for idx, constraint in enumerate(constraints):
+                    if isinstance(constraint, str) and constraint.strip():
+                        constraint_id = f"constraint_{idx}"
+                        query = """
+                        MATCH (project:Project {id: $project_id})
+                        MERGE (c:Constraint {id: $constraint_id})
+                        SET c.description = $description,
+                            c.order = $order,
+                            c.updatedAt = datetime()
+                        MERGE (project)-[:HAS_CONSTRAINT {order: $order}]->(c)
+                        """
+                        session.run(
+                            query,
+                            project_id=project_id,
+                            constraint_id=constraint_id,
+                            description=constraint,
+                            order=idx
+                        )
+                
+                # Sync success criteria
+                success_criteria = book_brief.get("success_criteria", [])
+                for idx, criterion in enumerate(success_criteria):
+                    if isinstance(criterion, str) and criterion.strip():
+                        criterion_id = f"success_{idx}"
+                        query = """
+                        MATCH (project:Project {id: $project_id})
+                        MERGE (sc:SuccessCriterion {id: $criterion_id})
+                        SET sc.description = $description,
+                            sc.order = $order,
+                            sc.updatedAt = datetime()
+                        MERGE (project)-[:HAS_SUCCESS_CRITERION {order: $order}]->(sc)
+                        """
+                        session.run(
+                            query,
+                            project_id=project_id,
+                            criterion_id=criterion_id,
+                            description=criterion,
+                            order=idx
+                        )
+                
+                logger.info(f"Synced book brief for project {project_id}")
+        except Exception as e:
+            logger.error(f"Failed to sync book brief", error=str(e), project_id=project_id)
     
     @staticmethod
     def _sync_characters(project_id: str, character_bible: Dict[str, Any]):

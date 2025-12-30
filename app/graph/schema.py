@@ -37,6 +37,8 @@ NODE_LABELS = [
     "TurningPoint",  # Major turning points
     "Climax",   # Story climax
     "Resolution",  # Story resolution
+    "Constraint",  # Story constraints
+    "SuccessCriterion",  # Success criteria
 ]
 
 # Relationship types
@@ -78,6 +80,8 @@ RELATIONSHIP_TYPES = [
     "HAS_TURNING_POINT",
     "HAS_CLIMAX",
     "HAS_RESOLUTION",
+    "HAS_CONSTRAINT",
+    "HAS_SUCCESS_CRITERION",
 ]
 
 # Allowed relationship combinations (source_label -> relationship_type -> target_label)
@@ -102,6 +106,8 @@ ALLOWED_RELATIONSHIPS = {
         "HAS_TURNING_POINT": ["TurningPoint"],
         "HAS_CLIMAX": ["Climax"],
         "HAS_RESOLUTION": ["Resolution"],
+        "HAS_CONSTRAINT": ["Constraint"],
+        "HAS_SUCCESS_CRITERION": ["SuccessCriterion"],
     },
     "Act": {
         "HAS_EVENT": ["PlotEvent"],
@@ -173,6 +179,8 @@ def create_constraints_and_indexes():
             "CREATE CONSTRAINT turningpoint_id_unique IF NOT EXISTS FOR (tp:TurningPoint) REQUIRE tp.id IS UNIQUE",
             "CREATE CONSTRAINT climax_id_unique IF NOT EXISTS FOR (c:Climax) REQUIRE c.id IS UNIQUE",
             "CREATE CONSTRAINT resolution_id_unique IF NOT EXISTS FOR (r:Resolution) REQUIRE r.id IS UNIQUE",
+            "CREATE CONSTRAINT constraint_id_unique IF NOT EXISTS FOR (c:Constraint) REQUIRE c.id IS UNIQUE",
+            "CREATE CONSTRAINT successcriterion_id_unique IF NOT EXISTS FOR (sc:SuccessCriterion) REQUIRE sc.id IS UNIQUE",
         ]
         
         indexes = [
