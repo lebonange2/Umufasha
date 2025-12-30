@@ -769,8 +769,11 @@
                                             `${artifacts ? '' : `<button class="btn btn-primary btn-sm" onclick="executeResearchPhase()">
                                                 <i class="bi bi-search"></i> Start Research
                                             </button>`}
-                                            ${artifacts ? `<button class="btn btn-success btn-sm" onclick="downloadResearchReport()">
-                                                <i class="bi bi-file-pdf"></i> Download Report
+                                            ${artifacts ? `<button class="btn btn-success btn-sm" onclick="downloadResearchTextReport()">
+                                                <i class="bi bi-file-text"></i> Download Text Report
+                                            </button>
+                                            <button class="btn btn-info btn-sm" onclick="downloadProjectReport()">
+                                                <i class="bi bi-file-earmark-zip"></i> Full Project Report
                                             </button>
                                             <button class="btn btn-success btn-sm mt-1" onclick="approvePhase('${phase}', 'approve')">
                                                 <i class="bi bi-check-circle"></i> Approve
@@ -1054,11 +1057,11 @@
             }
         }
 
-        async function downloadResearchReport() {
+        async function downloadResearchTextReport() {
             if (!currentProjectId) return;
             
             try {
-                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/research-report`);
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/research-text-report`);
                 
                 if (!response.ok) {
                     if (response.status === 404) {
@@ -1069,21 +1072,52 @@
                     return;
                 }
                 
-                // Download PDF
+                // Download text file
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `research_report_${currentProjectId.substring(0, 8)}.pdf`;
+                a.download = `research_report_${currentProjectId.substring(0, 8)}.txt`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
                 
-                alert('Research report downloaded!');
+                console.log('Research text report downloaded!');
             } catch (error) {
                 console.error('Failed to download research report:', error);
                 alert('Failed to download research report: ' + error.message);
+            }
+        }
+
+        async function downloadProjectReport() {
+            if (!currentProjectId) return;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch project data');
+                }
+                
+                const project = await response.json();
+                
+                // Create comprehensive project report in JSON format
+                const reportContent = JSON.stringify(project, null, 2);
+                const blob = new Blob([reportContent], { type: 'application/json' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `project_report_${currentProjectId.substring(0, 8)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                console.log('Full project report downloaded!');
+            } catch (error) {
+                console.error('Failed to download project report:', error);
+                alert('Failed to download project report: ' + error.message);
             }
         }
 

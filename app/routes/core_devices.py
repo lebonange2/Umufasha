@@ -897,6 +897,7 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
 
 
 @router.get("/api/core-devices/projects/{project_id}/research-report")
+@router.get("/api/core-devices/projects/{project_id}/research-text-report")
 async def download_research_report(project_id: str, db: AsyncSession = Depends(get_db)):
     """Download the text research report."""
     from fastapi.responses import Response
