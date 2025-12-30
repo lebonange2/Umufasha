@@ -1011,3 +1011,187 @@ async def approve_research_recommendation(
     except Exception as e:
         logger.error(f"Failed to approve research for project {project_id}", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class PhaseApprovalRequest(BaseModel):
+    """Phase approval/edit request."""
+    action: str  # "approve", "deny", "edit"
+    edited_artifacts: Optional[Dict[str, Any]] = None  # If action="edit", the modified artifacts
+    feedback: Optional[str] = None  # Optional feedback for denial
+
+
+@router.post("/api/core-devices/projects/{project_id}/phases/{phase}/approve")
+async def approve_phase(
+    project_id: str,
+    phase: str,
+    request: PhaseApprovalRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """Approve, deny, or edit a completed phase.
+    
+    Actions:
+    - approve: Accept artifacts and automatically advance to next phase
+    - deny: Reject artifacts and re-execute phase
+    - edit: Save user-edited artifacts and advance to next phase
+    """
+    try:
+        # Load project
+        if project_id not in active_projects:
+            loaded_data = await load_project_from_db(project_id, db)
+            if loaded_data:
+                active_projects[project_id] = loaded_data
+            else:
+                raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_data = active_projects[project_id]
+        company = project_data.get("company")
+        
+        if not company:
+            raise HTTPException(status_code=500, detail="Company instance not found")
+        
+        # Validate phase exists and has artifacts
+        phase_artifacts = project_data.get("artifacts", {}).get(phase)
+        if not phase_artifacts:
+            raise HTTPException(status_code=400, detail=f"No artifacts found for phase {phase}")
+        
+        # Handle different actions
+        if request.action == "approve":
+            # Store approval decision
+            if "owner_decisions" not in project_data:
+                project_data["owner_decisions"] = {}
+            
+            project_data["owner_decisions"][phase] = {
+                "decision": "approve",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            # Advance to next phase
+            next_phase = _get_next_phase(phase)
+            if next_phase:
+                project_data["current_phase"] = next_phase
+                
+                # Save to database
+                await save_project_to_db(project_id, project_data, db)
+                
+                message = f"Phase '{phase}' approved. Advanced to '{next_phase}'."
+                
+                # Auto-start next phase execution
+                background_tasks.add_task(_execute_phase_background, project_id, Phase(next_phase))
+                
+                return {
+                    "success": True,
+                    "message": message,
+                    "next_phase": next_phase,
+                    "status": "executing_next_phase"
+                }
+            else:
+                # Last phase - mark project as complete
+                project_data["status"] = "complete"
+                await save_project_to_db(project_id, project_data, db)
+                
+                return {
+                    "success": True,
+                    "message": "Final phase approved. Project completed!",
+                    "status": "complete"
+                }
+        
+        elif request.action == "edit":
+            if not request.edited_artifacts:
+                raise HTTPException(status_code=400, detail="edited_artifacts required for edit action")
+            
+            # Update artifacts with user edits
+            project_data["artifacts"][phase] = request.edited_artifacts
+            
+            # Store edit decision
+            if "owner_decisions" not in project_data:
+                project_data["owner_decisions"] = {}
+            
+            project_data["owner_decisions"][phase] = {
+                "decision": "edit",
+                "timestamp": datetime.utcnow().isoformat(),
+                "original_artifacts": phase_artifacts,
+                "edited_artifacts": request.edited_artifacts
+            }
+            
+            # Advance to next phase
+            next_phase = _get_next_phase(phase)
+            if next_phase:
+                project_data["current_phase"] = next_phase
+                await save_project_to_db(project_id, project_data, db)
+                
+                message = f"Phase '{phase}' edited and saved. Advanced to '{next_phase}'."
+                
+                # Auto-start next phase execution
+                background_tasks.add_task(_execute_phase_background, project_id, Phase(next_phase))
+                
+                return {
+                    "success": True,
+                    "message": message,
+                    "next_phase": next_phase,
+                    "status": "executing_next_phase"
+                }
+            else:
+                project_data["status"] = "complete"
+                await save_project_to_db(project_id, project_data, db)
+                
+                return {
+                    "success": True,
+                    "message": "Final phase edited and saved. Project completed!",
+                    "status": "complete"
+                }
+        
+        elif request.action == "deny":
+            # Store denial decision
+            if "owner_decisions" not in project_data:
+                project_data["owner_decisions"] = {}
+            
+            project_data["owner_decisions"][phase] = {
+                "decision": "deny",
+                "feedback": request.feedback or "",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            # Clear artifacts to force re-execution
+            project_data["artifacts"][phase] = {}
+            
+            await save_project_to_db(project_id, project_data, db)
+            
+            message = f"Phase '{phase}' denied. Please re-execute the phase with adjustments."
+            
+            return {
+                "success": True,
+                "message": message,
+                "status": "awaiting_re_execution"
+            }
+        
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid action: {request.action}")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to approve phase {phase} for project {project_id}", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _get_next_phase(current_phase: str) -> Optional[str]:
+    """Get the next phase in the product development pipeline."""
+    phases = [
+        "research_discovery",
+        "strategy_idea_intake",
+        "concept_differentiation",
+        "ux_system_design",
+        "detailed_engineering",
+        "validation_industrialization",
+        "positioning_launch"
+    ]
+    
+    try:
+        current_index = phases.index(current_phase)
+        if current_index < len(phases) - 1:
+            return phases[current_index + 1]
+    except ValueError:
+        pass
+    
+    return None

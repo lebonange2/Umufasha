@@ -760,24 +760,39 @@
                                     <p class="phase-description mb-2">${info.description}</p>
                                     ${artifacts ? `<div class="artifact-section">
                                         <div class="artifact-title">Artifacts:</div>
-                                        <pre class="mb-0" style="font-size: 0.85rem; max-height: 200px; overflow-y: auto;">${JSON.stringify(artifacts, null, 2)}</pre>
+                                        <textarea id="artifacts-${phase}" class="form-control" style="font-size: 0.85rem; max-height: 200px; font-family: monospace;" rows="8">${JSON.stringify(artifacts, null, 2)}</textarea>
                                     </div>` : ''}
                                 </div>
                                 <div>
                                     ${index === currentPhaseIndex && project.status === 'in_progress' ? 
                                         phase === 'research_discovery' ?
-                                            `<button class="btn btn-primary btn-sm" onclick="executeResearchPhase()">
+                                            `${artifacts ? '' : `<button class="btn btn-primary btn-sm" onclick="executeResearchPhase()">
                                                 <i class="bi bi-search"></i> Start Research
-                                            </button>
-                                            ${artifacts ? `<button class="btn btn-success btn-sm mt-1" onclick="downloadResearchReport()">
+                                            </button>`}
+                                            ${artifacts ? `<button class="btn btn-success btn-sm" onclick="downloadResearchReport()">
                                                 <i class="bi bi-file-pdf"></i> Download Report
                                             </button>
-                                            <button class="btn btn-success btn-sm mt-1" onclick="approveResearch(true)">
+                                            <button class="btn btn-success btn-sm mt-1" onclick="approvePhase('${phase}', 'approve')">
                                                 <i class="bi bi-check-circle"></i> Approve
+                                            </button>
+                                            <button class="btn btn-warning btn-sm mt-1" onclick="approvePhase('${phase}', 'edit')">
+                                                <i class="bi bi-pencil"></i> Edit & Save
+                                            </button>
+                                            <button class="btn btn-danger btn-sm mt-1" onclick="approvePhase('${phase}', 'deny')">
+                                                <i class="bi bi-x-circle"></i> Deny
                                             </button>` : ''}` :
-                                            `<button class="btn btn-primary btn-sm" onclick="executePhase()">
+                                            `${artifacts ? '' : `<button class="btn btn-primary btn-sm" onclick="executePhase()">
                                                 <i class="bi bi-play-circle"></i> Execute
-                                            </button>`
+                                            </button>`}
+                                            ${artifacts ? `<button class="btn btn-success btn-sm" onclick="approvePhase('${phase}', 'approve')">
+                                                <i class="bi bi-check-circle"></i> Approve
+                                            </button>
+                                            <button class="btn btn-warning btn-sm mt-1" onclick="approvePhase('${phase}', 'edit')">
+                                                <i class="bi bi-pencil"></i> Edit & Save
+                                            </button>
+                                            <button class="btn btn-danger btn-sm mt-1" onclick="approvePhase('${phase}', 'deny')">
+                                                <i class="bi bi-x-circle"></i> Deny
+                                            </button>` : ''}`
                                         : ''}
                                 </div>
                             </div>
@@ -1065,6 +1080,77 @@
             } catch (error) {
                 console.error('Failed to approve research:', error);
                 alert('Failed to submit decision: ' + error.message);
+            }
+        }
+
+        async function approvePhase(phase, action) {
+            if (!currentProjectId) return;
+            
+            try {
+                let requestBody = { action: action };
+                
+                // If editing, get the edited artifacts from the textarea
+                if (action === 'edit') {
+                    const textarea = document.getElementById(`artifacts-${phase}`);
+                    if (!textarea) {
+                        alert('Cannot find artifacts to edit');
+                        return;
+                    }
+                    
+                    try {
+                        const editedArtifacts = JSON.parse(textarea.value);
+                        requestBody.edited_artifacts = editedArtifacts;
+                    } catch (e) {
+                        alert('Invalid JSON format in edited artifacts. Please check your changes.');
+                        return;
+                    }
+                }
+                
+                // If denying, ask for feedback
+                if (action === 'deny') {
+                    const feedback = prompt('Please provide feedback for denial (optional):');
+                    if (feedback !== null) {
+                        requestBody.feedback = feedback;
+                    } else {
+                        return; // User cancelled
+                    }
+                }
+                
+                // Confirm action
+                const confirmMessage = {
+                    'approve': `Approve this phase and advance to the next phase?`,
+                    'edit': `Save your edits and advance to the next phase?`,
+                    'deny': `Deny this phase? You'll need to re-execute it.`
+                }[action];
+                
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+                
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/phases/${phase}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to process action');
+                }
+                
+                const data = await response.json();
+                alert(data.message);
+                
+                // Reload project to show updated phase
+                await loadProject(currentProjectId);
+                
+                // If approved or edited, start polling for next phase execution
+                if (data.status === 'executing_next_phase') {
+                    startPhaseStatusCheck();
+                }
+            } catch (error) {
+                console.error(`Failed to ${action} phase:`, error);
+                alert(`Failed to ${action} phase: ` + error.message);
             }
         }
     </script>
