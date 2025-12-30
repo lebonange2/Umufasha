@@ -390,7 +390,7 @@ async def get_core_devices_project(project_id: str, db: AsyncSession = Depends(g
     )
 
 
-async def _execute_phase_background(project_id: str, current_phase: Phase, db: AsyncSession):
+async def _execute_phase_background(project_id: str, current_phase: Phase):
     """Execute phase in background with real-time chat transparency."""
     logger.info(f"Background: Executing phase {current_phase.value} for project {project_id}")
     
@@ -402,107 +402,118 @@ async def _execute_phase_background(project_id: str, current_phase: Phase, db: A
         "error": None
     }
     
-    try:
-        # Get project data
-        project_data = active_projects.get(project_id)
-        if not project_data:
-            raise ValueError(f"Project {project_id} not found in active projects")
-        
-        company: CoreDevicesCompany = project_data["company"]
-        
-        await log_progress(project_id, f"Starting phase: {current_phase.value}", current_phase.value, db)
-        
-        # Get initial chat log count to track new messages
-        initial_chat_count = len(project_data["chat_log"])
-        
-        # Create a callback to save messages in real-time
-        async def save_new_messages():
-            """Periodically check and save new messages from message bus."""
-            if company and company.bus:
-                new_messages = company.bus.get_messages_since(initial_chat_count)
-                if new_messages:
-                    for msg in new_messages:
-                        project_data["chat_log"].append(msg.to_dict())
-                    # Save to DB immediately for real-time updates
-                    await save_project_to_db(project_id, project_data, db)
-        
-        # Start a background task to periodically save messages
-        import asyncio
-        
-        async def message_saver():
-            while phase_execution_status.get(status_key, {}).get("status") == "running":
-                await save_new_messages()
-                await asyncio.sleep(2)  # Check every 2 seconds
-        
-        saver_task = asyncio.create_task(message_saver())
-        
+    # Create dedicated database session for this background task
+    from app.deps import get_db
+    
+    async for db in get_db():
         try:
-            # Execute the appropriate phase
-            result = None
-            if current_phase == Phase.STRATEGY_IDEA_INTAKE:
-                result = await company.execute_phase_1()
-            elif current_phase == Phase.CONCEPT_DIFFERENTIATION:
-                result = await company.execute_phase_2()
-            elif current_phase == Phase.UX_SYSTEM_DESIGN:
-                result = await company.execute_phase_3()
-            elif current_phase == Phase.DETAILED_ENGINEERING:
-                result = await company.execute_phase_4()
-            elif current_phase == Phase.VALIDATION_INDUSTRIALIZATION:
-                result = await company.execute_phase_5()
-            elif current_phase == Phase.POSITIONING_LAUNCH:
-                result = await company.execute_phase_6()
-            else:
-                raise ValueError(f"Unknown phase: {current_phase}")
-        finally:
-            # Ensure final messages are saved
-            await save_new_messages()
-            saver_task.cancel()
+            # Get project data
+            project_data = active_projects.get(project_id)
+            if not project_data:
+                raise ValueError(f"Project {project_id} not found in active projects")
+            
+            company: CoreDevicesCompany = project_data["company"]
+            
+            await log_progress(project_id, f"Starting phase: {current_phase.value}", current_phase.value, db)
+            
+            # Get initial chat log count to track new messages
+            initial_chat_count = len(project_data["chat_log"])
+            
+            # Create a callback to save messages in real-time
+            async def save_new_messages():
+                """Periodically check and save new messages from message bus."""
+                if company and company.bus:
+                    new_messages = company.bus.get_messages_since(initial_chat_count)
+                    if new_messages:
+                        for msg in new_messages:
+                            project_data["chat_log"].append(msg.to_dict())
+                        # Create NEW db session for background save to avoid concurrency issues
+                        from app.deps import get_db
+                        async for bg_db in get_db():
+                            try:
+                                await save_project_to_db(project_id, project_data, bg_db)
+                            finally:
+                                await bg_db.close()
+                            break  # Only use first session
+            
+            # Start a background task to periodically save messages
+            import asyncio
+            
+            async def message_saver():
+                while phase_execution_status.get(status_key, {}).get("status") == "running":
+                    await save_new_messages()
+                    await asyncio.sleep(2)  # Check every 2 seconds
+            
+            saver_task = asyncio.create_task(message_saver())
+            
             try:
-                await saver_task
-            except asyncio.CancelledError:
-                pass
-        
-        # Update project data with final results
-        project_data["artifacts"][current_phase.value] = result.get("artifacts", {})
-        # Add any remaining messages not yet saved
-        final_messages = result.get("chat_log", [])
-        existing_timestamps = {msg.get("timestamp") for msg in project_data["chat_log"]}
-        for msg in final_messages:
-            if msg.get("timestamp") not in existing_timestamps:
-                project_data["chat_log"].append(msg)
-        
-        # Save to database
-        await save_project_to_db(project_id, project_data, db)
-        
-        # Mark as completed
-        phase_execution_status[status_key] = {
-            "status": "completed",
-            "phase": current_phase.value,
-            "started_at": phase_execution_status[status_key]["started_at"],
-            "completed_at": datetime.utcnow().isoformat(),
-            "error": None
-        }
-        
-        await log_progress(project_id, f"Completed phase: {current_phase.value}", current_phase.value, db)
-        logger.info(f"Background: Phase {current_phase.value} completed for project {project_id}")
-        
-    except Exception as phase_error:
-        error_msg = str(phase_error)
-        logger.error(f"Background phase execution error: {error_msg}", error=error_msg, exc_info=True)
-        await log_error(project_id, error_msg, current_phase.value, db)
-        
-        # Mark as failed
-        phase_execution_status[status_key] = {
-            "status": "failed",
-            "phase": current_phase.value,
-            "started_at": phase_execution_status.get(status_key, {}).get("started_at", datetime.utcnow().isoformat()),
-            "error": error_msg
-        }
-        
-        # Save error state to database
-        if db and project_id in active_projects:
-            project_data["status"] = "error"
+                # Execute the appropriate phase
+                result = None
+                if current_phase == Phase.STRATEGY_IDEA_INTAKE:
+                    result = await company.execute_phase_1()
+                elif current_phase == Phase.CONCEPT_DIFFERENTIATION:
+                    result = await company.execute_phase_2()
+                elif current_phase == Phase.UX_SYSTEM_DESIGN:
+                    result = await company.execute_phase_3()
+                elif current_phase == Phase.DETAILED_ENGINEERING:
+                    result = await company.execute_phase_4()
+                elif current_phase == Phase.VALIDATION_INDUSTRIALIZATION:
+                    result = await company.execute_phase_5()
+                elif current_phase == Phase.POSITIONING_LAUNCH:
+                    result = await company.execute_phase_6()
+                else:
+                    raise ValueError(f"Unknown phase: {current_phase}")
+            finally:
+                # Ensure final messages are saved
+                await save_new_messages()
+                saver_task.cancel()
+                try:
+                    await saver_task
+                except asyncio.CancelledError:
+                    pass
+            
+            # Update project data with final results
+            project_data["artifacts"][current_phase.value] = result.get("artifacts", {})
+            # Add any remaining messages not yet saved
+            final_messages = result.get("chat_log", [])
+            existing_timestamps = {msg.get("timestamp") for msg in project_data["chat_log"]}
+            for msg in final_messages:
+                if msg.get("timestamp") not in existing_timestamps:
+                    project_data["chat_log"].append(msg)
+            
+            # Save to database
             await save_project_to_db(project_id, project_data, db)
+            
+            # Mark as completed
+            phase_execution_status[status_key] = {
+                "status": "completed",
+                "phase": current_phase.value,
+                "started_at": phase_execution_status[status_key]["started_at"],
+                "completed_at": datetime.utcnow().isoformat(),
+                "error": None
+            }
+            
+            await log_progress(project_id, f"Completed phase: {current_phase.value}", current_phase.value, db)
+            logger.info(f"Background: Phase {current_phase.value} completed for project {project_id}")
+            
+        except Exception as phase_error:
+            error_msg = str(phase_error)
+            logger.error(f"Background phase execution error: {error_msg}", error=error_msg, exc_info=True)
+            await log_error(project_id, error_msg, current_phase.value, db)
+            
+            # Mark as failed
+            phase_execution_status[status_key] = {
+                "status": "failed",
+                "phase": current_phase.value,
+                "started_at": phase_execution_status.get(status_key, {}).get("started_at", datetime.utcnow().isoformat()),
+                "error": error_msg
+            }
+            
+            # Save error state to database
+            if db and project_id in active_projects:
+                project_data["status"] = "error"
+                await save_project_to_db(project_id, project_data, db)
+        break  # Exit async for loop after first iteration
 
 
 @router.post("/api/core-devices/projects/{project_id}/execute-phase")
@@ -543,8 +554,8 @@ async def execute_phase(project_id: str, background_tasks: BackgroundTasks, db: 
                     "phase": current_phase.value
                 }
         
-        # Start background task
-        background_tasks.add_task(_execute_phase_background, project_id, current_phase, db)
+        # Start background task WITHOUT passing db session (it will create its own)
+        background_tasks.add_task(_execute_phase_background, project_id, current_phase)
         
         logger.info(f"Started background phase execution for {current_phase.value} in project {project_id}")
         
@@ -776,8 +787,14 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                         if new_messages:
                             for msg in new_messages:
                                 project_data["chat_log"].append(msg.to_dict())
-                            # Save to DB immediately for real-time updates
-                            await save_project_to_db(project_id, project_data, db)
+                            # Create NEW db session for background save to avoid concurrency issues
+                            from app.deps import get_db
+                            async for bg_db in get_db():
+                                try:
+                                    await save_project_to_db(project_id, project_data, bg_db)
+                                finally:
+                                    await bg_db.close()
+                                break  # Only use first session
                 
                 research_scope = project_data.get("research_scope", "")
                 
