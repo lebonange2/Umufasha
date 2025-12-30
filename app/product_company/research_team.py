@@ -86,7 +86,10 @@ Output as JSON: {{
     "opportunity_areas": ["area1", "area2", ...]
 }}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system="You are a Market Research Agent for electronic products.",
+            user=prompt
+        )
         result = self._extract_json(response)
         
         self.bus.send(self.role, "Research_Lead_Agent", Phase.RESEARCH_DISCOVERY,
@@ -125,7 +128,10 @@ Output as JSON: {{
     ]
 }}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system="You are a Market Research Agent for electronic products.",
+            user=prompt
+        )
         result = self._extract_json(response)
         
         opportunities = result.get("opportunities", []) if result else []
@@ -188,11 +194,14 @@ Output as JSON: {{
     ]
 }}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system="You are a Technology Research Agent specializing in electronics and device technologies.",
+            user=prompt
+        )
         result = self._extract_json(response)
         
         self.bus.send(self.role, "Research_Lead_Agent", Phase.RESEARCH_DISCOVERY,
-                     f"[Technology_Research_Agent] ✓ Analyzed technology feasibility", "internal")
+                     f"[Technology_Research_Agent] ✓ Evaluated {len(result.get('technology_analysis', []))} opportunities for technical feasibility", "internal")
         
         return result or {"technology_analysis": []}
     
@@ -249,7 +258,10 @@ Output as JSON: {{
     ]
 }}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system="You are a User Research Agent specializing in understanding user needs and behaviors.",
+            user=prompt
+        )
         result = self._extract_json(response)
         
         self.bus.send(self.role, "Research_Lead_Agent", Phase.RESEARCH_DISCOVERY,
@@ -323,7 +335,10 @@ Output as JSON: {{
     ]
 }}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system="You are a Research Lead Agent responsible for synthesizing research and making strategic product recommendations.",
+            user=prompt
+        )
         result = self._extract_json(response)
         
         if result and result.get("recommended_product"):
