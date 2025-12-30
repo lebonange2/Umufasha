@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str = "neo4jpassword"
     
     # LLM - Local models only (Ollama)
-    LLM_MODEL: str = "qwen3:30b"  # Default local model
+    LLM_MODEL: str = "gemma2:2b"  # Default local model (small, fast, low memory)
     LLM_PROVIDER: str = "local"  # Always local (Ollama) - no API keys needed
     LLM_LOCAL_URL: str = "http://localhost:11434/v1"  # Ollama default URL
     # Legacy fields (deprecated, not used - kept for backwards compatibility)

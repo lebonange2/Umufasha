@@ -957,7 +957,7 @@ class CoreDevicesCompany:
     Enhanced with explicit checklist execution and progress tracking.
     """
     
-    def __init__(self, llm_client: Optional[LLMClient] = None, model: str = "qwen3:30b"):
+    def __init__(self, llm_client: Optional[LLMClient] = None, model: str = "gemma2:2b"):
         """Initialize the company with all agents."""
         if llm_client is None:
             config = get_config()

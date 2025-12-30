@@ -132,7 +132,7 @@ async def load_project_from_db(project_id: str, db: AsyncSession) -> Optional[Di
             return None
         
         # Recreate company with saved models
-        model = db_project.model or "qwen3:30b"
+        model = db_project.model or "gemma2:2b"
         company = CoreDevicesCompany(model=model)
         
         # Restore project state
@@ -258,7 +258,7 @@ class CoreDevicesProjectCreate(BaseModel):
     research_mode: bool = False  # If True, start with Research Phase (Phase 0)
     research_scope: Optional[str] = ""  # Scope for research (e.g., "health devices", "energy solutions")
     constraints: Optional[Dict[str, Any]] = {}
-    model: str = "qwen3:30b"
+    model: str = "gemma2:2b"  # Use small model by default (low memory requirements)
     ceo_model: Optional[str] = None
     output_directory: str = "product_outputs"
 
@@ -292,7 +292,7 @@ async def create_core_devices_project(project: CoreDevicesProjectCreate, db: Asy
         project_id = str(uuid.uuid4())
         
         # Create company instance
-        model = project.model or "qwen3:30b"
+        model = project.model or "gemma2:2b"
         ceo_model = project.ceo_model or model
         company = CoreDevicesCompany(model=model)
         
