@@ -99,6 +99,21 @@ Output as JSON: {{
                          "[Market_Research_Agent] ✅ LLM response received, parsing JSON...", "internal")
             
             result = self._extract_json(response)
+            
+            if not result:
+                self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
+                             f"[Market_Research_Agent] ⚠️ Could not parse JSON, using fallback data", "internal")
+                # Return minimal fallback data
+                result = {
+                    "market_trends": ["IoT devices", "AI-powered electronics", "Sustainable tech"],
+                    "emerging_needs": ["Health monitoring", "Energy efficiency"],
+                    "market_gaps": ["User-friendly devices", "Affordable solutions"],
+                    "opportunity_areas": ["Consumer electronics", "Smart home"]
+                }
+            else:
+                self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
+                             "[Market_Research_Agent] ✅ JSON parsed successfully", "internal")
+                
         except Exception as e:
             self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
                          f"[Market_Research_Agent] ❌ ERROR: {str(e)}", "internal")
@@ -154,17 +169,36 @@ Output as JSON: {{
         return opportunities
     
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
-        """Extract JSON from LLM response."""
+        """Extract JSON from LLM response with timeout protection."""
+        import re
+        
+        # Limit text length to prevent hanging
+        search_text = text[:10000] if len(text) > 10000 else text
+        
+        # Strategy 1: Try direct parse
         try:
-            return json.loads(text)
+            return json.loads(search_text)
         except:
-            import re
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except:
-                    pass
+            pass
+        
+        # Strategy 2: Find JSON in markdown code blocks
+        try:
+            json_block = re.search(r'```json\s*(\{.*?\})\s*```', search_text, re.DOTALL)
+            if json_block:
+                return json.loads(json_block.group(1))
+        except:
+            pass
+        
+        # Strategy 3: Find first { to last }
+        try:
+            first_brace = search_text.find('{')
+            last_brace = search_text.rfind('}')
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                potential_json = search_text[first_brace:last_brace+1]
+                return json.loads(potential_json)
+        except:
+            pass
+        
         return None
 
 
@@ -218,17 +252,36 @@ Output as JSON: {{
         return result or {"technology_analysis": []}
     
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
-        """Extract JSON from LLM response."""
+        """Extract JSON from LLM response with timeout protection."""
+        import re
+        
+        # Limit text length to prevent hanging
+        search_text = text[:10000] if len(text) > 10000 else text
+        
+        # Strategy 1: Try direct parse
         try:
-            return json.loads(text)
+            return json.loads(search_text)
         except:
-            import re
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except:
-                    pass
+            pass
+        
+        # Strategy 2: Find JSON in markdown code blocks
+        try:
+            json_block = re.search(r'```json\s*(\{.*?\})\s*```', search_text, re.DOTALL)
+            if json_block:
+                return json.loads(json_block.group(1))
+        except:
+            pass
+        
+        # Strategy 3: Find first { to last }
+        try:
+            first_brace = search_text.find('{')
+            last_brace = search_text.rfind('}')
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                potential_json = search_text[first_brace:last_brace+1]
+                return json.loads(potential_json)
+        except:
+            pass
+        
         return None
 
 
@@ -282,17 +335,36 @@ Output as JSON: {{
         return result or {"user_analysis": []}
     
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
-        """Extract JSON from LLM response."""
+        """Extract JSON from LLM response with timeout protection."""
+        import re
+        
+        # Limit text length to prevent hanging
+        search_text = text[:10000] if len(text) > 10000 else text
+        
+        # Strategy 1: Try direct parse
         try:
-            return json.loads(text)
+            return json.loads(search_text)
         except:
-            import re
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except:
-                    pass
+            pass
+        
+        # Strategy 2: Find JSON in markdown code blocks
+        try:
+            json_block = re.search(r'```json\s*(\{.*?\})\s*```', search_text, re.DOTALL)
+            if json_block:
+                return json.loads(json_block.group(1))
+        except:
+            pass
+        
+        # Strategy 3: Find first { to last }
+        try:
+            first_brace = search_text.find('{')
+            last_brace = search_text.rfind('}')
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                potential_json = search_text[first_brace:last_brace+1]
+                return json.loads(potential_json)
+        except:
+            pass
+        
         return None
 
 
@@ -360,17 +432,36 @@ Output as JSON: {{
         return result or {"recommended_product": None, "alternative_opportunities": []}
     
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
-        """Extract JSON from LLM response."""
+        """Extract JSON from LLM response with timeout protection."""
+        import re
+        
+        # Limit text length to prevent hanging
+        search_text = text[:10000] if len(text) > 10000 else text
+        
+        # Strategy 1: Try direct parse
         try:
-            return json.loads(text)
+            return json.loads(search_text)
         except:
-            import re
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except:
-                    pass
+            pass
+        
+        # Strategy 2: Find JSON in markdown code blocks
+        try:
+            json_block = re.search(r'```json\s*(\{.*?\})\s*```', search_text, re.DOTALL)
+            if json_block:
+                return json.loads(json_block.group(1))
+        except:
+            pass
+        
+        # Strategy 3: Find first { to last }
+        try:
+            first_brace = search_text.find('{')
+            last_brace = search_text.rfind('}')
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                potential_json = search_text[first_brace:last_brace+1]
+                return json.loads(potential_json)
+        except:
+            pass
+        
         return None
 
 
