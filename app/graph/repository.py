@@ -92,7 +92,7 @@ class GraphRepository:
                     UNWIND nodes_in_path as n
                     WITH project, collect(DISTINCT n) as all_nodes, rels_in_path
                     UNWIND rels_in_path as r
-                    WITH project, all_nodes, collect(DISTINCT r) as all_rels
+                    WITH project, all_nodes, collect(DISTINCT {{rel: r, start: startNode(r), end: endNode(r)}}) as all_rels
                     RETURN all_nodes, all_rels
                     """
                     result = session.run(query, project_id=project_id, focus_node_id=focus_node_id)
@@ -120,11 +120,12 @@ class GraphRepository:
                     {stage_filter}
                     OPTIONAL MATCH (project)-[*0..{depth}]-(n)
                     WHERE n IS NOT NULL {label_filter}
-                    WITH project, collect(DISTINCT n) as all_nodes
+                    WITH project, collect(DISTINCT n) as nodes_without_project
+                    WITH project, nodes_without_project + project as all_nodes
                     UNWIND all_nodes as n1
                     OPTIONAL MATCH (n1)-[r]-(n2)
                     WHERE n2 IN all_nodes AND n1 IS NOT NULL
-                    WITH project, all_nodes, collect(DISTINCT r) as all_rels
+                    WITH project, all_nodes, collect(DISTINCT {{rel: r, start: startNode(r), end: endNode(r)}}) as all_rels
                     RETURN project, all_nodes, all_rels
                     """
                     params = {"project_id": project_id}
@@ -160,18 +161,23 @@ class GraphRepository:
                 
                 edges = []
                 edge_ids = set()
-                for rel in record["all_rels"] or []:
-                    if rel and rel.start_node and rel.end_node:
-                        edge_id = f"{rel.start_node['id']}_{rel.type}_{rel.end_node['id']}"
-                        if edge_id not in edge_ids:
-                            edge_ids.add(edge_id)
-                            edges.append({
-                                "id": edge_id,
-                                "type": rel.type,
-                                "from": rel.start_node["id"],
-                                "to": rel.end_node["id"],
-                                "properties": dict(rel)
-                            })
+                for rel_data in record["all_rels"] or []:
+                    if rel_data and "rel" in rel_data and "start" in rel_data and "end" in rel_data:
+                        rel = rel_data["rel"]
+                        start_node = rel_data["start"]
+                        end_node = rel_data["end"]
+                        
+                        if rel is not None and start_node and end_node and start_node.get('id') and end_node.get('id'):
+                            edge_id = f"{start_node['id']}_{rel.type}_{end_node['id']}"
+                            if edge_id not in edge_ids:
+                                edge_ids.add(edge_id)
+                                edges.append({
+                                    "id": edge_id,
+                                    "type": rel.type,
+                                    "from": start_node["id"],
+                                    "to": end_node["id"],
+                                    "properties": dict(rel)
+                                })
                 
                 return {"nodes": nodes, "edges": edges}
         except ConnectionError:
