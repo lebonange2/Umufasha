@@ -28,6 +28,7 @@ from app.routes import (
     writer_documents,
     book_writer,
     ferrari_company,
+    core_devices,
     product_debate,
     mindmaps,
     graph
@@ -137,6 +138,7 @@ app.include_router(writer.router, tags=["writer"])
 app.include_router(writer_documents.router, tags=["writer-documents"])
 app.include_router(book_writer.router, tags=["book-writer"])
 app.include_router(ferrari_company.router, tags=["ferrari-company"])
+app.include_router(core_devices.router, tags=["core-devices"])
 app.include_router(product_debate.router, tags=["product-debate"])
 app.include_router(mindmaps.router, tags=["mindmaps"])
 app.include_router(graph.router, tags=["graph"])
@@ -166,6 +168,15 @@ async def product_debate_page(request: Request):
     return templates.TemplateResponse("product_debate.html", {
         "request": request,
         "title": "1-Sigma Novelty Explorer"
+    })
+
+
+@app.get("/core-devices", response_class=HTMLResponse)
+async def core_devices_page(request: Request):
+    """Core Devices Company page."""
+    return templates.TemplateResponse("core_devices_company.html", {
+        "request": request,
+        "title": "Core Devices Company"
     })
 
 

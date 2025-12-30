@@ -329,3 +329,42 @@ class BookPublishingHouseProject(Base):
         Index("idx_bph_updated", "updated_at"),
         Index("idx_bph_phase", "current_phase"),
     )
+
+
+class CoreDevicesProject(Base):
+    """Core Devices Company project model for persistence."""
+    __tablename__ = "core_devices_projects"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    product_idea = Column(Text, nullable=False)
+    primary_need = Column(String(50), nullable=True)
+    constraints = Column(JSON, nullable=True)
+    output_directory = Column(String(255), default="product_outputs")
+    model = Column(String(50), default="qwen3:30b")  # Worker agent model
+    ceo_model = Column(String(50), nullable=True)  # CEO/manager model
+    
+    # Project state
+    current_phase = Column(String(50), default="strategy_idea_intake")
+    status = Column(String(50), default="in_progress")  # in_progress, complete, stopped, error
+    
+    # Project data (stored as JSON for flexibility)
+    project_data = Column(JSON, nullable=True)  # Full ProductProject state
+    artifacts = Column(JSON, nullable=True)  # Phase artifacts
+    owner_decisions = Column(JSON, nullable=True)  # Owner decisions per phase
+    chat_log = Column(JSON, nullable=True)  # Agent communication log
+    
+    # Progress tracking
+    progress_log = Column(JSON, nullable=True)  # List of progress entries with timestamps
+    error_log = Column(JSON, nullable=True)  # List of errors with timestamps
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_activity_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_cdc_status", "status"),
+        Index("idx_cdc_updated", "updated_at"),
+        Index("idx_cdc_phase", "current_phase"),
+    )

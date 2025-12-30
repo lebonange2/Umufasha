@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Devices Company - Multi-Agent Product Development</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --electronics-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8f9fa;
+        }
+
+        .hero-section {
+            background: var(--electronics-gradient);
+            color: white;
+            padding: 3rem 0 2rem 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .hero-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero-subtitle {
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+
+        .container-main {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+
+        .phase-card {
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .phase-card:hover {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+
+        .phase-card.active {
+            border-left-color: var(--success-color);
+            background: #f0fff4;
+        }
+
+        .phase-card.completed {
+            border-left-color: #6c757d;
+            opacity: 0.8;
+        }
+
+        .phase-badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-pending {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .badge-active {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .badge-completed {
+            background: #6c757d;
+            color: white;
+        }
+
+        .chat-container {
+            height: 500px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 10px;
+            padding: 1rem;
+        }
+
+        .chat-message {
+            margin-bottom: 1rem;
+            padding: 0.8rem;
+            border-radius: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chat-message.agent {
+            background: #e3f2fd;
+            border-left: 3px solid #2196f3;
+        }
+
+        .chat-message.owner {
+            background: #fff3e0;
+            border-left: 3px solid #ff9800;
+        }
+
+        .chat-message.ceo {
+            background: #f3e5f5;
+            border-left: 3px solid #9c27b0;
+        }
+
+        .agent-name {
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 0.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .message-content {
+            font-size: 0.95rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .timestamp {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 0.3rem;
+        }
+
+        .btn-primary {
+            background: var(--electronics-gradient);
+            border: none;
+            padding: 0.6rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-secondary {
+            border-radius: 25px;
+            padding: 0.6rem 1.5rem;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+
+        .status-in-progress {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-complete {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        .artifact-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .artifact-title {
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #495057;
+        }
+
+        .project-list-item {
+            padding: 1rem;
+            border-bottom: 1px solid #e9ecef;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .project-list-item:hover {
+            background: #f8f9fa;
+        }
+
+        .project-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            opacity: 0.3;
+            margin-bottom: 1rem;
+        }
+
+        .phase-description {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+
+        .primary-need-badge {
+            display: inline-block;
+            padding: 0.4rem 0.9rem;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: #e7f3ff;
+            color: #0066cc;
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="hero-title">
+                        <i class="bi bi-cpu"></i> Core Devices Company
+                    </h1>
+                    <p class="hero-subtitle">Ferrari-Style Multi-Agent Electronic Product Development System</p>
+                </div>
+                <div>
+                    <a href="/" class="btn btn-outline-light">
+                        <i class="bi bi-house"></i> Home
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container-main">
+        <div class="row">
+            <!-- Left Sidebar: Project List & Create -->
+            <div class="col-lg-3">
+                <div class="card">
+                    <div class="card-header bg-transparent">
+                        <h5 class="mb-0"><i class="bi bi-folder"></i> Projects</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="p-3">
+                            <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+                                <i class="bi bi-plus-circle"></i> New Product
+                            </button>
+                        </div>
+                        <div id="projectList" style="max-height: 500px; overflow-y: auto;">
+                            <!-- Projects will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Project Info -->
+                <div class="card" id="projectInfoCard" style="display: none;">
+                    <div class="card-header bg-transparent">
+                        <h6 class="mb-0"><i class="bi bi-info-circle"></i> Project Info</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="projectInfo"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content: Phases & Chat -->
+            <div class="col-lg-9">
+                <!-- Welcome Screen -->
+                <div id="welcomeScreen" class="card">
+                    <div class="card-body">
+                        <div class="empty-state">
+                            <i class="bi bi-lightbulb"></i>
+                            <h3>Welcome to Core Devices Company</h3>
+                            <p class="lead">Create a new product development project to get started</p>
+                            <p>Our multi-agent system will guide you through 6 phases:</p>
+                            <div class="row mt-4">
+                                <div class="col-md-6">
+                                    <ul class="list-unstyled text-start">
+                                        <li class="mb-2"><i class="bi bi-1-circle text-primary"></i> Strategy & Idea Intake</li>
+                                        <li class="mb-2"><i class="bi bi-2-circle text-primary"></i> Concept & Differentiation</li>
+                                        <li class="mb-2"><i class="bi bi-3-circle text-primary"></i> UX Architecture & System Design</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <ul class="list-unstyled text-start">
+                                        <li class="mb-2"><i class="bi bi-4-circle text-primary"></i> Detailed Engineering & Prototyping</li>
+                                        <li class="mb-2"><i class="bi bi-5-circle text-primary"></i> Validation, Safety & Industrialization</li>
+                                        <li class="mb-2"><i class="bi bi-6-circle text-primary"></i> Customer Experience, Positioning & Launch</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+                                <i class="bi bi-plus-circle"></i> Create Your First Product
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Dashboard -->
+                <div id="projectDashboard" style="display: none;">
+                    <!-- Project Header -->
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h4 id="projectTitle" class="mb-2"></h4>
+                                    <div id="projectStatus" class="mb-2"></div>
+                                    <div id="currentPhaseDisplay"></div>
+                                </div>
+                                <button class="btn btn-danger btn-sm" onclick="deleteCurrentProject()">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Phase Progress -->
+                    <div class="card">
+                        <div class="card-header bg-transparent">
+                            <h5 class="mb-0"><i class="bi bi-list-check"></i> Development Phases</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="phasesList"></div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Chat Log -->
+                    <div class="card">
+                        <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Agent Communications</h5>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary" onclick="loadChatLog()">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="chatLog" class="chat-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- Owner Decision Panel -->
+                    <div class="card" id="decisionPanel" style="display: none;">
+                        <div class="card-header bg-warning bg-opacity-10">
+                            <h5 class="mb-0"><i class="bi bi-hand-thumbs-up"></i> Owner Decision Required</h5>
+                        </div>
+                        <div class="card-body">
+                            <p id="decisionPrompt"></p>
+                            <div class="mb-3">
+                                <label for="ownerFeedback" class="form-label">Feedback (optional):</label>
+                                <textarea class="form-control" id="ownerFeedback" rows="3" placeholder="Provide feedback or changes if needed..."></textarea>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-success" onclick="submitDecision('approve')">
+                                    <i class="bi bi-check-circle"></i> Approve
+                                </button>
+                                <button class="btn btn-warning" onclick="submitDecision('request_changes')">
+                                    <i class="bi bi-pencil"></i> Request Changes
+                                </button>
+                                <button class="btn btn-danger" onclick="submitDecision('stop')">
+                                    <i class="bi bi-x-circle"></i> Stop Project
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Project Modal -->
+    <div class="modal fade" id="createProjectModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Create New Product</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createProjectForm">
+                        <div class="mb-3">
+                            <label for="productIdea" class="form-label">Product Idea *</label>
+                            <textarea class="form-control" id="productIdea" rows="3" required 
+                                placeholder="Describe your product idea briefly..."></textarea>
+                            <div class="form-text">What electrical/electronic product do you want to create?</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="primaryNeed" class="form-label">Primary Human Need *</label>
+                            <select class="form-select" id="primaryNeed" required>
+                                <option value="">Select primary need...</option>
+                                <option value="energy">Energy</option>
+                                <option value="water">Water</option>
+                                <option value="food">Food</option>
+                                <option value="shelter">Shelter</option>
+                                <option value="health">Health</option>
+                                <option value="communication">Communication</option>
+                                <option value="safety">Safety</option>
+                                <option value="mobility">Mobility</option>
+                                <option value="essential_productivity">Essential Productivity</option>
+                            </select>
+                            <div class="form-text">Which primary need does this product address?</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="constraints" class="form-label">Constraints (Optional)</label>
+                            <textarea class="form-control" id="constraints" rows="2" 
+                                placeholder="Budget, environment, complexity, timeline..."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="modelSelect" class="form-label">AI Model</label>
+                            <select class="form-select" id="modelSelect">
+                                <option value="qwen3:30b">Qwen3:30B (Default)</option>
+                                <option value="qwen3:72b">Qwen3:72B (More capable)</option>
+                                <option value="gpt-4">GPT-4 (If configured)</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="createProject()">
+                        <i class="bi bi-rocket"></i> Create Product
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentProjectId = null;
+        let phaseCheckInterval = null;
+
+        const phaseInfo = {
+            'strategy_idea_intake': {
+                name: 'Strategy & Idea Intake',
+                icon: 'bi-clipboard-check',
+                description: 'Validate idea against primary human needs'
+            },
+            'concept_differentiation': {
+                name: 'Concept & Differentiation',
+                icon: 'bi-diagram-3',
+                description: 'Define concepts and market positioning'
+            },
+            'ux_system_design': {
+                name: 'UX Architecture & System Design',
+                icon: 'bi-palette',
+                description: 'Design user experience and technical architecture'
+            },
+            'detailed_engineering': {
+                name: 'Detailed Engineering & Prototyping',
+                icon: 'bi-tools',
+                description: 'Create detailed designs and prototypes'
+            },
+            'validation_industrialization': {
+                name: 'Validation, Safety & Industrialization',
+                icon: 'bi-shield-check',
+                description: 'Ensure safety, compliance, and manufacturability'
+            },
+            'positioning_launch': {
+                name: 'Customer Experience, Positioning & Launch',
+                icon: 'bi-rocket-takeoff',
+                description: 'Prepare market positioning and launch'
+            },
+            'complete': {
+                name: 'Complete',
+                icon: 'bi-check-circle',
+                description: 'Product ready for launch'
+            }
+        };
+
+        // Load projects on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProjects();
+        });
+
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/core-devices/projects');
+                const data = await response.json();
+                
+                const projectList = document.getElementById('projectList');
+                
+                if (data.projects.length === 0) {
+                    projectList.innerHTML = '<div class="p-3 text-muted text-center">No projects yet</div>';
+                    return;
+                }
+                
+                projectList.innerHTML = data.projects.map(p => `
+                    <div class="project-list-item" onclick="loadProject('${p.id}')">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div style="flex: 1;">
+                                <div class="fw-bold text-truncate">${escapeHtml(p.product_idea.substring(0, 50))}...</div>
+                                <div class="small text-muted mt-1">
+                                    <span class="primary-need-badge">${escapeHtml(p.primary_need || 'N/A')}</span>
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    ${phaseInfo[p.current_phase]?.name || p.current_phase}
+                                </div>
+                            </div>
+                            <div>
+                                <span class="phase-badge badge-${getStatusClass(p.status)}">${p.status}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load projects:', error);
+            }
+        }
+
+        async function createProject() {
+            const productIdea = document.getElementById('productIdea').value;
+            const primaryNeed = document.getElementById('primaryNeed').value;
+            const constraints = document.getElementById('constraints').value;
+            const model = document.getElementById('modelSelect').value;
+
+            if (!productIdea || !primaryNeed) {
+                alert('Please fill in required fields');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/core-devices/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        product_idea: productIdea,
+                        primary_need: primaryNeed,
+                        constraints: constraints ? { description: constraints } : {},
+                        model: model
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to create project');
+
+                const data = await response.json();
+                
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('createProjectModal')).hide();
+                
+                // Reset form
+                document.getElementById('createProjectForm').reset();
+                
+                // Load the new project
+                await loadProjects();
+                await loadProject(data.id);
+            } catch (error) {
+                console.error('Failed to create project:', error);
+                alert('Failed to create project: ' + error.message);
+            }
+        }
+
+        async function loadProject(projectId) {
+            currentProjectId = projectId;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${projectId}`);
+                if (!response.ok) throw new Error('Failed to load project');
+                
+                const project = await response.json();
+                
+                // Hide welcome, show dashboard
+                document.getElementById('welcomeScreen').style.display = 'none';
+                document.getElementById('projectDashboard').style.display = 'block';
+                document.getElementById('projectInfoCard').style.display = 'block';
+                
+                // Update project title and status
+                document.getElementById('projectTitle').textContent = project.product_idea.substring(0, 100);
+                
+                const statusHtml = `
+                    <span class="status-indicator status-${project.status.replace('_', '-')}">
+                        <i class="bi bi-circle-fill"></i> ${project.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                `;
+                document.getElementById('projectStatus').innerHTML = statusHtml;
+                
+                const currentPhase = phaseInfo[project.current_phase] || {};
+                document.getElementById('currentPhaseDisplay').innerHTML = `
+                    <strong>Current Phase:</strong> 
+                    <i class="${currentPhase.icon}"></i> ${currentPhase.name}
+                `;
+                
+                // Update project info card
+                document.getElementById('projectInfo').innerHTML = `
+                    <div class="mb-2"><strong>Primary Need:</strong> <span class="primary-need-badge">${escapeHtml(project.primary_need || 'N/A')}</span></div>
+                    <div class="mb-2"><strong>Created:</strong> ${new Date(project.created_at).toLocaleDateString()}</div>
+                    <div class="mb-2"><strong>Updated:</strong> ${new Date(project.updated_at).toLocaleDateString()}</div>
+                `;
+                
+                // Render phases
+                renderPhases(project);
+                
+                // Load chat log
+                await loadChatLog();
+                
+                // Start phase status checking
+                startPhaseStatusCheck();
+            } catch (error) {
+                console.error('Failed to load project:', error);
+                alert('Failed to load project');
+            }
+        }
+
+        function renderPhases(project) {
+            const phases = [
+                'strategy_idea_intake',
+                'concept_differentiation',
+                'ux_system_design',
+                'detailed_engineering',
+                'validation_industrialization',
+                'positioning_launch'
+            ];
+            
+            const currentPhaseIndex = phases.indexOf(project.current_phase);
+            
+            const phasesHtml = phases.map((phase, index) => {
+                const info = phaseInfo[phase];
+                let badgeClass = 'badge-pending';
+                let cardClass = 'phase-card';
+                
+                if (index < currentPhaseIndex) {
+                    badgeClass = 'badge-completed';
+                    cardClass += ' completed';
+                } else if (index === currentPhaseIndex) {
+                    badgeClass = 'badge-active';
+                    cardClass += ' active';
+                }
+                
+                const artifacts = project.artifacts?.[phase];
+                
+                return `
+                    <div class="${cardClass} card mb-2">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div style="flex: 1;">
+                                    <h6>
+                                        <i class="${info.icon}"></i>
+                                        ${info.name}
+                                        <span class="phase-badge ${badgeClass} ms-2">
+                                            ${index < currentPhaseIndex ? 'Completed' : 
+                                              index === currentPhaseIndex ? 'Active' : 'Pending'}
+                                        </span>
+                                    </h6>
+                                    <p class="phase-description mb-2">${info.description}</p>
+                                    ${artifacts ? `<div class="artifact-section">
+                                        <div class="artifact-title">Artifacts:</div>
+                                        <pre class="mb-0" style="font-size: 0.85rem; max-height: 200px; overflow-y: auto;">${JSON.stringify(artifacts, null, 2)}</pre>
+                                    </div>` : ''}
+                                </div>
+                                <div>
+                                    ${index === currentPhaseIndex && project.status === 'in_progress' ? 
+                                        `<button class="btn btn-primary btn-sm" onclick="executePhase()">
+                                            <i class="bi bi-play-circle"></i> Execute
+                                        </button>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            document.getElementById('phasesList').innerHTML = phasesHtml;
+        }
+
+        async function loadChatLog() {
+            if (!currentProjectId) return;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/chat-log`);
+                const data = await response.json();
+                
+                const chatLog = document.getElementById('chatLog');
+                
+                if (data.chat_log.length === 0) {
+                    chatLog.innerHTML = '<div class="text-muted text-center p-4">No messages yet</div>';
+                    return;
+                }
+                
+                chatLog.innerHTML = data.chat_log.map(msg => {
+                    let messageClass = 'chat-message agent';
+                    if (msg.from_agent === 'OWNER') messageClass = 'chat-message owner';
+                    if (msg.from_agent === 'CEO_Agent') messageClass = 'chat-message ceo';
+                    
+                    return `
+                        <div class="${messageClass}">
+                            <div class="agent-name">
+                                <i class="bi bi-person-circle"></i>
+                                ${msg.from_agent} → ${msg.to_agent}
+                            </div>
+                            <div class="message-content">${escapeHtml(msg.content)}</div>
+                            <div class="timestamp">${new Date(msg.timestamp).toLocaleString()}</div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Scroll to bottom
+                chatLog.scrollTop = chatLog.scrollHeight;
+                
+                // Check if owner decision is needed
+                checkForOwnerDecision(data.chat_log);
+            } catch (error) {
+                console.error('Failed to load chat log:', error);
+            }
+        }
+
+        function checkForOwnerDecision(chatLog) {
+            // Check if latest message is a request for owner decision
+            const lastMsg = chatLog[chatLog.length - 1];
+            if (lastMsg && lastMsg.message_type === 'owner_request' && 
+                lastMsg.content.toLowerCase().includes('decision')) {
+                document.getElementById('decisionPanel').style.display = 'block';
+                document.getElementById('decisionPrompt').textContent = 
+                    'Review the phase summary above and make your decision.';
+            } else {
+                document.getElementById('decisionPanel').style.display = 'none';
+            }
+        }
+
+        async function executePhase() {
+            if (!currentProjectId) return;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/execute-phase`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error('Failed to execute phase');
+                
+                const data = await response.json();
+                alert('Phase execution started! Agents are working...');
+                
+                // Start checking status
+                startPhaseStatusCheck();
+            } catch (error) {
+                console.error('Failed to execute phase:', error);
+                alert('Failed to execute phase: ' + error.message);
+            }
+        }
+
+        function startPhaseStatusCheck() {
+            // Clear existing interval
+            if (phaseCheckInterval) {
+                clearInterval(phaseCheckInterval);
+            }
+            
+            // Check status every 2 seconds
+            phaseCheckInterval = setInterval(async () => {
+                if (!currentProjectId) {
+                    clearInterval(phaseCheckInterval);
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/core-devices/projects/${currentProjectId}/phase-status`);
+                    const status = await response.json();
+                    
+                    if (status.status === 'completed') {
+                        // Phase completed, reload project
+                        await loadProject(currentProjectId);
+                        clearInterval(phaseCheckInterval);
+                    } else if (status.status === 'failed') {
+                        alert('Phase execution failed: ' + status.error);
+                        clearInterval(phaseCheckInterval);
+                    }
+                } catch (error) {
+                    console.error('Failed to check phase status:', error);
+                }
+            }, 2000);
+        }
+
+        async function submitDecision(decision) {
+            if (!currentProjectId) return;
+            
+            const feedback = document.getElementById('ownerFeedback').value;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/owner-decision`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        decision: decision,
+                        feedback: feedback
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to submit decision');
+                
+                const data = await response.json();
+                
+                // Clear feedback
+                document.getElementById('ownerFeedback').value = '';
+                
+                // Reload project
+                await loadProject(currentProjectId);
+                
+                if (decision === 'approve') {
+                    alert('Decision approved! Moving to next phase.');
+                } else if (decision === 'stop') {
+                    alert('Project stopped.');
+                } else {
+                    alert('Changes requested. Please execute the phase again with your feedback.');
+                }
+            } catch (error) {
+                console.error('Failed to submit decision:', error);
+                alert('Failed to submit decision: ' + error.message);
+            }
+        }
+
+        async function deleteCurrentProject() {
+            if (!currentProjectId) return;
+            
+            if (!confirm('Are you sure you want to delete this project?')) return;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) throw new Error('Failed to delete project');
+                
+                currentProjectId = null;
+                document.getElementById('welcomeScreen').style.display = 'block';
+                document.getElementById('projectDashboard').style.display = 'none';
+                document.getElementById('projectInfoCard').style.display = 'none';
+                
+                await loadProjects();
+            } catch (error) {
+                console.error('Failed to delete project:', error);
+                alert('Failed to delete project: ' + error.message);
+            }
+        }
+
+        function getStatusClass(status) {
+            const map = {
+                'in_progress': 'active',
+                'complete': 'completed',
+                'stopped': 'completed',
+                'error': 'pending'
+            };
+            return map[status] || 'pending';
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+    </script>
+</body>
+</html>
