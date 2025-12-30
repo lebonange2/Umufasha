@@ -136,7 +136,8 @@ class LLMClient:
                     "model": self.model,
                     "messages": messages,
                     "temperature": 0.7,
-                    "max_tokens": 2000
+                    "max_tokens": 2000,
+                    "stream": False
                 }
                 
                 if tools:
@@ -161,19 +162,23 @@ class LLMClient:
             
         except httpx.HTTPStatusError as e:
             error_msg = f"Client error '{e.response.status_code} {e.response.reason_phrase}' for url '{e.request.url}'"
+            error_detail = ""
             if e.response.text:
                 try:
                     error_data = e.response.json()
                     if "error" in error_data:
-                        error_msg += f"\n{error_data['error'].get('message', '')}"
+                        error_detail = error_data['error'].get('message', '') or str(error_data['error'])
+                        error_msg += f"\nError: {error_detail}"
                 except:
-                    error_msg += f"\n{e.response.text[:500]}"
+                    error_detail = e.response.text[:500]
+                    error_msg += f"\nResponse: {error_detail}"
             error_msg += f"\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/{e.response.status_code}"
             logger.error("LLM HTTP error", 
                         status_code=e.response.status_code,
                         url=str(e.request.url),
                         provider=self.provider,
-                        model=self.model)
+                        model=self.model,
+                        error_detail=error_detail)
             raise Exception(error_msg) from e
         except httpx.RequestError as e:
             error_msg = f"Request error: {str(e)}"
