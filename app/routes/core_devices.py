@@ -268,6 +268,8 @@ class CoreDevicesProjectResponse(BaseModel):
     id: str
     product_idea: str
     primary_need: Optional[str]
+    research_mode: bool = False
+    research_scope: Optional[str] = ""
     current_phase: str
     status: str
     created_at: str
@@ -347,6 +349,8 @@ async def create_core_devices_project(project: CoreDevicesProjectCreate, db: Asy
             id=project_id,
             product_idea=project.product_idea or "",
             primary_need=project.primary_need or "",
+            research_mode=project.research_mode,
+            research_scope=project.research_scope or "",
             current_phase=starting_phase,  # Use actual starting phase (research_discovery or strategy_idea_intake)
             status="in_progress",
             created_at=datetime.utcnow().isoformat(),
@@ -375,6 +379,8 @@ async def get_core_devices_project(project_id: str, db: AsyncSession = Depends(g
         id=project_id,
         product_idea=project_data.get("product_idea", ""),
         primary_need=project_data.get("primary_need"),
+        research_mode=project_data.get("research_mode", False),
+        research_scope=project_data.get("research_scope", ""),
         current_phase=project_data.get("current_phase", "strategy_idea_intake"),
         status=project_data.get("status", "in_progress"),
         created_at=project_data.get("created_at", datetime.utcnow().isoformat()),

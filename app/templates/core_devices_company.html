@@ -710,6 +710,12 @@
                 'positioning_launch'
             ];
             
+            // Debug logging
+            console.log('🔍 Current Phase:', project.current_phase);
+            console.log('🔍 Research Mode:', project.research_mode);
+            console.log('🔍 Product Idea:', project.product_idea);
+            console.log('🔍 Status:', project.status);
+            
             const currentPhaseIndex = phases.indexOf(project.current_phase);
             
             const phasesHtml = phases.map((phase, index) => {
