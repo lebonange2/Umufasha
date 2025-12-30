@@ -345,9 +345,9 @@ async def create_core_devices_project(project: CoreDevicesProjectCreate, db: Asy
         
         return CoreDevicesProjectResponse(
             id=project_id,
-            product_idea=project.product_idea,
-            primary_need=project.primary_need,
-            current_phase="strategy_idea_intake",
+            product_idea=project.product_idea or "",
+            primary_need=project.primary_need or "",
+            current_phase=starting_phase,  # Use actual starting phase (research_discovery or strategy_idea_intake)
             status="in_progress",
             created_at=datetime.utcnow().isoformat(),
             updated_at=datetime.utcnow().isoformat(),

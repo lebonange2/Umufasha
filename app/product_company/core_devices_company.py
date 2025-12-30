@@ -952,9 +952,9 @@ class CoreDevicesCompany:
         if llm_client is None:
             config = get_config()
             llm_client = LLMClient(
-                base_url=config.llm_base_url,
+                base_url=config['base_url'],  # config is a dict, not an object
                 model=model,
-                temperature=0.7
+                temperature=config.get('temperature', 0.7)
             )
         
         self.llm = llm_client
@@ -989,7 +989,7 @@ class CoreDevicesCompany:
         self.project = ProductProject(
             product_idea=idea,
             primary_need=need,
-            constraints=constraints or{},
+            constraints=constraints or {},
             current_phase=Phase.RESEARCH_DISCOVERY if not idea else Phase.STRATEGY_IDEA_INTAKE
         )
         
