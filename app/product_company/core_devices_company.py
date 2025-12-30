@@ -954,7 +954,7 @@ class CoreDevicesCompany:
             llm_client = LLMClient(
                 base_url=config['base_url'],  # config is a dict, not an object
                 model=model,
-                temperature=config.get('temperature', 0.7)
+                provider=config.get('provider', 'local')
             )
         
         self.llm = llm_client
