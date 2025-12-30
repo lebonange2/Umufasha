@@ -73,6 +73,8 @@ async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: 
             # Update existing project
             db_project.product_idea = project_data.get("product_idea")
             db_project.primary_need = project_data.get("primary_need")
+            db_project.research_mode = project_data.get("research_mode", False)
+            db_project.research_scope = project_data.get("research_scope")
             db_project.constraints = project_data.get("constraints", {})
             db_project.output_directory = project_data.get("output_directory", "product_outputs")
             db_project.model = project_data.get("model", "qwen3:30b")
@@ -83,6 +85,7 @@ async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: 
             db_project.artifacts = project_data.get("artifacts", {})
             db_project.owner_decisions = project_data.get("owner_decisions", {})
             db_project.chat_log = project_data.get("chat_log", [])
+            db_project.pdf_report = project_data.get("pdf_report")  # Store PDF bytes
             db_project.last_activity_at = datetime.utcnow()
             db_project.updated_at = datetime.utcnow()
         else:
@@ -91,6 +94,8 @@ async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: 
                 id=project_id,
                 product_idea=project_data.get("product_idea"),
                 primary_need=project_data.get("primary_need"),
+                research_mode=project_data.get("research_mode", False),
+                research_scope=project_data.get("research_scope"),
                 constraints=project_data.get("constraints", {}),
                 output_directory=project_data.get("output_directory", "product_outputs"),
                 model=project_data.get("model", "qwen3:30b"),
@@ -101,6 +106,7 @@ async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: 
                 artifacts=project_data.get("artifacts", {}),
                 owner_decisions=project_data.get("owner_decisions", {}),
                 chat_log=project_data.get("chat_log", []),
+                pdf_report=project_data.get("pdf_report"),
                 progress_log=[],
                 error_log=[],
             )
@@ -192,8 +198,10 @@ async def load_project_from_db(project_id: str, db: AsyncSession) -> Optional[Di
         # Reconstruct project data dict
         project_data = {
             "company": company,
-            "product_idea": db_project.product_idea,
-            "primary_need": db_project.primary_need,
+            "product_idea": db_project.product_idea or "",
+            "primary_need": db_project.primary_need or "",
+            "research_mode": db_project.research_mode or False,
+            "research_scope": db_project.research_scope or "",
             "constraints": db_project.constraints or {},
             "output_directory": db_project.output_directory,
             "model": db_project.model,
@@ -203,6 +211,7 @@ async def load_project_from_db(project_id: str, db: AsyncSession) -> Optional[Di
             "owner_decisions": db_project.owner_decisions or {},
             "artifacts": db_project.artifacts or {},
             "chat_log": db_project.chat_log or [],
+            "pdf_report": db_project.pdf_report,  # Restore PDF bytes
             "progress_log": db_project.progress_log or [],
             "error_log": db_project.error_log or [],
             "created_at": db_project.created_at.isoformat() if db_project.created_at else datetime.utcnow().isoformat(),
@@ -244,8 +253,10 @@ async def log_error(project_id: str, error: str, phase: Optional[str] = None, db
 # Pydantic models for API
 class CoreDevicesProjectCreate(BaseModel):
     """Create Core Devices project request."""
-    product_idea: str
-    primary_need: str
+    product_idea: Optional[str] = ""  # Optional - Research Team will discover if empty
+    primary_need: Optional[str] = ""  # Optional - Research Team will identify if empty
+    research_mode: bool = False  # If True, start with Research Phase (Phase 0)
+    research_scope: Optional[str] = ""  # Scope for research (e.g., "health devices", "energy solutions")
     constraints: Optional[Dict[str, Any]] = {}
     model: str = "qwen3:30b"
     ceo_model: Optional[str] = None
@@ -283,23 +294,28 @@ async def create_core_devices_project(project: CoreDevicesProjectCreate, db: Asy
         ceo_model = project.ceo_model or model
         company = CoreDevicesCompany(model=model)
         
-        # Initialize project
+        # Initialize project (can be with or without idea)
         await company.initialize_project(
-            idea=project.product_idea,
-            primary_need=project.primary_need,
+            idea=project.product_idea or "",
+            primary_need=project.primary_need or "",
             constraints=project.constraints
         )
+        
+        # Determine starting phase
+        starting_phase = "research_discovery" if project.research_mode or not project.product_idea else "strategy_idea_intake"
         
         # Create project data
         project_data = {
             "company": company,
-            "product_idea": project.product_idea,
-            "primary_need": project.primary_need,
+            "product_idea": project.product_idea or "",
+            "primary_need": project.primary_need or "",
+            "research_mode": project.research_mode,
+            "research_scope": project.research_scope or "",
             "constraints": project.constraints,
             "output_directory": project.output_directory,
             "model": model,
             "ceo_model": ceo_model,
-            "current_phase": "strategy_idea_intake",
+            "current_phase": starting_phase,
             "status": "in_progress",
             "owner_decisions": {},
             "artifacts": {},
@@ -675,4 +691,217 @@ async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         logger.error("Failed to delete project", error=str(e), exc_info=True)
         await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/core-devices/projects/{project_id}/execute-research")
+async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Execute Phase 0: Research & Discovery.
+    
+    Research Team discovers product opportunities and generates PDF report.
+    """
+    try:
+        # Check if project exists
+        if project_id not in active_projects:
+            # Try loading from database
+            loaded_data = await load_project_from_db(project_id, db)
+            if loaded_data:
+                active_projects[project_id] = loaded_data
+            else:
+                raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_data = active_projects[project_id]
+        company = project_data.get("company")
+        
+        if not company:
+            raise HTTPException(status_code=500, detail="Company instance not found")
+        
+        # Execute research phase in background
+        async def execute_research_bg():
+            try:
+                phase_execution_status[project_id] = {"status": "running", "phase": "research_discovery"}
+                
+                research_scope = project_data.get("research_scope", "")
+                result = await company.execute_phase_0(research_scope=research_scope)
+                
+                # Store PDF report
+                if "pdf_report" in result:
+                    project_data["pdf_report"] = result["pdf_report"]
+                
+                # Update project data
+                project_data["artifacts"]["research_discovery"] = result.get("artifacts", {})
+                project_data["chat_log"].extend(result.get("chat_log", []))
+                project_data["current_phase"] = "research_discovery"
+                
+                await save_project_to_db(project_id, project_data, db)
+                
+                phase_execution_status[project_id] = {
+                    "status": "completed",
+                    "phase": "research_discovery",
+                    "artifacts": result.get("artifacts", {})
+                }
+                
+            except Exception as e:
+                phase_execution_status[project_id] = {
+                    "status": "failed",
+                    "phase": "research_discovery",
+                    "error": str(e)
+                }
+                await log_error(project_id, str(e), "research_discovery", db)
+        
+        # Run in background
+        asyncio.create_task(execute_research_bg())
+        
+        return {"message": "Research phase started", "project_id": project_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to execute research phase for project {project_id}", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/core-devices/projects/{project_id}/research-report")
+async def download_research_report(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Download the PDF research report."""
+    from fastapi.responses import Response
+    
+    try:
+        # Check if project exists
+        if project_id not in active_projects:
+            # Try loading from database
+            loaded_data = await load_project_from_db(project_id, db)
+            if loaded_data:
+                active_projects[project_id] = loaded_data
+            else:
+                raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_data = active_projects[project_id]
+        
+        # Get PDF report from artifacts
+        pdf_report = project_data.get("pdf_report")
+        
+        if not pdf_report:
+            # Try to get from artifacts
+            research_artifacts = project_data.get("artifacts", {}).get("research_discovery", {})
+            if "pdf_report" in research_artifacts:
+                pdf_report = research_artifacts["pdf_report"]
+        
+        if not pdf_report:
+            raise HTTPException(status_code=404, detail="Research report not found. Execute research phase first.")
+        
+        # Return PDF file
+        return Response(
+            content=pdf_report,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=research_report_{project_id[:8]}.pdf"
+            }
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download research report for project {project_id}", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ResearchApprovalRequest(BaseModel):
+    """Research approval request."""
+    approve: bool  # True to use recommendation, False to reject
+    provide_own_idea: bool = False  # If rejecting, provide own idea
+    product_idea: Optional[str] = None  # User's own idea
+    primary_need: Optional[str] = None  # User's primary need
+
+
+@router.post("/api/core-devices/projects/{project_id}/approve-research")
+async def approve_research_recommendation(
+    project_id: str,
+    request: ResearchApprovalRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Approve or reject the Research Team's recommendation."""
+    try:
+        # Check if project exists
+        if project_id not in active_projects:
+            loaded_data = await load_project_from_db(project_id, db)
+            if loaded_data:
+                active_projects[project_id] = loaded_data
+            else:
+                raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_data = active_projects[project_id]
+        company = project_data.get("company")
+        
+        if not company:
+            raise HTTPException(status_code=500, detail="Company instance not found")
+        
+        if request.approve:
+            # Apply research recommendation
+            research_artifacts = project_data.get("artifacts", {}).get("research_discovery", {})
+            recommendation = research_artifacts.get("recommendation", {})
+            
+            if not recommendation:
+                raise HTTPException(status_code=400, detail="No research recommendation found")
+            
+            company.apply_research_recommendation(recommendation)
+            
+            # Update project data
+            recommended_product = recommendation.get("recommended_product", {})
+            project_data["product_idea"] = recommended_product.get("product_concept", "")
+            project_data["primary_need"] = recommended_product.get("primary_need", "")
+            project_data["current_phase"] = "strategy_idea_intake"
+            
+            # Log owner decision
+            project_data["owner_decisions"]["research_discovery"] = {
+                "decision": "approve",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            message = "Research recommendation approved. Proceeding to Phase 1."
+            
+        elif request.provide_own_idea and request.product_idea:
+            # Owner provided their own idea
+            await company.initialize_project(
+                idea=request.product_idea,
+                primary_need=request.primary_need or "",
+                constraints=project_data.get("constraints", {})
+            )
+            
+            project_data["product_idea"] = request.product_idea
+            project_data["primary_need"] = request.primary_need or ""
+            project_data["current_phase"] = "strategy_idea_intake"
+            
+            # Log owner decision
+            project_data["owner_decisions"]["research_discovery"] = {
+                "decision": "provide_own_idea",
+                "product_idea": request.product_idea,
+                "primary_need": request.primary_need,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            message = "Owner provided own product idea. Proceeding to Phase 1."
+        
+        else:
+            # Rejected without providing idea
+            project_data["status"] = "stopped"
+            project_data["owner_decisions"]["research_discovery"] = {
+                "decision": "reject",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+            message = "Research recommendation rejected. Project stopped."
+        
+        await save_project_to_db(project_id, project_data, db)
+        
+        return {
+            "message": message,
+            "project_id": project_id,
+            "current_phase": project_data["current_phase"]
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to approve research for project {project_id}", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

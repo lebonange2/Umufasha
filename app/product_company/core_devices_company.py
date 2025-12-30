@@ -20,6 +20,7 @@ from app.book_writer.config import get_config
 
 class Phase(Enum):
     """Product development phases following Ferrari-style pipeline."""
+    RESEARCH_DISCOVERY = "research_discovery"  # Phase 0: Research Team discovers product opportunities
     STRATEGY_IDEA_INTAKE = "strategy_idea_intake"
     CONCEPT_DIFFERENTIATION = "concept_differentiation"
     UX_SYSTEM_DESIGN = "ux_system_design"
@@ -967,21 +968,123 @@ class CoreDevicesCompany:
         self.cto = CTOAgent(llm_client, self.bus)
         self.coo = COOAgent(llm_client, self.bus)
         self.cmo = CMOAgent(llm_client, self.bus)
+        
+        # Initialize research team
+        from app.product_company.research_team import ResearchTeam
+        self.research_team = ResearchTeam(llm_client, self.bus)
     
-    async def initialize_project(self, idea: str, primary_need: str, constraints: Dict[str, Any] = None) -> ProductProject:
-        """Initialize a new product project."""
+    async def initialize_project(self, idea: str = "", primary_need: str = "", constraints: Dict[str, Any] = None) -> ProductProject:
+        """Initialize a new product project.
+        
+        Args:
+            idea: Product idea (optional - if empty, Research Team will discover opportunities)
+            primary_need: Primary human need (optional - if empty, Research Team will identify)
+            constraints: Any constraints for the project
+        """
         try:
-            need = PrimaryNeed(primary_need.lower())
+            need = PrimaryNeed(primary_need.lower()) if primary_need else None
         except ValueError:
             need = None
         
         self.project = ProductProject(
             product_idea=idea,
             primary_need=need,
-            constraints=constraints or {}
+            constraints=constraints or{},
+            current_phase=Phase.RESEARCH_DISCOVERY if not idea else Phase.STRATEGY_IDEA_INTAKE
         )
         
         return self.project
+    
+    async def execute_phase_0(self, research_scope: str = "") -> Dict[str, Any]:
+        """Execute Phase 0: Research & Discovery (Research Team discovers product opportunities).
+        
+        This phase is executed when the Owner doesn't have a specific product idea.
+        The Research Team autonomously discovers opportunities and generates a PDF report.
+        """
+        if not self.project:
+            raise ValueError("Project not initialized")
+        
+        await self.ceo.start_phase(Phase.RESEARCH_DISCOVERY, self.project)
+        
+        self.bus.send("CEO_Agent", "Research_Team", Phase.RESEARCH_DISCOVERY,
+                     "[CEO_Agent] Research Team, please discover and analyze product opportunities.", "internal")
+        
+        # Execute research
+        research_results = await self.research_team.execute_research_phase(
+            scope=research_scope,
+            constraints=self.project.constraints
+        )
+        
+        # Extract recommendation
+        recommendation = research_results.get("recommendation", {})
+        recommended_product = recommendation.get("recommended_product")
+        
+        if not recommended_product:
+            raise ValueError("Research Team failed to generate a recommendation")
+        
+        # CEO reviews research and presents to Owner
+        ceo_review = f"""[CEO_Agent] Research Phase Complete
+
+The Research Team has completed comprehensive analysis and generated a detailed PDF report.
+
+**Research Team Recommendation:**
+
+**Product Concept:** {recommended_product.get('product_concept', 'N/A')}
+
+**Primary Human Need:** {recommended_product.get('primary_need', 'N/A').title()}
+
+**Justification:**
+{chr(10).join(f'• {j}' for j in recommended_product.get('justification', []))}
+
+**Expected Impact:** {recommended_product.get('expected_impact', 'N/A')}
+
+A comprehensive PDF report documenting the full research process is available for download.
+
+**Owner Decision Required:**
+- **Approve** - Use this product idea and proceed to Phase 1 (Strategy & Idea Intake)
+- **Request Changes** - Specify different focus areas for research
+- **Provide Own Idea** - Reject research and provide your own product idea
+"""
+        
+        self.bus.send("CEO_Agent", "OWNER", Phase.RESEARCH_DISCOVERY, ceo_review, "owner_request")
+        
+        # Store research results in project
+        self.project.current_phase = Phase.RESEARCH_DISCOVERY
+        
+        return {
+            "phase": Phase.RESEARCH_DISCOVERY.value,
+            "artifacts": {
+                "research_findings": research_results.get("findings"),
+                "recommendation": recommendation,
+                "opportunities": research_results.get("opportunities", [])
+            },
+            "pdf_report": research_results.get("pdf_report"),  # bytes for download
+            "summary": ceo_review,
+            "chat_log": [m.to_dict() for m in self.bus.get_messages(Phase.RESEARCH_DISCOVERY)]
+        }
+    
+    def apply_research_recommendation(self, recommendation: Dict[str, Any]) -> None:
+        """Apply the Research Team's recommendation to the project.
+        
+        Called after Owner approves the research recommendation.
+        """
+        if not self.project:
+            raise ValueError("No project to update")
+        
+        recommended_product = recommendation.get("recommended_product", {})
+        
+        # Update project with research recommendation
+        self.project.product_idea = recommended_product.get("product_concept", "")
+        try:
+            self.project.primary_need = PrimaryNeed(recommended_product.get("primary_need", "").lower())
+        except ValueError:
+            self.project.primary_need = None
+        
+        # Move to Phase 1
+        self.project.current_phase = Phase.STRATEGY_IDEA_INTAKE
+        
+        self.bus.send("CEO_Agent", "CPO_Agent", Phase.STRATEGY_IDEA_INTAKE,
+                     f"[CEO_Agent] Owner approved research recommendation. Proceeding with: {self.project.product_idea[:100]}...", "internal")
     
     async def execute_phase_1(self) -> Dict[str, Any]:
         """Execute Phase 1: Strategy & Idea Intake (with explicit checklist)."""

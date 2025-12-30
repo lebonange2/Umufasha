@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from sqlalchemy import (
     Column, Integer, String, DateTime, Boolean, Text, 
-    ForeignKey, JSON, Index, UniqueConstraint
+    ForeignKey, JSON, Index, UniqueConstraint, LargeBinary
 )
 from sqlalchemy.orm import relationship
 import uuid
@@ -336,12 +336,17 @@ class CoreDevicesProject(Base):
     __tablename__ = "core_devices_projects"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    product_idea = Column(Text, nullable=False)
+    product_idea = Column(Text, nullable=True)  # Now optional - Research Team can discover
     primary_need = Column(String(50), nullable=True)
+    research_mode = Column(Boolean, default=False)  # If True, project starts with Research Phase
+    research_scope = Column(Text, nullable=True)  # Research scope/focus areas
     constraints = Column(JSON, nullable=True)
     output_directory = Column(String(255), default="product_outputs")
     model = Column(String(50), default="qwen3:30b")  # Worker agent model
     ceo_model = Column(String(50), nullable=True)  # CEO/manager model
+    
+    # Research Team outputs
+    pdf_report = Column(LargeBinary, nullable=True)  # PDF research report (binary)
     
     # Project state
     current_phase = Column(String(50), default="strategy_idea_intake")

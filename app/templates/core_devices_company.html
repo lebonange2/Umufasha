@@ -421,28 +421,54 @@
                 </div>
                 <div class="modal-body">
                     <form id="createProjectForm">
-                        <div class="mb-3">
-                            <label for="productIdea" class="form-label">Product Idea *</label>
-                            <textarea class="form-control" id="productIdea" rows="3" required 
-                                placeholder="Describe your product idea briefly..."></textarea>
-                            <div class="form-text">What electrical/electronic product do you want to create?</div>
+                        <!-- Research Mode Toggle -->
+                        <div class="mb-4 p-3" style="background: #f8f9fa; border-radius: 10px;">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="researchMode" onchange="toggleResearchMode()">
+                                <label class="form-check-label" for="researchMode">
+                                    <strong>🔬 Research Mode</strong> - Let our Research Team discover product opportunities for you
+                                </label>
+                            </div>
+                            <div class="form-text mt-2">
+                                Enable this if you don't have a specific product idea. Our Research Team will analyze markets, technologies, and user needs to recommend the best opportunity with a detailed PDF report.
+                            </div>
                         </div>
-                        
-                        <div class="mb-3">
-                            <label for="primaryNeed" class="form-label">Primary Human Need *</label>
-                            <select class="form-select" id="primaryNeed" required>
-                                <option value="">Select primary need...</option>
-                                <option value="energy">Energy</option>
-                                <option value="water">Water</option>
-                                <option value="food">Food</option>
-                                <option value="shelter">Shelter</option>
-                                <option value="health">Health</option>
-                                <option value="communication">Communication</option>
-                                <option value="safety">Safety</option>
-                                <option value="mobility">Mobility</option>
-                                <option value="essential_productivity">Essential Productivity</option>
-                            </select>
-                            <div class="form-text">Which primary need does this product address?</div>
+
+                        <!-- Manual Mode Fields -->
+                        <div id="manualFields">
+                            <div class="mb-3">
+                                <label for="productIdea" class="form-label">Product Idea</label>
+                                <textarea class="form-control" id="productIdea" rows="3" 
+                                    placeholder="Describe your product idea briefly..."></textarea>
+                                <div class="form-text">What electrical/electronic product do you want to create?</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="primaryNeed" class="form-label">Primary Human Need</label>
+                                <select class="form-select" id="primaryNeed">
+                                    <option value="">Select primary need...</option>
+                                    <option value="energy">Energy</option>
+                                    <option value="water">Water</option>
+                                    <option value="food">Food</option>
+                                    <option value="shelter">Shelter</option>
+                                    <option value="health">Health</option>
+                                    <option value="communication">Communication</option>
+                                    <option value="safety">Safety</option>
+                                    <option value="mobility">Mobility</option>
+                                    <option value="essential_productivity">Essential Productivity</option>
+                                </select>
+                                <div class="form-text">Which primary need does this product address?</div>
+                            </div>
+                        </div>
+
+                        <!-- Research Mode Fields -->
+                        <div id="researchFields" style="display: none;">
+                            <div class="mb-3">
+                                <label for="researchScope" class="form-label">Research Focus (Optional)</label>
+                                <input type="text" class="form-control" id="researchScope" 
+                                    placeholder="e.g., 'health devices', 'energy solutions', 'smart home'...">
+                                <div class="form-text">Optionally narrow research to specific areas. Leave blank for open exploration.</div>
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -477,6 +503,11 @@
         let phaseCheckInterval = null;
 
         const phaseInfo = {
+            'research_discovery': {
+                name: 'Research & Discovery',
+                icon: 'bi-search',
+                description: 'Research Team discovers product opportunities'
+            },
             'strategy_idea_intake': {
                 name: 'Strategy & Idea Intake',
                 icon: 'bi-clipboard-check',
@@ -554,14 +585,31 @@
             }
         }
 
+        function toggleResearchMode() {
+            const researchMode = document.getElementById('researchMode').checked;
+            const manualFields = document.getElementById('manualFields');
+            const researchFields = document.getElementById('researchFields');
+            
+            if (researchMode) {
+                manualFields.style.display = 'none';
+                researchFields.style.display = 'block';
+            } else {
+                manualFields.style.display = 'block';
+                researchFields.style.display = 'none';
+            }
+        }
+
         async function createProject() {
+            const researchMode = document.getElementById('researchMode').checked;
             const productIdea = document.getElementById('productIdea').value;
             const primaryNeed = document.getElementById('primaryNeed').value;
+            const researchScope = document.getElementById('researchScope').value;
             const constraints = document.getElementById('constraints').value;
             const model = document.getElementById('modelSelect').value;
 
-            if (!productIdea || !primaryNeed) {
-                alert('Please fill in required fields');
+            // Validation: if not research mode, require product idea
+            if (!researchMode && !productIdea) {
+                alert('Please provide a product idea or enable Research Mode');
                 return;
             }
 
@@ -570,8 +618,10 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        product_idea: productIdea,
-                        primary_need: primaryNeed,
+                        product_idea: productIdea || "",
+                        primary_need: primaryNeed || "",
+                        research_mode: researchMode,
+                        research_scope: researchScope || "",
                         constraints: constraints ? { description: constraints } : {},
                         model: model
                     })
@@ -586,6 +636,8 @@
                 
                 // Reset form
                 document.getElementById('createProjectForm').reset();
+                document.getElementById('researchMode').checked = false;
+                toggleResearchMode();
                 
                 // Load the new project
                 await loadProjects();
@@ -649,6 +701,7 @@
 
         function renderPhases(project) {
             const phases = [
+                'research_discovery',
                 'strategy_idea_intake',
                 'concept_differentiation',
                 'ux_system_design',
@@ -695,9 +748,20 @@
                                 </div>
                                 <div>
                                     ${index === currentPhaseIndex && project.status === 'in_progress' ? 
-                                        `<button class="btn btn-primary btn-sm" onclick="executePhase()">
-                                            <i class="bi bi-play-circle"></i> Execute
-                                        </button>` : ''}
+                                        phase === 'research_discovery' ?
+                                            `<button class="btn btn-primary btn-sm" onclick="executeResearchPhase()">
+                                                <i class="bi bi-search"></i> Start Research
+                                            </button>
+                                            ${artifacts ? `<button class="btn btn-success btn-sm mt-1" onclick="downloadResearchReport()">
+                                                <i class="bi bi-file-pdf"></i> Download Report
+                                            </button>
+                                            <button class="btn btn-success btn-sm mt-1" onclick="approveResearch(true)">
+                                                <i class="bi bi-check-circle"></i> Approve
+                                            </button>` : ''}` :
+                                            `<button class="btn btn-primary btn-sm" onclick="executePhase()">
+                                                <i class="bi bi-play-circle"></i> Execute
+                                            </button>`
+                                        : ''}
                                 </div>
                             </div>
                         </div>
@@ -895,6 +959,85 @@
                 "'": '&#039;'
             };
             return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        async function executeResearchPhase() {
+            if (!currentProjectId) return;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/execute-research`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) throw new Error('Failed to start research');
+                
+                alert('Research Team activated! They are analyzing markets, technologies, and user needs...');
+                
+                // Start checking status
+                startPhaseStatusCheck();
+            } catch (error) {
+                console.error('Failed to execute research:', error);
+                alert('Failed to start research: ' + error.message);
+            }
+        }
+
+        async function downloadResearchReport() {
+            if (!currentProjectId) return;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/research-report`);
+                
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        alert('Research report not found. Execute research phase first.');
+                    } else {
+                        throw new Error('Failed to download report');
+                    }
+                    return;
+                }
+                
+                // Download PDF
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `research_report_${currentProjectId.substring(0, 8)}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                alert('Research report downloaded!');
+            } catch (error) {
+                console.error('Failed to download research report:', error);
+                alert('Failed to download research report: ' + error.message);
+            }
+        }
+
+        async function approveResearch(approve) {
+            if (!currentProjectId) return;
+            
+            try {
+                const response = await fetch(`/api/core-devices/projects/${currentProjectId}/approve-research`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        approve: approve,
+                        provide_own_idea: false
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to submit decision');
+                
+                const data = await response.json();
+                alert(data.message);
+                
+                // Reload project
+                await loadProject(currentProjectId);
+            } catch (error) {
+                console.error('Failed to approve research:', error);
+                alert('Failed to submit decision: ' + error.message);
+            }
         }
     </script>
 </body>
