@@ -466,7 +466,114 @@ Output as JSON: {{
 
 
 class ResearchReportGenerator:
-    """Generates comprehensive PDF reports from research findings."""
+    """Generates comprehensive research reports."""
+    
+    @staticmethod
+    def generate_text_report(findings: ResearchFindings,
+                            market_data: Dict[str, Any],
+                            tech_data: Dict[str, Any],
+                            user_data: Dict[str, Any],
+                            recommendation: Dict[str, Any]) -> str:
+        """Generate a comprehensive text research report."""
+        from datetime import datetime
+        
+        lines = []
+        lines.append("=" * 80)
+        lines.append("PRODUCT RESEARCH & DISCOVERY REPORT")
+        lines.append("=" * 80)
+        lines.append(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        lines.append("")
+        
+        # Research Scope
+        if findings.research_scope:
+            lines.append("RESEARCH SCOPE")
+            lines.append("-" * 80)
+            lines.append(findings.research_scope)
+            lines.append("")
+        
+        # Market Analysis
+        lines.append("1. MARKET ANALYSIS")
+        lines.append("-" * 80)
+        lines.append("")
+        lines.append("Market Trends:")
+        for i, trend in enumerate(market_data.get('market_trends', []), 1):
+            lines.append(f"  {i}. {trend}")
+        lines.append("")
+        
+        lines.append("Emerging Needs:")
+        for i, need in enumerate(market_data.get('emerging_needs', []), 1):
+            lines.append(f"  {i}. {need}")
+        lines.append("")
+        
+        lines.append("Market Gaps:")
+        for i, gap in enumerate(market_data.get('market_gaps', []), 1):
+            lines.append(f"  {i}. {gap}")
+        lines.append("")
+        
+        # Product Opportunities
+        lines.append("2. PRODUCT OPPORTUNITIES IDENTIFIED")
+        lines.append("-" * 80)
+        for i, opp in enumerate(findings.product_opportunities or [], 1):
+            lines.append(f"\nOpportunity {i}:")
+            lines.append(f"  Product: {opp.get('product_concept', 'N/A')}")
+            lines.append(f"  Primary Need: {opp.get('primary_need', 'N/A')}")
+            lines.append(f"  Market Size: {opp.get('market_size', 'N/A')}")
+            lines.append(f"  Differentiation: {opp.get('differentiation', 'N/A')}")
+        lines.append("")
+        
+        # Technology Analysis
+        lines.append("3. TECHNOLOGY FEASIBILITY ANALYSIS")
+        lines.append("-" * 80)
+        for i, tech in enumerate(tech_data.get('technology_analysis', []), 1):
+            lines.append(f"\nAnalysis {i}:")
+            lines.append(f"  Product: {tech.get('product_concept', 'N/A')}")
+            lines.append(f"  Feasibility: {tech.get('feasibility', 'N/A')}")
+            lines.append(f"  Readiness: {tech.get('readiness', 'N/A')}")
+            lines.append(f"  Technologies: {', '.join(tech.get('enabling_technologies', []))}")
+        lines.append("")
+        
+        # User Research
+        lines.append("4. USER NEEDS ANALYSIS")
+        lines.append("-" * 80)
+        for i, user in enumerate(user_data.get('user_analysis', []), 1):
+            lines.append(f"\nUser Analysis {i}:")
+            lines.append(f"  Product: {user.get('product_concept', 'N/A')}")
+            lines.append(f"  Pain Points: {', '.join(user.get('pain_points', []))}")
+            lines.append(f"  User Preferences: {', '.join(user.get('user_preferences', []))}")
+        lines.append("")
+        
+        # Final Recommendation
+        lines.append("5. RECOMMENDED PRODUCT")
+        lines.append("-" * 80)
+        rec = recommendation.get('recommended_product', {})
+        if rec:
+            lines.append(f"\nProduct Concept:")
+            lines.append(f"  {rec.get('product_concept', 'N/A')}")
+            lines.append(f"\nPrimary Human Need:")
+            lines.append(f"  {rec.get('primary_need', 'N/A').title()}")
+            lines.append(f"\nJustification:")
+            for i, reason in enumerate(rec.get('justification', []), 1):
+                lines.append(f"  {i}. {reason}")
+            lines.append(f"\nExpected Impact:")
+            lines.append(f"  {rec.get('expected_impact', 'N/A')}")
+            lines.append(f"\nNext Steps:")
+            for i, step in enumerate(rec.get('next_steps', []), 1):
+                lines.append(f"  {i}. {step}")
+        lines.append("")
+        
+        # Alternative Opportunities
+        if recommendation.get('alternative_opportunities'):
+            lines.append("6. ALTERNATIVE OPPORTUNITIES")
+            lines.append("-" * 80)
+            for i, alt in enumerate(recommendation.get('alternative_opportunities', []), 1):
+                lines.append(f"  {i}. {alt.get('concept', 'N/A')} ({alt.get('primary_need', 'N/A')})")
+            lines.append("")
+        
+        lines.append("=" * 80)
+        lines.append("END OF REPORT")
+        lines.append("=" * 80)
+        
+        return "\n".join(lines)
     
     @staticmethod
     def generate_pdf_report(findings: ResearchFindings, 
@@ -724,7 +831,7 @@ class ResearchTeam:
         # Step 4: Synthesize and recommend
         recommendation = await self.research_lead.synthesize_research(market_data, tech_data, user_data)
         
-        # Step 5: Generate PDF report
+        # Step 5: Generate text report (simplified from PDF)
         findings = ResearchFindings(
             market_trends=market_data.get('market_trends', []),
             emerging_needs=market_data.get('emerging_needs', []),
@@ -735,12 +842,12 @@ class ResearchTeam:
             constraints=constraints
         )
         
-        pdf_report = ResearchReportGenerator.generate_pdf_report(
+        text_report = ResearchReportGenerator.generate_text_report(
             findings, market_data, tech_data, user_data, recommendation
         )
         
         self.bus.send("Research_Team", "CEO_Agent", Phase.RESEARCH_DISCOVERY,
-                     "[Research_Team] ✓ Research complete. PDF report generated.", "internal")
+                     "[Research_Team] ✓ Research complete. Text report generated.", "internal")
         
         return {
             "findings": findings,
@@ -748,6 +855,6 @@ class ResearchTeam:
             "tech_data": tech_data,
             "user_data": user_data,
             "recommendation": recommendation,
-            "pdf_report": pdf_report,  # bytes
+            "text_report": text_report,  # string
             "opportunities": opportunities
         }

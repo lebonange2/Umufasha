@@ -1068,7 +1068,7 @@ A comprehensive PDF report documenting the full research process is available fo
                 "recommendation": recommendation,
                 "opportunities": research_results.get("opportunities", [])
             },
-            "pdf_report": research_results.get("pdf_report"),  # bytes for download
+            "text_report": research_results.get("text_report"),  # text string for download
             "summary": ceo_review,
             "chat_log": [m.to_dict() for m in self.bus.get_messages(Phase.RESEARCH_DISCOVERY)]
         }

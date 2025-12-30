@@ -803,9 +803,9 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                     except asyncio.CancelledError:
                         pass
                 
-                # Store PDF report
-                if "pdf_report" in result:
-                    project_data["pdf_report"] = result["pdf_report"]
+                # Store text report
+                if "text_report" in result:
+                    project_data["text_report"] = result["text_report"]
                 
                 # Update project data with final results
                 project_data["artifacts"]["research_discovery"] = result.get("artifacts", {})
@@ -852,7 +852,7 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
 
 @router.get("/api/core-devices/projects/{project_id}/research-report")
 async def download_research_report(project_id: str, db: AsyncSession = Depends(get_db)):
-    """Download the PDF research report."""
+    """Download the text research report."""
     from fastapi.responses import Response
     
     try:
@@ -867,24 +867,24 @@ async def download_research_report(project_id: str, db: AsyncSession = Depends(g
         
         project_data = active_projects[project_id]
         
-        # Get PDF report from artifacts
-        pdf_report = project_data.get("pdf_report")
+        # Get text report
+        text_report = project_data.get("text_report")
         
-        if not pdf_report:
+        if not text_report:
             # Try to get from artifacts
             research_artifacts = project_data.get("artifacts", {}).get("research_discovery", {})
-            if "pdf_report" in research_artifacts:
-                pdf_report = research_artifacts["pdf_report"]
+            if "text_report" in research_artifacts:
+                text_report = research_artifacts["text_report"]
         
-        if not pdf_report:
+        if not text_report:
             raise HTTPException(status_code=404, detail="Research report not found. Execute research phase first.")
         
-        # Return PDF file
+        # Return text file
         return Response(
-            content=pdf_report,
-            media_type="application/pdf",
+            content=text_report.encode('utf-8'),
+            media_type="text/plain",
             headers={
-                "Content-Disposition": f"attachment; filename=research_report_{project_id[:8]}.pdf"
+                "Content-Disposition": f"attachment; filename=research_report_{project_id[:8]}.txt"
             }
         )
     
