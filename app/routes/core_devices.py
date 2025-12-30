@@ -428,25 +428,33 @@ async def _execute_phase_background(project_id: str, current_phase: Phase):
             
             await log_progress(project_id, f"Starting phase: {current_phase.value}", current_phase.value, db)
             
-            # Get initial chat log count to track new messages
-            initial_chat_count = len(project_data["chat_log"])
+            # Track which messages have been saved using message bus index
+            last_saved_message_index = company.bus.get_total_message_count() if company and company.bus else 0
             
             # Create a callback to save messages in real-time
             async def save_new_messages():
                 """Periodically check and save new messages from message bus."""
+                nonlocal last_saved_message_index
+                
                 if company and company.bus:
-                    new_messages = company.bus.get_messages_since(initial_chat_count)
-                    if new_messages:
-                        for msg in new_messages:
-                            project_data["chat_log"].append(msg.to_dict())
-                        # Create NEW db session for background save to avoid concurrency issues
-                        from app.deps import get_db
-                        async for bg_db in get_db():
-                            try:
-                                await save_project_to_db(project_id, project_data, bg_db)
-                            finally:
-                                await bg_db.close()
-                            break  # Only use first session
+                    current_total = company.bus.get_total_message_count()
+                    if current_total > last_saved_message_index:
+                        # Get only NEW messages since last save
+                        new_messages = company.bus.get_messages_since(last_saved_message_index)
+                        if new_messages:
+                            for msg in new_messages:
+                                project_data["chat_log"].append(msg.to_dict())
+                            
+                            # Update the index to prevent re-adding same messages
+                            last_saved_message_index = current_total
+                            
+                            # Create NEW db session for background save to avoid concurrency issues
+                            async for bg_db in get_db():
+                                try:
+                                    await save_project_to_db(project_id, project_data, bg_db)
+                                finally:
+                                    await bg_db.close()
+                                break  # Only use first session
             
             # Start a background task to periodically save messages
             import asyncio
@@ -486,12 +494,8 @@ async def _execute_phase_background(project_id: str, current_phase: Phase):
             
             # Update project data with final results
             project_data["artifacts"][current_phase.value] = result.get("artifacts", {})
-            # Add any remaining messages not yet saved
-            final_messages = result.get("chat_log", [])
-            existing_timestamps = {msg.get("timestamp") for msg in project_data["chat_log"]}
-            for msg in final_messages:
-                if msg.get("timestamp") not in existing_timestamps:
-                    project_data["chat_log"].append(msg)
+            # Note: message_saver background task already saved all messages in real-time
+            # No need to merge final_messages again (would cause duplicates)
             
             # Save to database
             await save_project_to_db(project_id, project_data, db)
@@ -768,6 +772,13 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
     Research Team discovers product opportunities and generates PDF report.
     """
     try:
+        # Check if research is already running for this project
+        status_key = f"{project_id}_research_discovery"
+        if status_key in phase_execution_status:
+            current_status = phase_execution_status[status_key].get("status")
+            if current_status == "running":
+                raise HTTPException(status_code=409, detail="Research phase is already running for this project")
+        
         # Check if project exists
         if project_id not in active_projects:
             # Try loading from database
@@ -789,25 +800,34 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                 status_key = f"{project_id}_research_discovery"
                 phase_execution_status[status_key] = {"status": "running", "phase": "research_discovery"}
                 
-                # Get initial chat log count to track new messages
-                initial_chat_count = len(project_data["chat_log"])
+                # Track which messages have been saved using message bus index
+                last_saved_message_index = company.bus.get_total_message_count() if company and company.bus else 0
                 
                 # Create a callback to save messages in real-time
                 async def save_new_messages():
                     """Periodically check and save new messages from message bus."""
+                    nonlocal last_saved_message_index
+                    
                     if company and company.bus:
-                        new_messages = company.bus.get_messages_since(initial_chat_count)
-                        if new_messages:
-                            for msg in new_messages:
-                                project_data["chat_log"].append(msg.to_dict())
-                            # Create NEW db session for background save to avoid concurrency issues
-                            from app.deps import get_db
-                            async for bg_db in get_db():
-                                try:
-                                    await save_project_to_db(project_id, project_data, bg_db)
-                                finally:
-                                    await bg_db.close()
-                                break  # Only use first session
+                        current_total = company.bus.get_total_message_count()
+                        if current_total > last_saved_message_index:
+                            # Get only NEW messages since last save
+                            new_messages = company.bus.get_messages_since(last_saved_message_index)
+                            if new_messages:
+                                for msg in new_messages:
+                                    project_data["chat_log"].append(msg.to_dict())
+                                
+                                # Update the index to prevent re-adding same messages
+                                last_saved_message_index = current_total
+                                
+                                # Create NEW db session for background save to avoid concurrency issues
+                                from app.deps import get_db
+                                async for bg_db in get_db():
+                                    try:
+                                        await save_project_to_db(project_id, project_data, bg_db)
+                                    finally:
+                                        await bg_db.close()
+                                    break  # Only use first session
                 
                 research_scope = project_data.get("research_scope", "")
                 
@@ -839,12 +859,8 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                 
                 # Update project data with final results
                 project_data["artifacts"]["research_discovery"] = result.get("artifacts", {})
-                # Add any remaining messages not yet saved
-                final_messages = result.get("chat_log", [])
-                existing_timestamps = {msg.get("timestamp") for msg in project_data["chat_log"]}
-                for msg in final_messages:
-                    if msg.get("timestamp") not in existing_timestamps:
-                        project_data["chat_log"].append(msg)
+                # Note: message_saver background task already saved all messages in real-time
+                # No need to merge final_messages again (would cause duplicates)
                 
                 project_data["current_phase"] = "research_discovery"
                 

@@ -861,10 +861,17 @@
             }
         }
 
+        let phaseExecuting = false;
+        
         async function executePhase() {
             if (!currentProjectId) return;
+            if (phaseExecuting) {
+                alert('Phase is already executing. Please wait...');
+                return;
+            }
             
             try {
+                phaseExecuting = true;
                 const response = await fetch(`/api/core-devices/projects/${currentProjectId}/execute-phase`, {
                     method: 'POST'
                 });
@@ -872,13 +879,20 @@
                 if (!response.ok) throw new Error('Failed to execute phase');
                 
                 const data = await response.json();
-                alert('Phase execution started! Agents are working...');
+                if (data.status === 'running') {
+                    alert('Phase is already running. Monitoring progress...');
+                } else {
+                    alert('Phase execution started! Agents are working...');
+                }
                 
                 // Start checking status
                 startPhaseStatusCheck();
             } catch (error) {
                 console.error('Failed to execute phase:', error);
                 alert('Failed to execute phase: ' + error.message);
+            } finally {
+                // Reset flag after a delay
+                setTimeout(() => { phaseExecuting = false; }, 2000);
             }
         }
 
@@ -1004,15 +1018,28 @@
             return text.replace(/[&<>"']/g, m => map[m]);
         }
 
+        let researchExecuting = false;
+        
         async function executeResearchPhase() {
             if (!currentProjectId) return;
+            if (researchExecuting) {
+                alert('Research is already running. Please wait...');
+                return;
+            }
             
             try {
+                researchExecuting = true;
                 const response = await fetch(`/api/core-devices/projects/${currentProjectId}/execute-research`, {
                     method: 'POST'
                 });
                 
-                if (!response.ok) throw new Error('Failed to start research');
+                if (!response.ok) {
+                    if (response.status === 409) {
+                        alert('Research is already running for this project.');
+                        return;
+                    }
+                    throw new Error('Failed to start research');
+                }
                 
                 alert('Research Team activated! They are analyzing markets, technologies, and user needs...');
                 
@@ -1021,6 +1048,9 @@
             } catch (error) {
                 console.error('Failed to execute research:', error);
                 alert('Failed to start research: ' + error.message);
+            } finally {
+                // Reset flag after a delay to prevent accidental re-clicks
+                setTimeout(() => { researchExecuting = false; }, 2000);
             }
         }
 
