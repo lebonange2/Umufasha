@@ -30,6 +30,18 @@ active_projects: Dict[str, Dict[str, Any]] = {}
 phase_execution_status: Dict[str, Dict[str, Any]] = {}
 
 
+def _convert_datetime_to_str(obj):
+    """Recursively convert datetime objects to ISO format strings."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {k: _convert_datetime_to_str(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_datetime_to_str(item) for item in obj]
+    else:
+        return obj
+
+
 async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: AsyncSession) -> None:
     """Save project state to database."""
     try:
@@ -81,10 +93,10 @@ async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: 
             db_project.ceo_model = project_data.get("ceo_model")
             db_project.current_phase = project_data.get("current_phase")
             db_project.status = project_data.get("status", "in_progress")
-            db_project.project_data = project_state
-            db_project.artifacts = project_data.get("artifacts", {})
-            db_project.owner_decisions = project_data.get("owner_decisions", {})
-            db_project.chat_log = project_data.get("chat_log", [])
+            db_project.project_data = _convert_datetime_to_str(project_state)
+            db_project.artifacts = _convert_datetime_to_str(project_data.get("artifacts", {}))
+            db_project.owner_decisions = _convert_datetime_to_str(project_data.get("owner_decisions", {}))
+            db_project.chat_log = _convert_datetime_to_str(project_data.get("chat_log", []))
             db_project.pdf_report = project_data.get("pdf_report")  # Store PDF bytes
             db_project.last_activity_at = datetime.utcnow()
             db_project.updated_at = datetime.utcnow()
@@ -102,10 +114,10 @@ async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: 
                 ceo_model=project_data.get("ceo_model"),
                 current_phase=project_data.get("current_phase", "strategy_idea_intake"),
                 status=project_data.get("status", "in_progress"),
-                project_data=project_state,
-                artifacts=project_data.get("artifacts", {}),
-                owner_decisions=project_data.get("owner_decisions", {}),
-                chat_log=project_data.get("chat_log", []),
+                project_data=_convert_datetime_to_str(project_state),
+                artifacts=_convert_datetime_to_str(project_data.get("artifacts", {})),
+                owner_decisions=_convert_datetime_to_str(project_data.get("owner_decisions", {})),
+                chat_log=_convert_datetime_to_str(project_data.get("chat_log", [])),
                 pdf_report=project_data.get("pdf_report"),
                 progress_log=[],
                 error_log=[],
@@ -774,7 +786,8 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
         # Execute research phase in background with live chat updates
         async def execute_research_bg():
             try:
-                phase_execution_status[project_id] = {"status": "running", "phase": "research_discovery"}
+                status_key = f"{project_id}_research_discovery"
+                phase_execution_status[status_key] = {"status": "running", "phase": "research_discovery"}
                 
                 # Get initial chat log count to track new messages
                 initial_chat_count = len(project_data["chat_log"])
@@ -803,7 +816,7 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                 
                 # Start a background task to periodically save messages
                 async def message_saver():
-                    while phase_execution_status.get(project_id, {}).get("status") == "running":
+                    while phase_execution_status.get(status_key, {}).get("status") == "running":
                         await save_new_messages()
                         await asyncio.sleep(2)  # Check every 2 seconds
                 
@@ -840,7 +853,7 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                 
                 logger.info(f"Research phase completed for project {project_id}, artifacts saved: {len(result.get('artifacts', {}))}")
                 
-                phase_execution_status[project_id] = {
+                phase_execution_status[status_key] = {
                     "status": "completed",
                     "phase": "research_discovery",
                     "artifacts": result.get("artifacts", {}),
@@ -848,7 +861,7 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                 }
                 
             except Exception as e:
-                phase_execution_status[project_id] = {
+                phase_execution_status[status_key] = {
                     "status": "failed",
                     "phase": "research_discovery",
                     "error": str(e)

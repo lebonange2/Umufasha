@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gemma2:2b"  # Default local model (small, fast, low memory)
     LLM_PROVIDER: str = "local"  # Always local (Ollama) - no API keys needed
     LLM_LOCAL_URL: str = "http://localhost:11434/v1"  # Ollama default URL
+    USE_MOCK_LLM: bool = False  # Set to True for testing with instant mock responses
     # Legacy fields (deprecated, not used - kept for backwards compatibility)
     OPENAI_API_KEY: Optional[str] = None  # Deprecated - not used
     ANTHROPIC_API_KEY: Optional[str] = None  # Deprecated - not used

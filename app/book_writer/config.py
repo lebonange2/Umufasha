@@ -13,5 +13,6 @@ def get_config() -> Dict:
         "provider": "local",
         "temperature": 0.7,
         "max_tokens": 4000,
+        "use_mock_llm": settings.USE_MOCK_LLM,  # For testing
     }
 

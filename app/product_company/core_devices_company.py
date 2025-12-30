@@ -1015,11 +1015,20 @@ class CoreDevicesCompany:
         """Initialize the company with all agents."""
         if llm_client is None:
             config = get_config()
-            llm_client = LLMClient(
-                base_url=config['base_url'],  # config is a dict, not an object
-                model=model,
-                provider=config.get('provider', 'local')
-            )
+            
+            # Use mock LLM for testing if enabled
+            use_mock = config.get('use_mock_llm', False)
+            print(f"🔧 CoreDevicesCompany init - use_mock_llm: {use_mock}, model: {model}")
+            
+            if use_mock:
+                from app.llm.mock_client import MockLLMClient
+                llm_client = MockLLMClient()
+            else:
+                llm_client = LLMClient(
+                    base_url=config['base_url'],  # config is a dict, not an object
+                    model=model,
+                    provider=config.get('provider', 'local')
+                )
         
         self.llm = llm_client
         self.bus = MessageBus()
@@ -1115,10 +1124,15 @@ A comprehensive PDF report documenting the full research process is available fo
         # Store research results in project
         self.project.current_phase = Phase.RESEARCH_DISCOVERY
         
+        # Convert ResearchFindings dataclass to dict for JSON serialization
+        from dataclasses import asdict
+        findings = research_results.get("findings")
+        findings_dict = asdict(findings) if findings else None
+        
         return {
             "phase": Phase.RESEARCH_DISCOVERY.value,
             "artifacts": {
-                "research_findings": research_results.get("findings"),
+                "research_findings": findings_dict,
                 "recommendation": recommendation,
                 "opportunities": research_results.get("opportunities", [])
             },
