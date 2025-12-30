@@ -240,6 +240,21 @@ async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+@app.head("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Serve favicon to prevent 404 errors."""
+    from fastapi.responses import FileResponse, Response
+    import os
+    
+    favicon_path = "app/static/favicon.ico"
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path)
+    else:
+        # Return 204 No Content instead of 404
+        return Response(status_code=204)
+
+
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint."""
