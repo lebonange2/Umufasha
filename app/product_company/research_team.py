@@ -86,11 +86,23 @@ Output as JSON: {{
     "opportunity_areas": ["area1", "area2", ...]
 }}"""
         
-        response = await self.llm.complete(
-            system="You are a Market Research Agent for electronic products.",
-            user=prompt
-        )
-        result = self._extract_json(response)
+        try:
+            self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
+                         "[Market_Research_Agent] 🤖 Calling LLM for market analysis (this may take 30-60 seconds)...", "internal")
+            
+            response = await self.llm.complete(
+                system="You are a Market Research Agent for electronic products.",
+                user=prompt
+            )
+            
+            self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
+                         "[Market_Research_Agent] ✅ LLM response received, parsing JSON...", "internal")
+            
+            result = self._extract_json(response)
+        except Exception as e:
+            self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
+                         f"[Market_Research_Agent] ❌ ERROR: {str(e)}", "internal")
+            raise
         
         self.bus.send(self.role, "Research_Lead_Agent", Phase.RESEARCH_DISCOVERY,
                      f"[Market_Research_Agent] ✓ Identified {len(result.get('market_trends', []))} market trends", "internal")
