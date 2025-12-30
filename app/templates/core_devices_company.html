@@ -791,13 +791,16 @@
                     if (msg.from_agent === 'OWNER') messageClass = 'chat-message owner';
                     if (msg.from_agent === 'CEO_Agent') messageClass = 'chat-message ceo';
                     
+                    // Format content with preserved line breaks
+                    const formattedContent = escapeHtml(msg.content).replace(/\n/g, '<br>');
+                    
                     return `
                         <div class="${messageClass}">
                             <div class="agent-name">
                                 <i class="bi bi-person-circle"></i>
                                 ${msg.from_agent} → ${msg.to_agent}
                             </div>
-                            <div class="message-content">${escapeHtml(msg.content)}</div>
+                            <div class="message-content" style="white-space: pre-wrap;">${formattedContent}</div>
                             <div class="timestamp">${new Date(msg.timestamp).toLocaleString()}</div>
                         </div>
                     `;
@@ -853,7 +856,7 @@
                 clearInterval(phaseCheckInterval);
             }
             
-            // Check status every 2 seconds
+            // Check status every 2 seconds AND reload chat log for real-time agent communications
             phaseCheckInterval = setInterval(async () => {
                 if (!currentProjectId) {
                     clearInterval(phaseCheckInterval);
@@ -861,6 +864,9 @@
                 }
                 
                 try {
+                    // Reload chat log to show real-time agent communications
+                    await loadChatLog();
+                    
                     const response = await fetch(`/api/core-devices/projects/${currentProjectId}/phase-status`);
                     const status = await response.json();
                     

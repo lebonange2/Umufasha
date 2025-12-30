@@ -177,6 +177,16 @@ class MessageBus:
         if agent:
             result = [m for m in result if m.from_agent == agent or m.to_agent == agent]
         return result
+    
+    def get_messages_since(self, index: int) -> List[AgentMessage]:
+        """Get all messages since the specified index."""
+        if index < 0:
+            index = 0
+        return self.messages[index:]
+    
+    def get_total_message_count(self) -> int:
+        """Get total number of messages in the bus."""
+        return len(self.messages)
 
 
 def extract_json(text: str) -> Optional[Dict[str, Any]]:

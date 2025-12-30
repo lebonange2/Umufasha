@@ -716,21 +716,62 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
         if not company:
             raise HTTPException(status_code=500, detail="Company instance not found")
         
-        # Execute research phase in background
+        # Execute research phase in background with live chat updates
         async def execute_research_bg():
             try:
                 phase_execution_status[project_id] = {"status": "running", "phase": "research_discovery"}
                 
+                # Get initial chat log count to track new messages
+                initial_chat_count = len(project_data["chat_log"])
+                
+                # Create a callback to save messages in real-time
+                async def save_new_messages():
+                    """Periodically check and save new messages from message bus."""
+                    if company and company.bus:
+                        new_messages = company.bus.get_messages_since(initial_chat_count)
+                        if new_messages:
+                            for msg in new_messages:
+                                project_data["chat_log"].append(msg.to_dict())
+                            # Save to DB immediately for real-time updates
+                            await save_project_to_db(project_id, project_data, db)
+                
                 research_scope = project_data.get("research_scope", "")
-                result = await company.execute_phase_0(research_scope=research_scope)
+                
+                # Execute research with periodic message saves
+                import asyncio
+                
+                # Start a background task to periodically save messages
+                async def message_saver():
+                    while phase_execution_status.get(project_id, {}).get("status") == "running":
+                        await save_new_messages()
+                        await asyncio.sleep(2)  # Check every 2 seconds
+                
+                saver_task = asyncio.create_task(message_saver())
+                
+                try:
+                    result = await company.execute_phase_0(research_scope=research_scope)
+                finally:
+                    # Ensure final messages are saved
+                    await save_new_messages()
+                    saver_task.cancel()
+                    try:
+                        await saver_task
+                    except asyncio.CancelledError:
+                        pass
                 
                 # Store PDF report
                 if "pdf_report" in result:
                     project_data["pdf_report"] = result["pdf_report"]
                 
-                # Update project data
+                # Update project data with final results
                 project_data["artifacts"]["research_discovery"] = result.get("artifacts", {})
-                project_data["chat_log"].extend(result.get("chat_log", []))
+                # Add any remaining messages not yet saved
+                final_messages = result.get("chat_log", [])
+                existing_timestamps = {msg.get("timestamp") for msg in project_data["chat_log"]}
+                for msg in final_messages:
+                    if msg.get("timestamp") not in existing_timestamps:
+                        project_data["chat_log"].append(msg)
+                
                 project_data["current_phase"] = "research_discovery"
                 
                 await save_project_to_db(project_id, project_data, db)
