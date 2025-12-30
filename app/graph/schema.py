@@ -31,6 +31,12 @@ NODE_LABELS = [
     "Source",
     "Command",  # For undo/redo
     "Layout",   # For saved layouts
+    "Act",      # Story acts (beginning, middle, end)
+    "PlotEvent",  # Events within acts
+    "PlotPoint",  # Key plot points
+    "TurningPoint",  # Major turning points
+    "Climax",   # Story climax
+    "Resolution",  # Story resolution
 ]
 
 # Relationship types
@@ -67,6 +73,11 @@ RELATIONSHIP_TYPES = [
     "SUPPORTED_BY",
     "EXPRESSED_IN",
     "SAVED_LAYOUT",
+    "HAS_ACT",
+    "HAS_PLOT_POINT",
+    "HAS_TURNING_POINT",
+    "HAS_CLIMAX",
+    "HAS_RESOLUTION",
 ]
 
 # Allowed relationship combinations (source_label -> relationship_type -> target_label)
@@ -86,6 +97,14 @@ ALLOWED_RELATIONSHIPS = {
         "HAS_ISSUE": ["Issue"],
         "HAS_SOURCE": ["Source"],
         "HAS_COMMAND": ["Command"],
+        "HAS_ACT": ["Act"],
+        "HAS_PLOT_POINT": ["PlotPoint"],
+        "HAS_TURNING_POINT": ["TurningPoint"],
+        "HAS_CLIMAX": ["Climax"],
+        "HAS_RESOLUTION": ["Resolution"],
+    },
+    "Act": {
+        "HAS_EVENT": ["PlotEvent"],
     },
     "Chapter": {
         "HAS_SCENE": ["Scene"],
@@ -148,6 +167,12 @@ def create_constraints_and_indexes():
             "CREATE CONSTRAINT issue_id_unique IF NOT EXISTS FOR (i:Issue) REQUIRE i.id IS UNIQUE",
             "CREATE CONSTRAINT source_id_unique IF NOT EXISTS FOR (s:Source) REQUIRE s.id IS UNIQUE",
             "CREATE CONSTRAINT command_id_unique IF NOT EXISTS FOR (c:Command) REQUIRE c.id IS UNIQUE",
+            "CREATE CONSTRAINT act_id_unique IF NOT EXISTS FOR (a:Act) REQUIRE a.id IS UNIQUE",
+            "CREATE CONSTRAINT plotevent_id_unique IF NOT EXISTS FOR (pe:PlotEvent) REQUIRE pe.id IS UNIQUE",
+            "CREATE CONSTRAINT plotpoint_id_unique IF NOT EXISTS FOR (pp:PlotPoint) REQUIRE pp.id IS UNIQUE",
+            "CREATE CONSTRAINT turningpoint_id_unique IF NOT EXISTS FOR (tp:TurningPoint) REQUIRE tp.id IS UNIQUE",
+            "CREATE CONSTRAINT climax_id_unique IF NOT EXISTS FOR (c:Climax) REQUIRE c.id IS UNIQUE",
+            "CREATE CONSTRAINT resolution_id_unique IF NOT EXISTS FOR (r:Resolution) REQUIRE r.id IS UNIQUE",
         ]
         
         indexes = [

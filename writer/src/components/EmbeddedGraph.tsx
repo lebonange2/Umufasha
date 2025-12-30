@@ -46,6 +46,12 @@ const NODE_COLORS: Record<string, number> = {
   Event: 0xe17055,
   Issue: 0xd63031,
   Source: 0x74b9ff,
+  Act: 0x9b59b6,          // Purple for acts
+  PlotEvent: 0xe74c3c,    // Red for plot events
+  PlotPoint: 0xf39c12,    // Orange for plot points
+  TurningPoint: 0xe67e22, // Dark orange for turning points
+  Climax: 0xc0392b,       // Dark red for climax
+  Resolution: 0x27ae60,   // Green for resolution
 };
 
 export default function EmbeddedGraph({ 
@@ -139,13 +145,28 @@ export default function EmbeddedGraph({
         console.log('Updating graph with data');
         graphRef.current.graphData(graphData);
         
-        // Center the camera on the graph after a short delay to ensure nodes are positioned
+        // Center the camera on nodes without zooming after a short delay
         setTimeout(() => {
           if (graphRef.current && graphData.nodes.length > 0) {
-            // Zoom to fit all nodes in view
-            graphRef.current.zoomToFit(400); // 400ms transition
+            // Calculate center of all nodes
+            let sumX = 0, sumY = 0, sumZ = 0;
+            graphData.nodes.forEach((node: any) => {
+              sumX += node.x || 0;
+              sumY += node.y || 0;
+              sumZ += node.z || 0;
+            });
+            const centerX = sumX / graphData.nodes.length;
+            const centerY = sumY / graphData.nodes.length;
+            const centerZ = sumZ / graphData.nodes.length;
+            
+            // Position camera to look at center point without changing distance
+            graphRef.current.cameraPosition(
+              { x: centerX, y: centerY, z: centerZ + 300 }, // Position camera 300 units away on Z axis
+              { x: centerX, y: centerY, z: centerZ }, // Look at center
+              1000 // 1 second transition
+            );
           }
-        }, 500);
+        }, 1000);
       }
       
       setLoading(false);
