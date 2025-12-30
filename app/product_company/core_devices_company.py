@@ -281,7 +281,10 @@ Summarize:
 
 Be business-focused and concise. Use markdown formatting."""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         summary = f"[CEO_Agent] Phase Summary\n\n{response}"
         
         return summary
@@ -342,7 +345,10 @@ Product Idea: {project.product_idea}
 
 Provide a clear, professional restatement."""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         return response.strip()
     
     async def phase1_checklist_item_2(self, project: ProductProject, idea_restatement: str) -> Tuple[str, bool]:
@@ -369,7 +375,10 @@ If the product does NOT map to a primary need, state "AUXILIARY" and explain why
 
 Output as JSON: {{"primary_need": "need_name", "justification": "...", "is_auxiliary": false}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         result = extract_json(response)
         
         if result and result.get("is_auxiliary"):
@@ -392,7 +401,10 @@ Analyze:
 
 Output as JSON: {{"category": "new_category" or "derivative", "reasoning": "..."}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         result = extract_json(response)
         
         return result.get("category", "new_category") if result else "new_category"
@@ -414,7 +426,10 @@ Include:
 
 Output as JSON: {{"working_title": "...", "current_context": "...", "friction_hypothesis": "..."}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         result = extract_json(response)
         
         return result or {
@@ -552,7 +567,10 @@ For each concept:
 
 Output as JSON: {{"concepts": [{{"name": "...", "approach": "...", "friction_reduction": "..."}}, ...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         concepts = extract_json(response) or {"concepts": []}
         
         self.bus.send(self.role, "CEO_Agent", Phase.CONCEPT_DIFFERENTIATION,
@@ -589,7 +607,10 @@ For each scenario:
 
 Output as JSON: {{"usage_concepts": [{{"scenario": "...", "friction_reduction": "...", "form_interaction": "..."}}, ...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         usage = extract_json(response) or {"usage_concepts": []}
         
         self.bus.send(self.role, "CPO_Agent", Phase.CONCEPT_DIFFERENTIATION,
@@ -621,7 +642,10 @@ For each journey:
 
 Output as JSON: {{"journeys": {{"unboxing": [{{"step": "...", "friction": "..."}}], "first_use": [...], ...}}}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         journeys = extract_json(response) or {"journeys": {}}
         
         return journeys
@@ -642,7 +666,10 @@ Define:
 
 Output as JSON: {{"inputs": [...], "outputs": [...], "states": [...], "transitions": [...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         blueprint = extract_json(response) or {"inputs": [], "outputs": [], "states": [], "transitions": []}
         
         return blueprint
@@ -664,7 +691,10 @@ Define:
 
 Output as JSON: {{"max_setup_steps": X, "max_task_steps": Y, "max_ui_options": Z, "usability_goals": [...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         budget = extract_json(response) or {"max_setup_steps": 5, "max_task_steps": 3, "max_ui_options": 5, "usability_goals": []}
         
         return budget
@@ -712,7 +742,10 @@ Specify:
 
 Output as JSON: {{"industrial_design": {{...}}, "prototype_approach": {{...}}, "test_metrics": {{...}}}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         design = extract_json(response) or {"industrial_design": {}, "prototype_approach": {}, "test_metrics": {}}
         
         return design
@@ -734,7 +767,10 @@ Design:
 
 Output as JSON: {{"quick_start": {{...}}, "labeling": {{...}}, "support_paths": {{...}}}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         onboarding = extract_json(response) or {"quick_start": {}, "labeling": {}, "support_paths": {}}
         
         return onboarding
@@ -773,7 +809,10 @@ Ensure architecture supports UX flows and minimizes friction.
 
 Output as JSON: {{"power": "...", "sensors_actuators": [...], "processing": "...", "connectivity": "...", "block_diagram": "...", "ux_constraints": [...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         architecture = extract_json(response) or {
             "power": "Battery-powered",
             "sensors_actuators": [],
@@ -807,7 +846,10 @@ Describe:
 
 Output as JSON: {{"schematic": {{...}}, "pcb_layout": {{...}}, "firmware": {{...}}, "risks": [...], "prototype_objectives": [...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         engineering = extract_json(response) or {
             "schematic": {},
             "pcb_layout": {},
@@ -835,7 +877,10 @@ Specify:
 
 Output as JSON: {{"safety_requirements": [...], "environmental_limits": {{...}}, "failure_modes": [...], "standards": [...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         validation = extract_json(response) or {
             "safety_requirements": [],
             "environmental_limits": {},
@@ -875,7 +920,10 @@ Create:
 
 Output as JSON: {{"dfm_strategy": {{...}}, "tolerances": {{...}}, "serviceability": {{...}}, "pilot_plan": {{...}}}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         manufacturing = extract_json(response) or {
             "dfm_strategy": {},
             "tolerances": {},
@@ -914,7 +962,10 @@ Analyze:
 
 Output as JSON: {{"market_context": "...", "pain_points": [...], "opportunities": [...]}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         analysis = extract_json(response) or {"market_context": {}, "pain_points": [], "opportunities": []}
         
         return analysis
@@ -939,7 +990,10 @@ Create:
 
 Output as JSON: {{"product_name": "...", "need_statement": "...", "benefit_statement": "...", "key_benefits": [...], "launch_messaging": {{...}}}}"""
         
-        response = await self.llm.generate(prompt)
+        response = await self.llm.complete(
+            system=f"You are a {self.role} in a product development company.",
+            user=prompt
+        )
         positioning = extract_json(response) or {
             "product_name": project.idea_dossier.get('working_title'),
             "need_statement": "",
