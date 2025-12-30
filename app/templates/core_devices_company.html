@@ -733,6 +733,17 @@
                 
                 const artifacts = project.artifacts?.[phase];
                 
+                // Debug logging for research phase
+                if (phase === 'research_discovery' && index === currentPhaseIndex) {
+                    console.log('🔬 Research Discovery Phase Status:');
+                    console.log('  - Current Phase Index:', currentPhaseIndex);
+                    console.log('  - Has Artifacts:', !!artifacts);
+                    console.log('  - Project Status:', project.status);
+                    if (artifacts) {
+                        console.log('  - Artifact Keys:', Object.keys(artifacts));
+                    }
+                }
+                
                 return `
                     <div class="${cardClass} card mb-2">
                         <div class="card-body">
@@ -878,11 +889,16 @@
                     
                     if (status.status === 'completed') {
                         // Phase completed, reload project
+                        console.log('✅ Phase completed:', status.phase);
+                        console.log('📦 Artifacts:', status.artifacts);
                         await loadProject(currentProjectId);
                         clearInterval(phaseCheckInterval);
+                        console.log('🔄 Project reloaded after completion');
                     } else if (status.status === 'failed') {
                         alert('Phase execution failed: ' + status.error);
                         clearInterval(phaseCheckInterval);
+                    } else if (status.status === 'running') {
+                        console.log('⏳ Phase still running:', status.phase);
                     }
                 } catch (error) {
                     console.error('Failed to check phase status:', error);

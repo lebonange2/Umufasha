@@ -818,12 +818,16 @@ async def execute_research_phase(project_id: str, db: AsyncSession = Depends(get
                 
                 project_data["current_phase"] = "research_discovery"
                 
+                # Final save with all data
                 await save_project_to_db(project_id, project_data, db)
+                
+                logger.info(f"Research phase completed for project {project_id}, artifacts saved: {len(result.get('artifacts', {}))}")
                 
                 phase_execution_status[project_id] = {
                     "status": "completed",
                     "phase": "research_discovery",
-                    "artifacts": result.get("artifacts", {})
+                    "artifacts": result.get("artifacts", {}),
+                    "completed_at": datetime.utcnow().isoformat()
                 }
                 
             except Exception as e:
