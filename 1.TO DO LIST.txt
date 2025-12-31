@@ -1,7 +1,10 @@
 1. /core-devices page:
 ---------------------
-Research & Discovery Phase: Generates product ideas from brainstorming
+✅ Research & Discovery Phase: COMPLETE
    - Brainstorms 5+ industries
    - Generates 4+ product ideas with primary needs
    - Synthesizes final product concept + primary need
+   - Works locally (./start.sh)
+   - Works on RunPod (./start_runpod.sh)
    - All tests passing!
+   - Quick start guide: RUNPOD_QUICK_START.md
