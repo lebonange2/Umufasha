@@ -26,10 +26,10 @@ from app.llm.client import LLMClient
 class ResearchFindings:
     """Complete research findings for product opportunity."""
     
-    # Market Analysis
-    market_trends: List[str] = field(default_factory=list)
+    # Brainstorming & Market Analysis
+    industries: List[str] = field(default_factory=list)
+    product_ideas: List[Dict[str, Any]] = field(default_factory=list)
     emerging_needs: List[str] = field(default_factory=list)
-    market_gaps: List[str] = field(default_factory=list)
     
     # Technology Analysis
     enabling_technologies: List[Dict[str, Any]] = field(default_factory=list)
@@ -59,31 +59,42 @@ class MarketResearchAgent:
         self.bus = message_bus
     
     async def research_market_trends(self, scope: str, constraints: Dict[str, Any]) -> Dict[str, Any]:
-        """Research current market trends in electronics/devices."""
+        """Brainstorm industries and product ideas aligned with primary human needs."""
         from app.product_company.core_devices_company import Phase
         
         self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
-                     "[Market_Research_Agent] ✓ Checklist 1/4: Analyzing market trends", "internal")
+                     "[Market_Research_Agent] ✓ Checklist 1/4: Brainstorming industries & product ideas", "internal")
         
-        prompt = f"""You are a Market Research Agent analyzing opportunities for electronic products.
+        prompt = f"""You are a Market Research Agent brainstorming product opportunities.
 
-Research Scope: {scope if scope else "Open exploration of electronic product opportunities"}
+Research Scope: {scope if scope else "Open exploration - brainstorm product ideas"}
 Constraints: {json.dumps(constraints, indent=2)}
 
-Conduct market analysis:
-1. Identify 5-7 current market trends in consumer electronics/devices
-2. Analyze which primary human needs are underserved
-3. Identify market gaps where current solutions have high friction
-4. List emerging market opportunities
+**PRIMARY HUMAN NEEDS** (choose from):
+- energy: Power, electricity, charging, batteries
+- water: Clean water, hydration, water management
+- food: Nutrition, cooking, food storage, agriculture
+- shelter: Housing, temperature control, home infrastructure
+- health: Medical care, fitness, wellness, hygiene
+- communication: Information sharing, connectivity, messaging
+- safety: Security, protection, emergency response
+- mobility: Transportation, movement, logistics
+- essential_productivity: Tools, work efficiency, time management
 
-Focus on products that address primary human needs:
-- energy, water, food, shelter, health, communication, safety, mobility, essential productivity
+**TASK:**
+1. Brainstorm 5-7 industries that could innovate around these primary needs
+2. For each industry, suggest 2-3 specific product ideas
+3. Identify which primary need(s) each product addresses
+4. List emerging opportunities where current solutions are inadequate
 
 Output as JSON: {{
-    "market_trends": ["trend1", "trend2", ...],
-    "emerging_needs": ["need1", "need2", ...],
-    "market_gaps": ["gap1", "gap2", ...],
-    "opportunity_areas": ["area1", "area2", ...]
+    "industries": ["Industry 1", "Industry 2", ...],
+    "product_ideas": [
+        {{"idea": "Product Name", "industry": "Industry", "addresses_need": "primary_need", "description": "Brief description"}},
+        ...
+    ],
+    "emerging_needs": ["Unmet need 1", "Unmet need 2", ...],
+    "opportunity_areas": ["Opportunity 1", "Opportunity 2", ...]
 }}"""
         
         try:
@@ -105,10 +116,13 @@ Output as JSON: {{
                              f"[Market_Research_Agent] ⚠️ Could not parse JSON, using fallback data", "internal")
                 # Return minimal fallback data
                 result = {
-                    "market_trends": ["IoT devices", "AI-powered electronics", "Sustainable tech"],
-                    "emerging_needs": ["Health monitoring", "Energy efficiency"],
-                    "market_gaps": ["User-friendly devices", "Affordable solutions"],
-                    "opportunity_areas": ["Consumer electronics", "Smart home"]
+                    "industries": ["Consumer Electronics", "Smart Home", "Health Tech", "Energy Management"],
+                    "product_ideas": [
+                        {"idea": "Smart Universal Charger", "industry": "Consumer Electronics", "addresses_need": "energy", "description": "AI-powered charging with battery optimization"},
+                        {"idea": "Home Energy Monitor", "industry": "Smart Home", "addresses_need": "energy", "description": "Real-time energy usage tracking and optimization"}
+                    ],
+                    "emerging_needs": ["Better battery life", "Energy efficiency", "Device interoperability"],
+                    "opportunity_areas": ["Smart charging solutions", "Battery health optimization"]
                 }
             else:
                 self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
@@ -120,36 +134,38 @@ Output as JSON: {{
             raise
         
         self.bus.send(self.role, "Research_Lead_Agent", Phase.RESEARCH_DISCOVERY,
-                     f"[Market_Research_Agent] ✓ Identified {len(result.get('market_trends', []))} market trends", "internal")
+                     f"[Market_Research_Agent] ✓ Brainstormed {len(result.get('industries', []))} industries, {len(result.get('product_ideas', []))} product ideas", "internal")
         
-        return result or {"market_trends": [], "emerging_needs": [], "market_gaps": [], "opportunity_areas": []}
+        return result or {"industries": [], "product_ideas": [], "emerging_needs": [], "opportunity_areas": []}
     
     async def identify_product_opportunities(self, market_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Identify specific product opportunities from market analysis."""
+        """Synthesize brainstormed product ideas into specific opportunities."""
         from app.product_company.core_devices_company import Phase
         
         self.bus.send(self.role, "INTERNAL", Phase.RESEARCH_DISCOVERY,
-                     "[Market_Research_Agent] ✓ Checklist 2/4: Identifying product opportunities", "internal")
+                     "[Market_Research_Agent] ✓ Checklist 2/4: Synthesizing top opportunities", "internal")
         
-        prompt = f"""Based on market analysis, propose 3-5 specific product opportunities.
+        prompt = f"""Based on brainstormed product ideas, select and refine 3-5 top opportunities.
 
-Market Data: {json.dumps(market_data, indent=2)}
+Brainstormed Data: {json.dumps(market_data, indent=2)}
 
-For each opportunity:
-1. Product concept (brief description)
-2. Primary human need it addresses
+**TASK:**
+Evaluate all product_ideas and select the 3-5 most promising opportunities.
+For each selected opportunity, provide:
+1. Product concept (detailed description)
+2. Primary human need it addresses (must be one of: energy, water, food, shelter, health, communication, safety, mobility, essential_productivity)
 3. Market size estimate (small/medium/large)
-4. Friction points in current solutions
-5. Differentiation potential
+4. Current friction points that this solves
+5. Key differentiation from existing solutions
 
 Output as JSON: {{
     "opportunities": [
         {{
-            "product_concept": "...",
+            "product_concept": "Detailed product name and description",
             "primary_need": "energy|water|food|shelter|health|communication|safety|mobility|essential_productivity",
             "market_size": "small|medium|large",
-            "current_friction": "...",
-            "differentiation": "..."
+            "current_friction": "What problems does this solve?",
+            "differentiation": "Why is this better than existing solutions?"
         }},
         ...
     ]
@@ -169,33 +185,47 @@ Output as JSON: {{
         return opportunities
     
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
-        """Extract JSON from LLM response with timeout protection."""
+        """Extract JSON from LLM response with robust parsing."""
         import re
         
         # Limit text length to prevent hanging
         search_text = text[:10000] if len(text) > 10000 else text
         
-        # Strategy 1: Try direct parse
+        # Strategy 1: Try direct parse (strip whitespace first)
         try:
-            return json.loads(search_text)
+            return json.loads(search_text.strip())
         except:
             pass
         
-        # Strategy 2: Find JSON in markdown code blocks
+        # Strategy 2: Find JSON in markdown code blocks (```json ... ```)
         try:
-            json_block = re.search(r'```json\s*(\{.*?\})\s*```', search_text, re.DOTALL)
+            json_block = re.search(r'```json\s*({.*?})\s*```', search_text, re.DOTALL)
             if json_block:
                 return json.loads(json_block.group(1))
         except:
             pass
         
-        # Strategy 3: Find first { to last }
+        # Strategy 3: Find JSON in any code blocks (``` ... ```)
+        try:
+            code_block = re.search(r'```\s*({.*?})\s*```', search_text, re.DOTALL)
+            if code_block:
+                return json.loads(code_block.group(1))
+        except:
+            pass
+        
+        # Strategy 4: Find first { to last } and clean common issues
         try:
             first_brace = search_text.find('{')
             last_brace = search_text.rfind('}')
             if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
                 potential_json = search_text[first_brace:last_brace+1]
-                return json.loads(potential_json)
+                # Try parsing as-is first
+                try:
+                    return json.loads(potential_json)
+                except:
+                    # Clean trailing commas before closing braces/brackets
+                    cleaned = re.sub(r',(\s*[}\]])', r'\1', potential_json)
+                    return json.loads(cleaned)
         except:
             pass
         
@@ -476,43 +506,47 @@ Output as JSON: {{
                                            user_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate a fallback recommendation when LLM JSON parsing fails."""
         
-        # Extract the first product opportunity from opportunities data
-        market_trends = market_data.get('market_trends', [])
+        # Extract the first product opportunity from brainstormed data
+        product_ideas = market_data.get('product_ideas', [])
         emerging_needs = market_data.get('emerging_needs', [])
         opportunities = market_data.get('opportunity_areas', [])
         
         # Try to get the first technology analysis
         tech_analysis = tech_data.get('technology_analysis', [])
         first_tech = tech_analysis[0] if tech_analysis else {}
+        first_idea = product_ideas[0] if product_ideas else {}
         
         # Build a recommendation based on available data
-        product_concept = first_tech.get('product_concept', 
-                                        opportunities[0] if opportunities else 
-                                        market_trends[0] if market_trends else
-                                        "Smart Device Solution")
+        product_concept = first_tech.get('product_concept') or \
+                         first_idea.get('idea') or \
+                         (opportunities[0] if opportunities else "Smart Device Solution")
         
-        # Infer primary need from the concept
-        concept_lower = str(product_concept).lower()
-        if any(word in concept_lower for word in ['charg', 'battery', 'power', 'energy']):
-            primary_need = 'energy'
-        elif any(word in concept_lower for word in ['health', 'medical', 'wellness']):
-            primary_need = 'health'
-        elif any(word in concept_lower for word in ['communication', 'connect', 'network']):
-            primary_need = 'communication'
-        elif any(word in concept_lower for word in ['safety', 'security', 'protect']):
-            primary_need = 'safety'
-        elif any(word in concept_lower for word in ['mobility', 'transport', 'vehicle']):
-            primary_need = 'mobility'
-        else:
-            primary_need = 'essential_productivity'
+        # Determine primary need - prefer from first_idea if available
+        primary_need = first_idea.get('addresses_need')
+        
+        # If not available, infer from the concept
+        if not primary_need:
+            concept_lower = str(product_concept).lower()
+            if any(word in concept_lower for word in ['charg', 'battery', 'power', 'energy']):
+                primary_need = 'energy'
+            elif any(word in concept_lower for word in ['health', 'medical', 'wellness']):
+                primary_need = 'health'
+            elif any(word in concept_lower for word in ['communication', 'connect', 'network']):
+                primary_need = 'communication'
+            elif any(word in concept_lower for word in ['safety', 'security', 'protect']):
+                primary_need = 'safety'
+            elif any(word in concept_lower for word in ['mobility', 'transport', 'vehicle']):
+                primary_need = 'mobility'
+            else:
+                primary_need = 'essential_productivity'
         
         return {
             "recommended_product": {
                 "product_concept": product_concept,
                 "primary_need": primary_need,
                 "justification": [
-                    f"Addresses emerging market need: {emerging_needs[0] if emerging_needs else 'market gap'}",
-                    f"Aligned with market trend: {market_trends[0] if market_trends else 'current trends'}",
+                    f"Addresses emerging need: {emerging_needs[0] if emerging_needs else 'key market need'}",
+                    f"Selected from brainstormed product ideas",
                     "Technology is feasible and ready for implementation",
                     "Clear value proposition for users"
                 ],
@@ -553,23 +587,27 @@ class ResearchReportGenerator:
             lines.append(findings.research_scope)
             lines.append("")
         
-        # Market Analysis
-        lines.append("1. MARKET ANALYSIS")
+        # Brainstorming Results
+        lines.append("1. BRAINSTORMING: INDUSTRIES & PRODUCT IDEAS")
         lines.append("-" * 80)
         lines.append("")
-        lines.append("Market Trends:")
-        for i, trend in enumerate(market_data.get('market_trends', []), 1):
-            lines.append(f"  {i}. {trend}")
+        lines.append("Industries Explored:")
+        for i, industry in enumerate(market_data.get('industries', []), 1):
+            lines.append(f"  {i}. {industry}")
         lines.append("")
         
-        lines.append("Emerging Needs:")
+        lines.append("Product Ideas Generated:")
+        for i, idea in enumerate(market_data.get('product_ideas', []), 1):
+            lines.append(f"\n  Idea {i}:")
+            lines.append(f"    Product: {idea.get('idea', 'N/A')}")
+            lines.append(f"    Industry: {idea.get('industry', 'N/A')}")
+            lines.append(f"    Addresses Need: {idea.get('addresses_need', 'N/A')}")
+            lines.append(f"    Description: {idea.get('description', 'N/A')}")
+        lines.append("")
+        
+        lines.append("Emerging Needs Identified:")
         for i, need in enumerate(market_data.get('emerging_needs', []), 1):
             lines.append(f"  {i}. {need}")
-        lines.append("")
-        
-        lines.append("Market Gaps:")
-        for i, gap in enumerate(market_data.get('market_gaps', []), 1):
-            lines.append(f"  {i}. {gap}")
         lines.append("")
         
         # Product Opportunities
@@ -895,9 +933,9 @@ class ResearchTeam:
         
         # Step 5: Generate text report (simplified from PDF)
         findings = ResearchFindings(
-            market_trends=market_data.get('market_trends', []),
+            industries=market_data.get('industries', []),
+            product_ideas=market_data.get('product_ideas', []),
             emerging_needs=market_data.get('emerging_needs', []),
-            market_gaps=market_data.get('market_gaps', []),
             product_opportunities=opportunities,
             recommended_product=recommendation.get('recommended_product'),
             research_scope=scope,
