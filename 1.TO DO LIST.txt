@@ -1,0 +1,7 @@
+1. /core-devices page:
+---------------------
+Research & Discovery Phase: Generates product ideas from brainstorming
+   - Brainstorms 5+ industries
+   - Generates 4+ product ideas with primary needs
+   - Synthesizes final product concept + primary need
+   - All tests passing!
