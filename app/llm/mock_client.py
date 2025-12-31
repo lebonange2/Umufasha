@@ -28,29 +28,77 @@ class MockLLMClient:
         
         # Market Research Agent
         if "market research agent" in system_lower:
-            print(f"🧪 [MockLLMClient] → Detected MARKET RESEARCH")
-            return json.dumps({
-                "market_trends": [
-                    "Smart home devices with AI integration",
-                    "Sustainable and energy-efficient electronics",
-                    "Health monitoring wearables"
-                ],
-                "emerging_needs": [
-                    "Better battery life and charging solutions",
-                    "Device interoperability",
-                    "Privacy-focused smart devices"
-                ],
-                "market_gaps": [
-                    "Universal charging solutions for multiple device types",
-                    "Intelligent power management",
-                    "Battery health optimization"
-                ],
-                "opportunity_areas": [
-                    "Smart charging technology",
-                    "Battery longevity products",
-                    "Multi-device power management"
-                ]
-            })
+            # Check if it's brainstorming or synthesizing
+            if "brainstorm" in user.lower() or "industries" in user.lower():
+                print(f"🧪 [MockLLMClient] → Detected MARKET RESEARCH (Brainstorming)")
+                return json.dumps({
+                    "industries": [
+                        "Consumer Electronics",
+                        "Smart Home Technology",
+                        "Health & Wellness Tech",
+                        "Energy Management",
+                        "Personal Productivity Tools"
+                    ],
+                    "product_ideas": [
+                        {
+                            "idea": "AI-Powered Universal Smart Charger",
+                            "industry": "Consumer Electronics",
+                            "addresses_need": "energy",
+                            "description": "Intelligent charger that optimizes charging speed and battery longevity across all devices"
+                        },
+                        {
+                            "idea": "Home Energy Optimizer",
+                            "industry": "Smart Home Technology",
+                            "addresses_need": "energy",
+                            "description": "Real-time energy monitoring and AI-powered optimization for reduced electricity costs"
+                        },
+                        {
+                            "idea": "Battery Health Monitor",
+                            "industry": "Consumer Electronics",
+                            "addresses_need": "essential_productivity",
+                            "description": "Device that tracks battery health and provides actionable insights to extend battery life"
+                        },
+                        {
+                            "idea": "Wireless Power Hub",
+                            "industry": "Smart Home Technology",
+                            "addresses_need": "energy",
+                            "description": "Central wireless charging station for all household devices"
+                        }
+                    ],
+                    "emerging_needs": [
+                        "Better battery life and charging solutions",
+                        "Device interoperability",
+                        "Privacy-focused smart devices",
+                        "Energy efficiency in homes"
+                    ],
+                    "opportunity_areas": [
+                        "Smart charging technology",
+                        "Battery longevity products",
+                        "Multi-device power management",
+                        "Home energy optimization"
+                    ]
+                })
+            else:
+                # Synthesizing opportunities
+                print(f"🧪 [MockLLMClient] → Detected MARKET RESEARCH (Synthesizing)")
+                return json.dumps({
+                    "opportunities": [
+                        {
+                            "product_concept": "AI-Powered Universal Smart Charger",
+                            "primary_need": "energy",
+                            "market_size": "large",
+                            "current_friction": "Multiple chargers needed, battery degradation from improper charging",
+                            "differentiation": "AI optimization for speed and longevity, universal compatibility"
+                        },
+                        {
+                            "product_concept": "Home Energy Optimizer",
+                            "primary_need": "energy",
+                            "market_size": "medium",
+                            "current_friction": "High electricity bills, no visibility into energy usage patterns",
+                            "differentiation": "Real-time monitoring with AI-powered recommendations"
+                        }
+                    ]
+                })
         
         # Technology Research Agent
         elif "technology research agent" in system_lower:
