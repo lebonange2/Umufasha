@@ -69,6 +69,9 @@ export default function ExamGeneratorPage() {
         } else if (status.status === 'error') {
           setGenerating(false);
           setError(status.error || 'Generation failed');
+        } else if (status.status === 'generating') {
+          // Continue polling, update UI with progress
+          setTimeout(poll, 2000);
         } else {
           setTimeout(poll, 2000);
         }
@@ -513,9 +516,25 @@ export default function ExamGeneratorPage() {
 
           {generating && generationStatus && (
             <div className="mt-4 p-4 bg-blue-50 rounded-md">
-              <div className="text-sm font-medium">Generation Status</div>
-              <div className="text-sm text-gray-600">Phase: {generationStatus.phase}</div>
-              <div className="text-sm text-gray-600">Progress: {generationStatus.progress}%</div>
+              <div className="text-sm font-medium mb-2">Generation Status</div>
+              <div className="text-sm text-gray-700 mb-1">
+                <span className="font-semibold">Phase:</span> {PHASE_NAMES[generationStatus.phase] || generationStatus.phase}
+              </div>
+              <div className="text-sm text-gray-700 mb-2">
+                <span className="font-semibold">Progress:</span> {generationStatus.progress || 0}%
+              </div>
+              {generationStatus.message && (
+                <div className="text-sm text-gray-600 italic">{generationStatus.message}</div>
+              )}
+              {generationStatus.error && (
+                <div className="text-sm text-red-600 mt-2">Error: {generationStatus.error}</div>
+              )}
+              <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${generationStatus.progress || 0}%` }}
+                ></div>
+              </div>
             </div>
           )}
 

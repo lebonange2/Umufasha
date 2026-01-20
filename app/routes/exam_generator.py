@@ -272,20 +272,59 @@ async def generate_exam_background(project_id: str, db: AsyncSession):
         company = project_data["company"]
         project = project_data["project"]
         
-        # Update status
-        generation_status[project_id] = {
-            "status": "generating",
-            "phase": "content_analysis",
-            "progress": 0
-        }
+        # Initialize phase logs
+        if project_id not in phase_logs:
+            phase_logs[project_id] = []
         
-        # Generate exam
+        # Progress callback function
+        def update_progress(phase: str, progress: int, message: str = ""):
+            """Update generation status with progress."""
+            generation_status[project_id] = {
+                "status": "generating",
+                "phase": phase,
+                "progress": progress,
+                "message": message
+            }
+            
+            # Log phase activity
+            phase_logs[project_id].append({
+                "phase": phase,
+                "progress": progress,
+                "message": message,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            
+            logger.info(f"Progress update for {project_id}", phase=phase, progress=progress, message=message)
+        
+        # Update initial status
+        update_progress("content_analysis", 0, "Starting exam generation...")
+        
+        # Generate exam with progress callback
         problems, review = await company.generate_exam(
             project,
-            max_iterations=project_data["validation_iterations"]
+            max_iterations=project_data["validation_iterations"],
+            progress_callback=update_progress
         )
         
+        # Final progress update
+        update_progress("complete", 100, f"Generated {len(problems)} problems successfully")
+        
+        # Validate problems were generated
+        if not problems:
+            error_msg = "No problems were generated. Please check the input content and try again."
+            logger.error(error_msg)
+            generation_status[project_id] = {
+                "status": "error",
+                "phase": "error",
+                "progress": 0,
+                "error": error_msg
+            }
+            if project_id in active_projects:
+                active_projects[project_id]["status"] = "error"
+            return
+        
         # Save exam files
+        logger.info(f"Saving {len(problems)} problems to files")
         output_files = await company.save_exam_files(project, problems)
         
         # Update project data
@@ -294,6 +333,10 @@ async def generate_exam_background(project_id: str, db: AsyncSession):
         project_data["output_files"] = output_files
         project_data["status"] = "complete"
         project_data["current_phase"] = "complete"
+        
+        logger.info(f"Exam generation complete", 
+                   problems_count=len(problems),
+                   review_status=review.get("approval_status"))
         
         # Save to database
         db_project_data = {
@@ -316,7 +359,8 @@ async def generate_exam_background(project_id: str, db: AsyncSession):
         generation_status[project_id] = {
             "status": "complete",
             "phase": "complete",
-            "progress": 100
+            "progress": 100,
+            "message": f"Successfully generated {len(problems)} problems"
         }
         
     except Exception as e:
@@ -331,7 +375,8 @@ async def generate_exam_background(project_id: str, db: AsyncSession):
             "status": "error",
             "phase": "error",
             "progress": 0,
-            "error": error_msg
+            "error": error_msg,
+            "message": f"Error: {error_msg}"
         }
         if project_id in active_projects:
             active_projects[project_id]["status"] = "error"
@@ -521,13 +566,22 @@ async def get_generation_status(project_id: str):
     status = generation_status.get(project_id, {
         "status": "unknown",
         "phase": "unknown",
-        "progress": 0
+        "progress": 0,
+        "message": ""
     })
     
     if project_id in active_projects:
         project_data = active_projects[project_id]
-        status["current_phase"] = project_data.get("current_phase", "unknown")
-        status["status"] = project_data.get("status", "unknown")
+        status["current_phase"] = project_data.get("current_phase", status.get("phase", "unknown"))
+        status["status"] = project_data.get("status", status.get("status", "unknown"))
+    
+    # Ensure all fields are present
+    if "message" not in status:
+        status["message"] = ""
+    if "progress" not in status:
+        status["progress"] = 0
+    if "phase" not in status:
+        status["phase"] = status.get("current_phase", "unknown")
     
     return status
 

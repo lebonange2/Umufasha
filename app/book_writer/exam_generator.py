@@ -7,7 +7,7 @@ input text files. The system includes rigorous validation with AI agents taking
 the exam repeatedly to ensure correctness.
 """
 
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
@@ -206,6 +206,9 @@ class ProblemGeneratorAgent(BaseAgent):
     
     async def generate_problems(self, content: str, analysis: Dict[str, Any], num_problems: int) -> List[ExamProblem]:
         """Generate multiple choice problems based on content and analysis."""
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
         system_prompt = """You are a Problem Generator specializing in creating high-quality multiple choice exam questions.
 Your task is to generate questions that:
 1. Have exactly ONE correct answer
@@ -215,17 +218,24 @@ Your task is to generate questions that:
 5. Are clear and unambiguous
 6. Include appropriate difficulty levels
 
-CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect."""
+CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
+
+You MUST respond with valid JSON only. Do not include any text before or after the JSON."""
         
-        user_prompt = f"""Generate {num_problems} multiple choice questions based on the following content and analysis:
+        # Use more content (up to 5000 chars) for better context
+        content_preview = content[:5000] if len(content) > 5000 else content
+        if len(content) > 5000:
+            content_preview += "\n\n[Content truncated for brevity - use the key concepts shown above]"
+        
+        user_prompt = f"""Generate exactly {num_problems} multiple choice questions based on the following content and analysis.
 
 Content:
-{content[:2000]}...
+{content_preview}
 
 Analysis:
 {json.dumps(analysis, indent=2)}
 
-Generate questions in the following JSON format:
+You MUST respond with ONLY valid JSON in this exact format (no markdown, no code blocks, just pure JSON):
 {{
     "problems": [
         {{
@@ -240,44 +250,131 @@ Generate questions in the following JSON format:
             "correct_answer": "A",
             "explanation": "Explanation of why the correct answer is correct",
             "topic": "Topic name",
-            "difficulty": "easy|medium|hard"
+            "difficulty": "easy"
         }},
-        ...
+        {{
+            "problem_number": 2,
+            "question": "Another question?",
+            "choices": {{
+                "A": "Choice A",
+                "B": "Choice B",
+                "C": "Choice C",
+                "D": "Choice D"
+            }},
+            "correct_answer": "B",
+            "explanation": "Explanation",
+            "topic": "Topic",
+            "difficulty": "medium"
+        }}
     ]
 }}
 
-IMPORTANT: Ensure each question has exactly ONE correct answer. Verify that the correct_answer field matches one of the choices."""
+CRITICAL REQUIREMENTS:
+- Generate exactly {num_problems} problems
+- Each problem must have exactly 4 choices (A, B, C, D)
+- Each problem must have exactly ONE correct answer
+- The correct_answer must be one of: A, B, C, or D
+- Respond with ONLY the JSON object, no other text"""
         
-        response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
-        
-        # Extract problems from response
+        # Retry logic - try up to 3 times
+        max_retries = 3
         problems = []
-        try:
-            # Look for JSON in the response
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-                problem_list = data.get("problems", [])
-                
-                for i, p in enumerate(problem_list, 1):
-                    try:
-                        problem = ExamProblem(
-                            problem_number=p.get("problem_number", i),
-                            question=p.get("question", ""),
-                            choices=p.get("choices", {}),
-                            correct_answer=p.get("correct_answer", "A"),
-                            explanation=p.get("explanation", ""),
-                            topic=p.get("topic", ""),
-                            difficulty=p.get("difficulty", "medium")
-                        )
-                        # Validate problem
-                        if problem.correct_answer in problem.choices and len(problem.choices) == 4:
-                            problems.append(problem)
-                    except Exception as e:
-                        continue
-        except json.JSONDecodeError:
-            pass
         
+        for attempt in range(max_retries):
+            try:
+                response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
+                logger.info(f"Problem generation attempt {attempt + 1}", response_length=len(response))
+                
+                # Extract problems from response
+                # Try multiple JSON extraction methods
+                json_data = None
+                
+                # Method 1: Look for JSON object
+                json_match = re.search(r'\{[^{}]*"problems"[^{}]*\[.*?\].*?\}', response, re.DOTALL)
+                if json_match:
+                    try:
+                        json_data = json.loads(json_match.group())
+                    except:
+                        pass
+                
+                # Method 2: Look for any JSON object
+                if not json_data:
+                    json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                    if json_match:
+                        try:
+                            json_data = json.loads(json_match.group())
+                        except:
+                            pass
+                
+                # Method 3: Try parsing the entire response
+                if not json_data:
+                    try:
+                        json_data = json.loads(response.strip())
+                    except:
+                        pass
+                
+                if json_data:
+                    problem_list = json_data.get("problems", [])
+                    logger.info(f"Extracted {len(problem_list)} problems from JSON")
+                    
+                    for i, p in enumerate(problem_list, 1):
+                        try:
+                            # Validate required fields
+                            if not p.get("question") or not p.get("choices"):
+                                logger.warning(f"Problem {i} missing required fields, skipping")
+                                continue
+                            
+                            problem = ExamProblem(
+                                problem_number=p.get("problem_number", i),
+                                question=p.get("question", "").strip(),
+                                choices=p.get("choices", {}),
+                                correct_answer=p.get("correct_answer", "A").strip().upper(),
+                                explanation=p.get("explanation", "").strip(),
+                                topic=p.get("topic", "").strip(),
+                                difficulty=p.get("difficulty", "medium").strip().lower()
+                            )
+                            
+                            # Validate problem structure
+                            if not problem.question:
+                                logger.warning(f"Problem {i} has empty question, skipping")
+                                continue
+                            
+                            if len(problem.choices) != 4:
+                                logger.warning(f"Problem {i} has {len(problem.choices)} choices (expected 4), skipping")
+                                continue
+                            
+                            if problem.correct_answer not in problem.choices:
+                                logger.warning(f"Problem {i} has invalid correct_answer {problem.correct_answer}, skipping")
+                                continue
+                            
+                            problems.append(problem)
+                            logger.info(f"Added problem {problem.problem_number}: {problem.question[:50]}...")
+                        except Exception as e:
+                            logger.warning(f"Error creating problem {i}: {e}")
+                            continue
+                    
+                    # If we got enough problems, break
+                    if len(problems) >= num_problems:
+                        problems = problems[:num_problems]  # Trim to exact number
+                        break
+                    elif len(problems) > 0:
+                        # Got some problems but not enough - continue to next attempt
+                        logger.warning(f"Only generated {len(problems)}/{num_problems} problems, retrying...")
+                        problems = []  # Clear and retry
+                else:
+                    logger.warning(f"Could not extract JSON from response (attempt {attempt + 1})")
+                    logger.debug(f"Response preview: {response[:200]}...")
+            
+            except Exception as e:
+                logger.error(f"Error generating problems (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2)  # Wait before retry
+        
+        if not problems:
+            logger.error(f"Failed to generate any problems after {max_retries} attempts")
+            raise Exception(f"Failed to generate problems. The LLM did not return valid problem data after {max_retries} attempts.")
+        
+        logger.info(f"Successfully generated {len(problems)} problems")
         return problems
 
 
@@ -457,28 +554,48 @@ class ExamGeneratorCompany:
         
         self.project: Optional[ExamProject] = None
     
-    async def generate_exam(self, project: ExamProject, max_iterations: int = 3) -> Tuple[List[ExamProblem], Dict[str, Any]]:
+    async def generate_exam(self, project: ExamProject, max_iterations: int = 3, 
+                           progress_callback: Optional[Callable[[str, int, str], None]] = None) -> Tuple[List[ExamProblem], Dict[str, Any]]:
         """
         Generate an exam from input content.
         
         Args:
             project: Exam project with input content
             max_iterations: Maximum number of validation iterations
+            progress_callback: Optional callback function(phase, progress, message) for progress updates
             
         Returns:
             Tuple of (final_problems, final_review)
         """
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
         self.project = project
+        
+        def update_progress(phase: str, progress: int, message: str = ""):
+            """Update progress if callback is provided."""
+            if progress_callback:
+                try:
+                    progress_callback(phase, progress, message)
+                except:
+                    pass
         
         # Phase 1: Content Analysis
         project.current_phase = ExamPhase.CONTENT_ANALYSIS
         project.status = "in_progress"
+        update_progress("content_analysis", 10, "Analyzing content structure and topics...")
+        logger.info("Starting content analysis phase")
         
         analysis = await self.content_analyst.analyze_content(project.input_content)
         project.content_analysis = analysis
+        logger.info("Content analysis complete", topics_count=len(analysis.get("key_topics", [])))
+        update_progress("content_analysis", 25, f"Identified {len(analysis.get('key_topics', []))} key topics")
         
         # Phase 2: Problem Generation
         project.current_phase = ExamPhase.PROBLEM_GENERATION
+        update_progress("problem_generation", 30, f"Generating {project.num_problems} problems...")
+        logger.info("Starting problem generation phase", num_problems=project.num_problems)
+        
         problems = await self.problem_generator.generate_problems(
             project.input_content,
             analysis,
@@ -486,11 +603,25 @@ class ExamGeneratorCompany:
         )
         project.problems = problems
         
+        if not problems:
+            error_msg = "No problems were generated. Please check the input content and try again."
+            logger.error(error_msg)
+            project.status = "error"
+            raise Exception(error_msg)
+        
+        logger.info(f"Generated {len(problems)} problems successfully")
+        update_progress("problem_generation", 50, f"Generated {len(problems)} problems")
+        
         # Phase 3: Validation (iterative)
         project.current_phase = ExamPhase.VALIDATION
         all_validation_results = []
+        update_progress("validation", 55, "Starting validation phase...")
+        logger.info("Starting validation phase", iterations=max_iterations)
         
         for iteration in range(max_iterations):
+            update_progress("validation", 55 + (iteration * 10), f"Validation iteration {iteration + 1}/{max_iterations}...")
+            logger.info(f"Validation iteration {iteration + 1}/{max_iterations}")
+            
             validation_results = await self.validation_agent.validate_all_problems(
                 problems,
                 project.input_content
@@ -506,13 +637,22 @@ class ExamGeneratorCompany:
                 if v.get("validation_status") != "valid" or v.get("is_ambiguous", False)
             ]
             
+            valid_count = len(validation_results) - len(invalid_problems)
+            logger.info(f"Iteration {iteration + 1}: {valid_count}/{len(validation_results)} problems valid")
+            update_progress("validation", 60 + (iteration * 10), f"{valid_count}/{len(validation_results)} problems validated")
+            
             if not invalid_problems:
                 # All problems are valid, break early
+                logger.info("All problems validated successfully")
+                update_progress("validation", 85, "All problems validated successfully")
                 break
             
             # Regenerate invalid problems
             if iteration < max_iterations - 1:
                 invalid_indices = [v["problem_number"] - 1 for v in invalid_problems]
+                logger.info(f"Regenerating {len(invalid_indices)} invalid problems")
+                update_progress("validation", 70 + (iteration * 5), f"Regenerating {len(invalid_indices)} invalid problems...")
+                
                 for idx in invalid_indices:
                     if idx < len(problems):
                         # Regenerate this problem
@@ -524,15 +664,21 @@ class ExamGeneratorCompany:
                         if new_problems:
                             problems[idx] = new_problems[0]
                             problems[idx].problem_number = idx + 1
+                            logger.info(f"Regenerated problem {idx + 1}")
         
         project.validation_results = all_validation_results
         project.problems = problems
         
         # Phase 4: Final Review
         project.current_phase = ExamPhase.FINAL_REVIEW
+        update_progress("final_review", 90, "Performing final quality review...")
+        logger.info("Starting final review phase")
+        
         final_validation = all_validation_results[-1]["results"] if all_validation_results else []
         review = await self.review_agent.review_exam(problems, final_validation, project.input_content)
         project.final_review = review
+        logger.info("Final review complete", approval_status=review.get("approval_status"))
+        update_progress("final_review", 95, f"Review status: {review.get('approval_status', 'unknown')}")
         
         # If review recommends revision, do one more pass
         if review.get("approval_status") == "needs_revision" and max_iterations > 0:
@@ -643,15 +789,31 @@ class ExamGeneratorCompany:
     
     async def save_exam_files(self, project: ExamProject, problems: List[ExamProblem]) -> Dict[str, str]:
         """Save exam files to disk."""
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
+        if not problems:
+            error_msg = "Cannot save files: No problems were generated"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
         output_dir = Path(project.output_directory)
         output_dir.mkdir(parents=True, exist_ok=True)
         
         project_id = project.project_id
         
+        logger.info(f"Saving {len(problems)} problems to files", output_dir=str(output_dir))
+        
         # Generate file contents
         problems_text = self.format_problems_file(problems)
         solutions_text = self.format_solutions_file(problems)
         combined_text = self.format_combined_file(problems)
+        
+        # Validate file contents are not empty
+        if not problems_text.strip() or not solutions_text.strip() or not combined_text.strip():
+            error_msg = "Generated file contents are empty. This should not happen."
+            logger.error(error_msg, problems_count=len(problems))
+            raise Exception(error_msg)
         
         # Save files
         problems_path = output_dir / f"{project_id}_Problems.txt"
@@ -661,6 +823,11 @@ class ExamGeneratorCompany:
         problems_path.write_text(problems_text, encoding='utf-8')
         solutions_path.write_text(solutions_text, encoding='utf-8')
         combined_path.write_text(combined_text, encoding='utf-8')
+        
+        logger.info("Files saved successfully", 
+                   problems_file=str(problems_path),
+                   solutions_file=str(solutions_path),
+                   combined_file=str(combined_path))
         
         return {
             "problems": str(problems_path),
