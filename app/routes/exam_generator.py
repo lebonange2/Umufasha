@@ -320,15 +320,75 @@ async def generate_exam_background(project_id: str, db: AsyncSession):
         }
         
     except Exception as e:
-        logger.error(f"Error generating exam for project {project_id}", error=str(e), exc_info=True)
+        error_msg = str(e)
+        logger.error(f"Error generating exam for project {project_id}", error=error_msg, exc_info=True)
+        
+        # Check if it's a connection error
+        if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "failed" in error_msg.lower():
+            error_msg = f"Connection error: Could not connect to LLM service. Please ensure Ollama is running at http://localhost:11434"
+        
         generation_status[project_id] = {
             "status": "error",
             "phase": "error",
             "progress": 0,
-            "error": str(e)
+            "error": error_msg
         }
         if project_id in active_projects:
             active_projects[project_id]["status"] = "error"
+        
+        # Also save error to database
+        try:
+            db_project_data = {
+                "input_file_path": project_data.get("input_file_path", ""),
+                "input_content": project_data.get("input_content", ""),
+                "output_directory": project_data.get("output_directory", "exam_outputs"),
+                "model": project_data.get("model", "qwen3:30b"),
+                "current_phase": "error",
+                "status": "error",
+                "num_problems": project_data.get("num_problems", 10),
+                "validation_iterations": project_data.get("validation_iterations", 3),
+                "project_data": {"error": error_msg},
+                "problems": [],
+                "validation_results": [],
+                "final_review": None,
+                "output_files": {}
+            }
+            await save_project_to_db(project_id, db_project_data, db)
+        except Exception as db_error:
+            logger.error(f"Failed to save error to database: {db_error}")
+
+
+@router.get("/api/exam-generator/health")
+async def check_llm_health():
+    """Check if LLM service is available."""
+    try:
+        from app.llm.client import LLMClient
+        from app.book_writer.config import get_config
+        
+        agent_config = get_config()
+        test_client = LLMClient(
+            api_key=None,
+            base_url=agent_config.get("base_url", "http://localhost:11434/v1"),
+            model=agent_config.get("model", "qwen3:30b"),
+            provider=agent_config.get("provider", "local")
+        )
+        
+        # Try a simple test call
+        await test_client.complete(
+            system="You are a test assistant.",
+            user="Say 'OK' if you can hear me."
+        )
+        
+        return {"status": "ok", "message": "LLM service is available"}
+    except Exception as e:
+        error_msg = str(e)
+        if "connection" in error_msg.lower() or "refused" in error_msg.lower():
+            return {
+                "status": "error",
+                "message": "Cannot connect to LLM service. Please ensure Ollama is running at http://localhost:11434",
+                "error": error_msg
+            }
+        return {"status": "error", "message": f"LLM service error: {error_msg}", "error": error_msg}
 
 
 @router.post("/api/exam-generator/projects/{project_id}/generate")

@@ -236,7 +236,14 @@ export default function ExamGeneratorPage() {
       pollGenerationStatus();
     } catch (err: any) {
       console.error('Start generation error:', err);
-      setError(err.message || 'Failed to start generation');
+      let errorMessage = err.message || 'Failed to start generation';
+      
+      // Check for connection errors
+      if (errorMessage.includes('connection') || errorMessage.includes('failed') || errorMessage.includes('NetworkError')) {
+        errorMessage = 'Connection error: Could not connect to the server. Please ensure the backend server is running and accessible.';
+      }
+      
+      setError(errorMessage);
       setGenerating(false);
     }
   };
@@ -490,13 +497,18 @@ export default function ExamGeneratorPage() {
           </div>
 
           {project.status === 'in_progress' && (
-            <button
-              onClick={startGeneration}
-              disabled={generating}
-              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {generating ? 'Generating...' : 'Start Generation'}
-            </button>
+            <div>
+              <button
+                onClick={startGeneration}
+                disabled={generating}
+                className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generating ? 'Generating...' : 'Start Generation'}
+              </button>
+              <p className="mt-2 text-sm text-gray-600">
+                Note: Ensure Ollama is running at http://localhost:11434 with the selected model ({project.model}) installed.
+              </p>
+            </div>
           )}
 
           {generating && generationStatus && (
