@@ -7,6 +7,41 @@ set -e
 echo "=== Ollama Setup for RunPod GPU ==="
 echo ""
 
+# Install zstd dependency (required for Ollama installation)
+echo "Installing zstd (required for Ollama installation)..."
+if command -v apt-get &> /dev/null; then
+    if command -v sudo &> /dev/null; then
+        sudo apt-get update -qq > /dev/null 2>&1 && sudo apt-get install -y -qq zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via apt-get"
+    else
+        apt-get update -qq > /dev/null 2>&1 && apt-get install -y -qq zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via apt-get"
+    fi
+elif command -v yum &> /dev/null; then
+    if command -v sudo &> /dev/null; then
+        sudo yum install -y -q zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via yum"
+    else
+        yum install -y -q zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via yum"
+    fi
+elif command -v dnf &> /dev/null; then
+    if command -v sudo &> /dev/null; then
+        sudo dnf install -y -q zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via dnf"
+    else
+        dnf install -y -q zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via dnf"
+    fi
+elif command -v apk &> /dev/null; then
+    if command -v sudo &> /dev/null; then
+        sudo apk add --quiet zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via apk"
+    else
+        apk add --quiet zstd > /dev/null 2>&1 || echo "⚠️ Failed to install zstd via apk"
+    fi
+fi
+
+# Verify zstd is installed
+if command -v zstd &> /dev/null; then
+    echo "✓ zstd installed successfully"
+else
+    echo "⚠️ zstd installation may have failed, but continuing with Ollama installation attempt"
+fi
+
 # Check if Ollama is already installed
 if command -v ollama &> /dev/null; then
     echo "✓ Ollama is already installed"
