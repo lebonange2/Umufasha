@@ -1115,9 +1115,12 @@ LATEX EXAMPLES:
                 if attempt < max_retries - 1:
                     await asyncio.sleep(2)  # Wait before retry
         
-        if not problems:
-            logger.error(f"Failed to generate any problems after {max_retries} attempts")
-            raise Exception(f"Failed to generate problems. The LLM did not return valid problem data after {max_retries} attempts.")
+                if not problems:
+                    logger.error(f"Failed to generate any problems after {max_retries} attempts")
+                    raise Exception(f"Failed to generate problems. The LLM did not return valid problem data after {max_retries} attempts. This may be due to empty choices or explanations in the generated problems.")
+                
+                if len(problems) < num_problems:
+                    logger.warning(f"Only generated {len(problems)}/{num_problems} problems. Some problems may have been rejected due to empty choices or explanations.")
         
         logger.info(f"Successfully generated {len(problems)} problems")
         return problems
