@@ -153,31 +153,48 @@ Provide your analysis in JSON format with the following structure:
         response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
         
         # Try to extract JSON from response
+        analysis = None
+        
+        # Method 1: Try parsing the entire response
         try:
-            # Look for JSON in the response
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                analysis = json.loads(json_match.group())
-            else:
-                # Fallback: create basic structure
-                analysis = {
-                    "key_topics": [],
-                    "important_concepts": [],
-                    "factual_information": [],
-                    "concept_relationships": [],
-                    "difficulty_assessment": {
-                        "easy_topics": [],
-                        "medium_topics": [],
-                        "hard_topics": []
-                    },
-                    "recommended_question_count": {
-                        "easy": 3,
-                        "medium": 4,
-                        "hard": 3
-                    }
-                }
-        except json.JSONDecodeError:
-            # Fallback structure
+            analysis = json.loads(response.strip())
+        except:
+            pass
+        
+        # Method 2: Extract JSON with balanced braces
+        if not analysis:
+            start_idx = response.find('{')
+            if start_idx != -1:
+                brace_count = 0
+                end_idx = start_idx
+                for i in range(start_idx, len(response)):
+                    if response[i] == '{':
+                        brace_count += 1
+                    elif response[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+                
+                if brace_count == 0:
+                    try:
+                        json_str = response[start_idx:end_idx]
+                        analysis = json.loads(json_str)
+                    except:
+                        pass
+        
+        # Method 3: Try extracting from markdown code blocks
+        if not analysis:
+            code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if code_block_match:
+                try:
+                    analysis = json.loads(code_block_match.group(1))
+                except:
+                    pass
+        
+        # Fallback: create basic structure if JSON extraction failed
+        if not analysis:
+            logger.warning("Could not extract JSON from content analysis response, using fallback structure")
             analysis = {
                 "key_topics": [],
                 "important_concepts": [],
@@ -285,33 +302,118 @@ CRITICAL REQUIREMENTS:
                 response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
                 logger.info(f"Problem generation attempt {attempt + 1}", response_length=len(response))
                 
+                # Check if response is empty
+                if not response or len(response.strip()) == 0:
+                    logger.warning(f"Empty response from LLM (attempt {attempt + 1})")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2)  # Wait before retry
+                    continue
+                
                 # Extract problems from response
                 # Try multiple JSON extraction methods
                 json_data = None
                 
-                # Method 1: Look for JSON object
-                json_match = re.search(r'\{[^{}]*"problems"[^{}]*\[.*?\].*?\}', response, re.DOTALL)
-                if json_match:
-                    try:
-                        json_data = json.loads(json_match.group())
-                    except:
-                        pass
+                # Method 1: Try parsing the entire response (cleanest)
+                try:
+                    json_data = json.loads(response.strip())
+                    logger.info(f"Successfully parsed JSON using method 1 (full response)")
+                except Exception as e:
+                    logger.debug(f"Method 1 failed: {e}")
+                    pass
                 
-                # Method 2: Look for any JSON object
+                # Method 2: Look for JSON object with balanced braces (handles nested structures)
                 if not json_data:
-                    json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                    if json_match:
+                    # Find the first { and then find the matching closing }
+                    start_idx = response.find('{')
+                    if start_idx != -1:
+                        brace_count = 0
+                        end_idx = start_idx
+                        for i in range(start_idx, len(response)):
+                            if response[i] == '{':
+                                brace_count += 1
+                            elif response[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    end_idx = i + 1
+                                    break
+                        
+                        if brace_count == 0:
+                            try:
+                                json_str = response[start_idx:end_idx]
+                                json_data = json.loads(json_str)
+                                logger.info(f"Successfully parsed JSON using method 2 (balanced braces), length={len(json_str)}")
+                            except Exception as e:
+                                logger.debug(f"Method 2 failed: {e}, json_str preview: {json_str[:200] if len(json_str) > 200 else json_str}")
+                                pass
+                
+                # Method 3: Look for JSON in code blocks (markdown)
+                if not json_data:
+                    # Try to extract from markdown code blocks
+                    code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+                    if code_block_match:
                         try:
-                            json_data = json.loads(json_match.group())
-                        except:
+                            json_data = json.loads(code_block_match.group(1))
+                            logger.info(f"Successfully parsed JSON using method 3 (code block)")
+                        except Exception as e:
+                            logger.debug(f"Method 3 failed: {e}")
                             pass
                 
-                # Method 3: Try parsing the entire response
+                # Method 4: Look for JSON object with "problems" key (more permissive)
                 if not json_data:
-                    try:
-                        json_data = json.loads(response.strip())
-                    except:
-                        pass
+                    # Find JSON object containing "problems"
+                    json_match = re.search(r'\{[^{]*"problems"\s*:\s*\[', response, re.DOTALL)
+                    if json_match:
+                        start_idx = json_match.start()
+                        # Find matching closing brace
+                        brace_count = 0
+                        end_idx = start_idx
+                        for i in range(start_idx, len(response)):
+                            if response[i] == '{':
+                                brace_count += 1
+                            elif response[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    end_idx = i + 1
+                                    break
+                        
+                        if brace_count == 0:
+                            try:
+                                json_str = response[start_idx:end_idx]
+                                json_data = json.loads(json_str)
+                            except Exception as e:
+                                logger.debug(f"Failed to parse JSON from method 4: {e}")
+                                pass
+                
+                # Method 5: Try to extract just the problems array and wrap it
+                if not json_data:
+                    # Find the problems array directly
+                    array_match = re.search(r'"problems"\s*:\s*\[', response, re.DOTALL)
+                    if array_match:
+                        # Find the start of the array
+                        array_start = response.find('[', array_match.end())
+                        if array_start != -1:
+                            # Find matching closing bracket
+                            bracket_count = 0
+                            array_end = array_start
+                            for i in range(array_start, len(response)):
+                                if response[i] == '[':
+                                    bracket_count += 1
+                                elif response[i] == ']':
+                                    bracket_count -= 1
+                                    if bracket_count == 0:
+                                        array_end = i + 1
+                                        break
+                            
+                            if bracket_count == 0:
+                                try:
+                                    array_str = response[array_start:array_end]
+                                    problems_list = json.loads(array_str)
+                                    # Wrap in expected format
+                                    json_data = {"problems": problems_list}
+                                    logger.info("Successfully extracted problems array using method 5")
+                                except Exception as e:
+                                    logger.debug(f"Failed to parse problems array: {e}")
+                                    pass
                 
                 if json_data:
                     problem_list = json_data.get("problems", [])
@@ -363,7 +465,13 @@ CRITICAL REQUIREMENTS:
                         problems = []  # Clear and retry
                 else:
                     logger.warning(f"Could not extract JSON from response (attempt {attempt + 1})")
-                    logger.debug(f"Response preview: {response[:200]}...")
+                    # Log more of the response for debugging
+                    preview_length = min(1000, len(response))
+                    logger.debug(f"Response preview (first {preview_length} chars): {response[:preview_length]}")
+                    # Also try to find where JSON might start
+                    json_start = response.find('{')
+                    if json_start != -1:
+                        logger.debug(f"Found '{{' at position {json_start}, showing context: {response[max(0, json_start-50):min(len(response), json_start+500)]}")
             
             except Exception as e:
                 logger.error(f"Error generating problems (attempt {attempt + 1}): {e}")
@@ -445,12 +553,49 @@ Respond in JSON format:
             "validation_status": "unknown"
         }
         
+        # Try multiple JSON extraction methods
+        json_data = None
+        
+        # Method 1: Try parsing the entire response
         try:
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                validation.update(result)
-        except json.JSONDecodeError:
+            json_data = json.loads(response.strip())
+        except:
+            pass
+        
+        # Method 2: Extract JSON with balanced braces
+        if not json_data:
+            start_idx = response.find('{')
+            if start_idx != -1:
+                brace_count = 0
+                end_idx = start_idx
+                for i in range(start_idx, len(response)):
+                    if response[i] == '{':
+                        brace_count += 1
+                    elif response[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+                
+                if brace_count == 0:
+                    try:
+                        json_str = response[start_idx:end_idx]
+                        json_data = json.loads(json_str)
+                    except:
+                        pass
+        
+        # Method 3: Try extracting from markdown code blocks
+        if not json_data:
+            code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if code_block_match:
+                try:
+                    json_data = json.loads(code_block_match.group(1))
+                except:
+                    pass
+        
+        if json_data:
+            validation.update(json_data)
+        else:
             validation["issues"].append("Could not parse validation response")
         
         return validation
@@ -517,12 +662,49 @@ Provide a comprehensive review in JSON format:
             "approval_status": "unknown"
         }
         
+        # Try multiple JSON extraction methods
+        json_data = None
+        
+        # Method 1: Try parsing the entire response
         try:
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                review.update(result)
-        except json.JSONDecodeError:
+            json_data = json.loads(response.strip())
+        except:
+            pass
+        
+        # Method 2: Extract JSON with balanced braces
+        if not json_data:
+            start_idx = response.find('{')
+            if start_idx != -1:
+                brace_count = 0
+                end_idx = start_idx
+                for i in range(start_idx, len(response)):
+                    if response[i] == '{':
+                        brace_count += 1
+                    elif response[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+                
+                if brace_count == 0:
+                    try:
+                        json_str = response[start_idx:end_idx]
+                        json_data = json.loads(json_str)
+                    except:
+                        pass
+        
+        # Method 3: Try extracting from markdown code blocks
+        if not json_data:
+            code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if code_block_match:
+                try:
+                    json_data = json.loads(code_block_match.group(1))
+                except:
+                    pass
+        
+        if json_data:
+            review.update(json_data)
+        else:
             review["issues_found"].append("Could not parse review response")
         
         return review
