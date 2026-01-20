@@ -373,3 +373,39 @@ class CoreDevicesProject(Base):
         Index("idx_cdc_updated", "updated_at"),
         Index("idx_cdc_phase", "current_phase"),
     )
+
+
+class ExamGeneratorProject(Base):
+    """Exam Generator project model for persistence."""
+    __tablename__ = "exam_generator_projects"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    input_file_path = Column(String(255), nullable=True)
+    input_content = Column(Text, nullable=False)
+    output_directory = Column(String(255), default="exam_outputs")
+    model = Column(String(50), default="qwen3:30b")
+    
+    # Project state
+    current_phase = Column(String(50), default="content_analysis")
+    status = Column(String(50), default="in_progress")  # in_progress, generating, complete, error
+    num_problems = Column(Integer, default=10)
+    validation_iterations = Column(Integer, default=3)
+    
+    # Project data (stored as JSON for flexibility)
+    project_data = Column(JSON, nullable=True)
+    problems = Column(JSON, nullable=True)  # List of ExamProblem dicts
+    validation_results = Column(JSON, nullable=True)  # List of validation results
+    final_review = Column(JSON, nullable=True)  # Final review results
+    output_files = Column(JSON, nullable=True)  # Dict of output file paths
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_activity_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_eg_status", "status"),
+        Index("idx_eg_updated", "updated_at"),
+        Index("idx_eg_phase", "current_phase"),
+    )

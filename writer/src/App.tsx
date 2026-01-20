@@ -5,6 +5,7 @@ import BookWriterPage from './pages/book-writer';
 import BookPublishingHousePage from './pages/ferrari-company';
 import PDFToAudioPage from './pages/pdf-to-audio';
 import GraphEditorPage from './pages/graph-editor';
+import ExamGeneratorPage from './pages/exam-generator';
 
 function App() {
   // Determine base path based on current location
@@ -34,6 +35,7 @@ function App() {
         <Route path="ferrari-company" element={<BookPublishingHousePage />} />
         <Route path="pdf-to-audio" element={<PDFToAudioPage />} />
         <Route path="graph/:projectId" element={<GraphEditorPage />} />
+        <Route path="exam-generator" element={<ExamGeneratorPage />} />
       </Routes>
     </BrowserRouter>
   );

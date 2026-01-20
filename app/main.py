@@ -31,7 +31,8 @@ from app.routes import (
     core_devices,
     product_debate,
     mindmaps,
-    graph
+    graph,
+    exam_generator
 )
 from app.core.config import settings
 
@@ -138,6 +139,7 @@ app.include_router(writer.router, tags=["writer"])
 app.include_router(writer_documents.router, tags=["writer-documents"])
 app.include_router(book_writer.router, tags=["book-writer"])
 app.include_router(ferrari_company.router, tags=["ferrari-company"])
+app.include_router(exam_generator.router, tags=["exam-generator"])
 app.include_router(core_devices.router, tags=["core-devices"])
 app.include_router(product_debate.router, tags=["product-debate"])
 app.include_router(mindmaps.router, tags=["mindmaps"])
