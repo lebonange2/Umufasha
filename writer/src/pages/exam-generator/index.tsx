@@ -32,16 +32,44 @@ const PHASE_NAMES: Record<string, string> = {
 const renderLaTeX = (text: string): JSX.Element | string => {
   if (!text) return '';
   
-  // Split text by LaTeX delimiters: \( \) for inline, \[ \] for block
+  // Split text by LaTeX delimiters: $...$ or \( \) for inline, \[ \] for block
   const parts: (string | JSX.Element)[] = [];
   let key = 0;
-  
-  // Handle inline math \( ... \)
-  const inlinePattern = /\\?\(([^)]+)\\?\)/g;
-  let match;
   let currentIndex = 0;
   
-  while ((match = inlinePattern.exec(text)) !== null) {
+  // Handle both $...$ and \(...\) formats
+  // First handle $...$ (more common in LLM outputs)
+  const dollarPattern = /\$([^$]+)\$/g;
+  let match;
+  
+  while ((match = dollarPattern.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > currentIndex) {
+      parts.push(text.substring(currentIndex, match.index));
+    }
+    // Add LaTeX math
+    try {
+      parts.push(<InlineMath key={key++} math={match[1]} />);
+    } catch (e) {
+      // If LaTeX parsing fails, just show the original text
+      parts.push(match[0]);
+    }
+    currentIndex = match.index + match[0].length;
+  }
+  
+  // If we found $ delimiters, add remaining text and return
+  if (currentIndex > 0) {
+    if (currentIndex < text.length) {
+      parts.push(text.substring(currentIndex));
+    }
+    return <>{parts}</>;
+  }
+  
+  // If no $ delimiters found, try \(...\) format
+  const parenPattern = /\\?\(([^)]+)\\?\)/g;
+  currentIndex = 0;
+  
+  while ((match = parenPattern.exec(text)) !== null) {
     // Add text before the match
     if (match.index > currentIndex) {
       parts.push(text.substring(currentIndex, match.index));
@@ -62,7 +90,7 @@ const renderLaTeX = (text: string): JSX.Element | string => {
   }
   
   // If no LaTeX found, return original text
-  if (parts.length === 0 || (parts.length === 1 && typeof parts[0] === 'string')) {
+  if (parts.length === 0 || (parts.length === 1 && typeof parts[0] === 'string' && parts[0] === text)) {
     return text;
   }
   

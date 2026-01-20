@@ -301,9 +301,47 @@ class ProblemGeneratorAgent(BaseAgent):
                             if choice_match:
                                 choices_dict[choice] = choice_match.group(1).replace('\\"', '"').replace('\\\\', '\\')
                         
-                        # Extract explanation
-                        explanation_match = re.search(r'"explanation"\s*:\s*"((?:[^"\\]|\\.)*)"', problem_str, re.DOTALL)
-                        explanation = explanation_match.group(1).replace('\\"', '"').replace('\\\\', '\\') if explanation_match else ""
+                        # Extract explanation - handle multi-line and escaped characters
+                        # Try to find explanation field, handling escaped quotes and newlines
+                        explanation_match = re.search(r'"explanation"\s*:\s*"((?:[^"\\]|\\.|\\n)*)"', problem_str, re.DOTALL)
+                        if not explanation_match:
+                            # Try alternative pattern for unterminated strings - look for explanation field and extract until end or next field
+                            explanation_start = problem_str.find('"explanation"')
+                            if explanation_start != -1:
+                                # Find the colon after "explanation"
+                                colon_pos = problem_str.find(':', explanation_start)
+                                if colon_pos != -1:
+                                    # Find the opening quote
+                                    quote_start = problem_str.find('"', colon_pos)
+                                    if quote_start != -1:
+                                        # Extract until we find a closing quote that's not escaped, or end of string
+                                        explanation_text = ""
+                                        i = quote_start + 1
+                                        while i < len(problem_str):
+                                            if problem_str[i] == '\\' and i + 1 < len(problem_str):
+                                                explanation_text += problem_str[i:i+2]
+                                                i += 2
+                                            elif problem_str[i] == '"':
+                                                # Check if this is followed by comma or closing brace (end of field)
+                                                j = i + 1
+                                                while j < len(problem_str) and problem_str[j] in ' \t\n\r':
+                                                    j += 1
+                                                if j < len(problem_str) and problem_str[j] in ',}':
+                                                    break
+                                                explanation_text += problem_str[i]
+                                                i += 1
+                                            else:
+                                                explanation_text += problem_str[i]
+                                                i += 1
+                                        explanation = explanation_text.replace('\\"', '"').replace('\\\\', '\\').replace('\\n', '\n').strip()
+                                    else:
+                                        explanation = ""
+                                else:
+                                    explanation = ""
+                            else:
+                                explanation = ""
+                        else:
+                            explanation = explanation_match.group(1).replace('\\"', '"').replace('\\\\', '\\').replace('\\n', '\n').strip()
                         
                         # Extract topic and difficulty
                         topic_match = re.search(r'"topic"\s*:\s*"((?:[^"\\]|\\.)*)"', problem_str)
@@ -312,7 +350,8 @@ class ProblemGeneratorAgent(BaseAgent):
                         difficulty_match = re.search(r'"difficulty"\s*:\s*"([^"]*)"', problem_str)
                         difficulty = difficulty_match.group(1) if difficulty_match else "medium"
                         
-                        if question_match and correct_match and len(choices_dict) == 4:
+                        # Only add if we have all required fields including non-empty explanation
+                        if question_match and correct_match and len(choices_dict) == 4 and explanation:
                             problems_found.append({
                                 "problem_number": len(problems_found) + 1,
                                 "question": question_match.group(1).replace('\\"', '"').replace('\\\\', '\\'),
@@ -322,17 +361,25 @@ class ProblemGeneratorAgent(BaseAgent):
                                 "topic": topic,
                                 "difficulty": difficulty
                             })
+                        else:
+                            logger.debug(f"Skipping problem in _try_fix_json: question={bool(question_match)}, choices={len(choices_dict)}, explanation={bool(explanation)}")
                         continue
                     
                     # If JSON parsing succeeded, validate and add
                     if isinstance(problem_obj, dict):
                         # Validate it has required fields with non-empty values
+                        choices = problem_obj.get("choices", {})
+                        explanation = problem_obj.get("explanation", "").strip()
+                        
                         if ("question" in problem_obj and problem_obj["question"] and
-                            "choices" in problem_obj and isinstance(problem_obj["choices"], dict) and
-                            len(problem_obj["choices"]) == 4 and
-                            all(v and isinstance(v, str) and v.strip() for v in problem_obj["choices"].values()) and
-                            "correct_answer" in problem_obj):
+                            "choices" in problem_obj and isinstance(choices, dict) and
+                            len(choices) == 4 and
+                            all(v and isinstance(v, str) and v.strip() for v in choices.values()) and
+                            "correct_answer" in problem_obj and
+                            explanation):  # Ensure explanation is not empty
                             problems_found.append(problem_obj)
+                        else:
+                            logger.debug(f"Skipping problem due to missing fields: question={bool(problem_obj.get('question'))}, choices_valid={len(choices) == 4 and all(v and isinstance(v, str) and v.strip() for v in choices.values())}, explanation={bool(explanation)}")
                 except Exception as e:
                     logger.debug(f"Error extracting problem from JSON: {e}")
                     continue
@@ -620,41 +667,15 @@ CRITICAL REQUIREMENTS:
                                     logger.debug(f"Failed to parse problems array: {e}, array_str preview: {array_str[:200] if 'array_str' in locals() else 'N/A'}")
                                     pass
                 
-                # Method 6: Try to extract partial problems from truncated JSON
+                # Method 6: Try to extract partial problems from truncated JSON using _try_fix_json
                 if not json_data:
-                    # Look for complete problem objects even if the JSON is truncated
-                    problems_found = []
-                    # Find all problem objects using regex
-                    problem_pattern = r'\{\s*"problem_number"\s*:\s*\d+[^}]*"correct_answer"\s*:\s*"[ABCD]"[^}]*\}'
-                    matches = re.finditer(problem_pattern, response, re.DOTALL)
-                    
-                    for match in matches:
+                    fixed_json = self._try_fix_json(response)
+                    if fixed_json:
                         try:
-                            problem_str = match.group(0)
-                            # Try to close the object if needed
-                            if not problem_str.endswith('}'):
-                                # Find the last complete field before truncation
-                                # Look for the last "correct_answer" field
-                                last_correct = problem_str.rfind('"correct_answer"')
-                                if last_correct != -1:
-                                    # Find the closing quote and value
-                                    value_start = problem_str.find(':', last_correct) + 1
-                                    value_end = problem_str.find(',', value_start)
-                                    if value_end == -1:
-                                        value_end = problem_str.find('}', value_start)
-                                    if value_end != -1:
-                                        # Close the object
-                                        problem_str = problem_str[:value_end] + '}'
-                            
-                            problem_obj = json.loads(problem_str)
-                            if isinstance(problem_obj, dict) and "question" in problem_obj and "choices" in problem_obj:
-                                problems_found.append(problem_obj)
+                            json_data = json.loads(fixed_json)
+                            logger.info(f"Successfully extracted problems using method 6 (_try_fix_json)")
                         except:
-                            continue
-                    
-                    if len(problems_found) > 0:
-                        json_data = {"problems": problems_found}
-                        logger.info(f"Successfully extracted {len(problems_found)} partial problems using method 6")
+                            pass
                 
                 if json_data:
                     problem_list = json_data.get("problems", [])
