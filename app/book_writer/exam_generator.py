@@ -116,15 +116,35 @@ class ContentAnalystAgent(BaseAgent):
     def __init__(self, llm_client: LLMClient):
         super().__init__("Content Analyst", "Content Analysis Specialist", llm_client)
     
+    def _extract_learning_objectives(self, content: str) -> List[str]:
+        """Extract learning objectives from the content text."""
+        objectives = []
+        # Pattern to match numbered learning objectives (e.g., 1.1.1.1, 1.1.1.2, etc.)
+        # Also matches lines that look like learning objectives
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            # Match patterns like "1.1.1.1 Objective text" or "1.1.1.1. Objective text"
+            if re.match(r'^\d+(\.\d+)+', line):
+                # Extract the objective text (everything after the number)
+                objective_text = re.sub(r'^\d+(\.\d+)+\.?\s*', '', line).strip()
+                if objective_text:
+                    objectives.append(objective_text)
+        return objectives
+    
     async def analyze_content(self, content: str) -> Dict[str, Any]:
-        """Analyze the input content and identify key topics."""
+        """Analyze the input content and identify key topics and learning objectives."""
+        # Extract learning objectives first
+        learning_objectives = self._extract_learning_objectives(content)
+        
         system_prompt = """You are a Content Analyst specializing in educational content analysis.
 Your task is to analyze text content and identify:
 1. Key topics and concepts
-2. Important facts and details
-3. Relationships between concepts
-4. Difficulty levels of different topics
-5. Suitable question types for each topic
+2. Learning objectives (numbered items like 1.1.1.1, 1.1.1.2, etc.)
+3. Important facts and details
+4. Relationships between concepts
+5. Difficulty levels of different topics
+6. Suitable question types for each topic
 
 Provide a structured analysis that will guide problem generation."""
         
@@ -132,8 +152,15 @@ Provide a structured analysis that will guide problem generation."""
 
 {content}
 
+IMPORTANT: The content contains learning objectives (numbered items). You MUST identify ALL learning objectives and ensure problems are generated for EACH one.
+
 Provide your analysis in JSON format with the following structure:
 {{
+    "learning_objectives": [
+        {{"number": "1.1.1.1", "objective": "Evaluate square roots and nth roots"}},
+        {{"number": "1.1.1.2", "objective": "Simplify radical expressions"}},
+        ...
+    ],
     "key_topics": ["topic1", "topic2", ...],
     "important_concepts": ["concept1", "concept2", ...],
     "factual_information": ["fact1", "fact2", ...],
@@ -194,8 +221,11 @@ Provide your analysis in JSON format with the following structure:
         
         # Fallback: create basic structure if JSON extraction failed
         if not analysis:
+            import structlog
+            logger = structlog.get_logger(__name__)
             logger.warning("Could not extract JSON from content analysis response, using fallback structure")
             analysis = {
+                "learning_objectives": [{"number": str(i+1), "objective": obj} for i, obj in enumerate(learning_objectives)],
                 "key_topics": [],
                 "important_concepts": [],
                 "factual_information": [],
@@ -211,6 +241,10 @@ Provide your analysis in JSON format with the following structure:
                     "hard": 3
                 }
             }
+        else:
+            # Ensure learning_objectives are included even if LLM didn't extract them
+            if "learning_objectives" not in analysis or not analysis.get("learning_objectives"):
+                analysis["learning_objectives"] = [{"number": str(i+1), "objective": obj} for i, obj in enumerate(learning_objectives)]
         
         return analysis
 
@@ -280,6 +314,367 @@ class ProblemGeneratorAgent(BaseAgent):
             logger.debug(f"Error in _try_fix_json: {e}")
         
         return None
+    
+    async def generate_problems_for_objective(self, content: str, analysis: Dict[str, Any], 
+                                            objective: Dict[str, Any], num_problems: int) -> List[ExamProblem]:
+        """Generate problems for a specific learning objective."""
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
+        objective_text = objective.get("objective", str(objective))
+        objective_number = objective.get("number", "")
+        
+        system_prompt = """You are a Problem Generator specializing in creating high-quality multiple choice exam questions.
+Your task is to generate questions that:
+1. Have exactly ONE correct answer
+2. Have 4 answer choices (A, B, C, D)
+3. Include plausible distractors (wrong answers that seem reasonable)
+4. Test understanding, not just memorization
+5. Are clear and unambiguous
+6. Include appropriate difficulty levels
+
+CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
+
+You MUST respond with valid JSON only. Do not include any text before or after the JSON."""
+        
+        # Use more content (up to 5000 chars) for better context
+        content_preview = content[:5000] if len(content) > 5000 else content
+        if len(content) > 5000:
+            content_preview += "\n\n[Content truncated for brevity - use the key concepts shown above]"
+        
+        user_prompt = f"""Generate exactly {num_problems} multiple choice questions SPECIFICALLY for this learning objective:
+
+LEARNING OBJECTIVE: {objective_number} - {objective_text}
+
+Content:
+{content_preview}
+
+Analysis:
+{json.dumps(analysis, indent=2)}
+
+IMPORTANT: All {num_problems} questions MUST be directly related to the learning objective: "{objective_text}"
+
+You MUST respond with ONLY valid JSON in this exact format (no markdown, no code blocks, just pure JSON):
+{{
+    "problems": [
+        {{
+            "problem_number": 1,
+            "question": "Question text here?",
+            "choices": {{
+                "A": "First choice",
+                "B": "Second choice",
+                "C": "Third choice",
+                "D": "Fourth choice"
+            }},
+            "correct_answer": "A",
+            "explanation": "Explanation of why the correct answer is correct",
+            "topic": "{objective_text}",
+            "difficulty": "easy"
+        }}
+    ]
+}}
+
+CRITICAL REQUIREMENTS:
+- Generate exactly {num_problems} problems
+- Each problem must be directly related to: {objective_text}
+- Each problem must have exactly 4 choices (A, B, C, D)
+- Each problem must have exactly ONE correct answer
+- The correct_answer must be one of: A, B, C, or D
+- Respond with ONLY the JSON object, no other text"""
+        
+        # Retry logic - try up to 3 times
+        max_retries = 3
+        problems = []
+        
+        for attempt in range(max_retries):
+            try:
+                response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
+                logger.info(f"Problem generation attempt {attempt + 1} for objective '{objective_text}'", response_length=len(response))
+                
+                # Check if response is empty
+                if not response or len(response.strip()) == 0:
+                    logger.warning(f"Empty response from LLM (attempt {attempt + 1})")
+                    if attempt < max_retries - 1:
+                        # Increase wait time with each retry
+                        wait_time = 2 * (attempt + 1)
+                        logger.info(f"Waiting {wait_time} seconds before retry...")
+                        await asyncio.sleep(wait_time)
+                    continue
+                
+                # Extract problems from response (same extraction logic as before)
+                json_data = None
+                
+                # Method 1: Try parsing the entire response (cleanest)
+                try:
+                    json_data = json.loads(response.strip())
+                    logger.info(f"Successfully parsed JSON using method 1 (full response)")
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Method 1 failed: {e}")
+                    # Try to fix common JSON issues and retry
+                    if "Unterminated string" in str(e) or "Expecting" in str(e) or "Invalid" in str(e):
+                        try:
+                            # Try to fix unterminated strings by finding the JSON object boundaries
+                            fixed_response = self._try_fix_json(response)
+                            if fixed_response:
+                                json_data = json.loads(fixed_response)
+                                logger.info(f"Successfully parsed JSON using method 1 after fixing")
+                        except Exception as fix_error:
+                            logger.debug(f"Failed to fix JSON: {fix_error}")
+                            pass
+                except Exception as e:
+                    logger.debug(f"Method 1 failed with non-JSON error: {e}")
+                    pass
+                
+                # Method 2: Look for JSON object with balanced braces (handles nested structures)
+                if not json_data:
+                    # Find the first { and then find the matching closing }
+                    start_idx = response.find('{')
+                    if start_idx != -1:
+                        brace_count = 0
+                        end_idx = start_idx
+                        for i in range(start_idx, len(response)):
+                            if response[i] == '{':
+                                brace_count += 1
+                            elif response[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    end_idx = i + 1
+                                    break
+                        
+                        if brace_count == 0:
+                            try:
+                                json_str = response[start_idx:end_idx]
+                                json_data = json.loads(json_str)
+                                logger.info(f"Successfully parsed JSON using method 2 (balanced braces), length={len(json_str)}")
+                            except Exception as e:
+                                logger.debug(f"Method 2 failed: {e}, json_str preview: {json_str[:200] if len(json_str) > 200 else json_str}")
+                                pass
+                
+                # Method 3: Look for JSON in code blocks (markdown)
+                if not json_data:
+                    # Try to extract from markdown code blocks
+                    code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+                    if code_block_match:
+                        try:
+                            json_data = json.loads(code_block_match.group(1))
+                            logger.info(f"Successfully parsed JSON using method 3 (code block)")
+                        except Exception as e:
+                            logger.debug(f"Method 3 failed: {e}")
+                            pass
+                
+                # Method 4: Look for JSON object with "problems" key (more permissive)
+                if not json_data:
+                    # Find JSON object containing "problems"
+                    json_match = re.search(r'\{[^{]*"problems"\s*:\s*\[', response, re.DOTALL)
+                    if json_match:
+                        start_idx = json_match.start()
+                        # Find matching closing brace
+                        brace_count = 0
+                        end_idx = start_idx
+                        for i in range(start_idx, len(response)):
+                            if response[i] == '{':
+                                brace_count += 1
+                            elif response[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    end_idx = i + 1
+                                    break
+                        
+                        if brace_count == 0:
+                            try:
+                                json_str = response[start_idx:end_idx]
+                                json_data = json.loads(json_str)
+                            except Exception as e:
+                                logger.debug(f"Failed to parse JSON from method 4: {e}")
+                                pass
+                
+                # Method 5: Try to extract just the problems array and wrap it
+                if not json_data:
+                    # Find the problems array directly - be more specific to avoid math expressions
+                    array_match = re.search(r'"problems"\s*:\s*\[', response, re.DOTALL)
+                    if array_match:
+                        # Find the start of the array (must be right after "problems":)
+                        array_start = response.find('[', array_match.end())
+                        if array_start != -1 and array_start - array_match.end() < 10:  # Ensure it's close (not a math expr)
+                            # Find matching closing bracket (handle nested structures)
+                            bracket_count = 0
+                            array_end = array_start
+                            in_string = False
+                            escape_next = False
+                            brace_count = 0  # Track braces inside array
+                            
+                            for i in range(array_start, len(response)):
+                                char = response[i]
+                                
+                                if escape_next:
+                                    escape_next = False
+                                    continue
+                                
+                                if char == '\\':
+                                    escape_next = True
+                                    continue
+                                
+                                if char == '"' and not escape_next:
+                                    in_string = not in_string
+                                    continue
+                                
+                                if not in_string:
+                                    if char == '[':
+                                        bracket_count += 1
+                                    elif char == ']':
+                                        bracket_count -= 1
+                                        if bracket_count == 0:
+                                            array_end = i + 1
+                                            break
+                                    elif char == '{':
+                                        brace_count += 1
+                                    elif char == '}':
+                                        brace_count -= 1
+                            
+                            if bracket_count == 0:
+                                try:
+                                    array_str = response[array_start:array_end]
+                                    # Validate it looks like JSON (starts with [ and contains {)
+                                    if array_str.startswith('[') and '{' in array_str:
+                                        problems_list = json.loads(array_str)
+                                        
+                                        # Validate that we got a list of dictionaries
+                                        if isinstance(problems_list, list) and len(problems_list) > 0:
+                                            # Check if first element is a dict (problem object)
+                                            if isinstance(problems_list[0], dict):
+                                                # Wrap in expected format
+                                                json_data = {"problems": problems_list}
+                                                logger.info(f"Successfully extracted {len(problems_list)} problems using method 5")
+                                            else:
+                                                logger.warning(f"Method 5 extracted array but first element is not a dict: {type(problems_list[0])}")
+                                        else:
+                                            logger.warning(f"Method 5 extracted invalid array: {problems_list}")
+                                except Exception as e:
+                                    logger.debug(f"Failed to parse problems array: {e}, array_str preview: {array_str[:200] if 'array_str' in locals() else 'N/A'}")
+                                    pass
+                
+                # Method 6: Try to extract partial problems from truncated JSON
+                if not json_data:
+                    # Look for complete problem objects even if the JSON is truncated
+                    problems_found = []
+                    # Find all problem objects using regex
+                    problem_pattern = r'\{\s*"problem_number"\s*:\s*\d+[^}]*"correct_answer"\s*:\s*"[ABCD]"[^}]*\}'
+                    matches = re.finditer(problem_pattern, response, re.DOTALL)
+                    
+                    for match in matches:
+                        try:
+                            problem_str = match.group(0)
+                            # Try to close the object if needed
+                            if not problem_str.endswith('}'):
+                                # Find the last complete field before truncation
+                                # Look for the last "correct_answer" field
+                                last_correct = problem_str.rfind('"correct_answer"')
+                                if last_correct != -1:
+                                    # Find the closing quote and value
+                                    value_start = problem_str.find(':', last_correct) + 1
+                                    value_end = problem_str.find(',', value_start)
+                                    if value_end == -1:
+                                        value_end = problem_str.find('}', value_start)
+                                    if value_end != -1:
+                                        # Close the object
+                                        problem_str = problem_str[:value_end] + '}'
+                            
+                            problem_obj = json.loads(problem_str)
+                            if isinstance(problem_obj, dict) and "question" in problem_obj and "choices" in problem_obj:
+                                problems_found.append(problem_obj)
+                        except:
+                            continue
+                    
+                    if len(problems_found) > 0:
+                        json_data = {"problems": problems_found}
+                        logger.info(f"Successfully extracted {len(problems_found)} partial problems using method 6")
+                
+                if json_data:
+                    problem_list = json_data.get("problems", [])
+                    logger.info(f"Extracted {len(problem_list)} problems from JSON")
+                    
+                    # Validate that problem_list is actually a list of dictionaries
+                    if not isinstance(problem_list, list):
+                        logger.error(f"Expected list but got {type(problem_list)}: {problem_list}")
+                        problem_list = []
+                    else:
+                        # Filter out non-dict items
+                        valid_problems = [p for p in problem_list if isinstance(p, dict)]
+                        if len(valid_problems) != len(problem_list):
+                            logger.warning(f"Filtered out {len(problem_list) - len(valid_problems)} non-dict items from problem list")
+                            problem_list = valid_problems
+                    
+                    for i, p in enumerate(problem_list, 1):
+                        try:
+                            # Ensure p is a dictionary
+                            if not isinstance(p, dict):
+                                logger.warning(f"Problem {i} is not a dictionary (type: {type(p)}), skipping")
+                                continue
+                            
+                            # Validate required fields
+                            if not p.get("question") or not p.get("choices"):
+                                logger.warning(f"Problem {i} missing required fields, skipping")
+                                continue
+                            
+                            problem = ExamProblem(
+                                problem_number=len(problems) + 1,
+                                question=p.get("question", "").strip(),
+                                choices=p.get("choices", {}),
+                                correct_answer=p.get("correct_answer", "A").strip().upper(),
+                                explanation=p.get("explanation", "").strip(),
+                                topic=p.get("topic", objective_text).strip(),
+                                difficulty=p.get("difficulty", "medium").strip().lower()
+                            )
+                            
+                            # Validate problem structure
+                            if not problem.question:
+                                logger.warning(f"Problem {i} has empty question, skipping")
+                                continue
+                            
+                            if len(problem.choices) != 4:
+                                logger.warning(f"Problem {i} has {len(problem.choices)} choices (expected 4), skipping")
+                                continue
+                            
+                            if problem.correct_answer not in problem.choices:
+                                logger.warning(f"Problem {i} has invalid correct_answer {problem.correct_answer}, skipping")
+                                continue
+                            
+                            problems.append(problem)
+                            logger.info(f"Added problem {problem.problem_number}: {problem.question[:50]}...")
+                        except Exception as e:
+                            logger.warning(f"Error creating problem {i}: {e}")
+                            continue
+                    
+                    # If we got enough problems, break
+                    if len(problems) >= num_problems:
+                        problems = problems[:num_problems]  # Trim to exact number
+                        logger.info(f"Successfully generated {len(problems)} problems for objective '{objective_text}', stopping retries")
+                        break
+                    elif len(problems) > 0:
+                        # Got some problems but not enough - keep them and continue to next attempt
+                        logger.warning(f"Only generated {len(problems)}/{num_problems} problems so far for objective '{objective_text}', continuing to accumulate...")
+                        # Don't clear problems - accumulate across attempts
+                else:
+                    logger.warning(f"Could not extract JSON from response (attempt {attempt + 1})")
+                    # Log more of the response for debugging
+                    preview_length = min(1000, len(response))
+                    logger.debug(f"Response preview (first {preview_length} chars): {response[:preview_length]}")
+                    # Also try to find where JSON might start
+                    json_start = response.find('{')
+                    if json_start != -1:
+                        logger.debug(f"Found '{{' at position {json_start}, showing context: {response[max(0, json_start-50):min(len(response), json_start+500)]}")
+            
+            except Exception as e:
+                logger.error(f"Error generating problems (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2)  # Wait before retry
+        
+        if not problems:
+            logger.error(f"Failed to generate any problems for objective '{objective_text}' after {max_retries} attempts")
+            # Don't raise exception here - let it accumulate and try other objectives
+        
+        logger.info(f"Successfully generated {len(problems)} problems for objective '{objective_text}'")
+        return problems
     
     async def generate_problems(self, content: str, analysis: Dict[str, Any], num_problems: int) -> List[ExamProblem]:
         """Generate multiple choice problems based on content and analysis."""
