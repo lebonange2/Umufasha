@@ -266,53 +266,52 @@ class ProblemGeneratorAgent(BaseAgent):
             problems_found = []
             
             # Look for problem objects - they start with "problem_number"
-            # Use a more flexible pattern to find problem objects that includes explanation field
-            # Look for problem objects that have at least question, choices, and correct_answer
-            # We'll extract explanation separately to handle truncation
-            pattern = r'\{\s*"problem_number"\s*:\s*\d+[^}]*"correct_answer"\s*:\s*"[ABCD]"[^}]*'
-            matches = list(re.finditer(pattern, response, re.DOTALL))
+            # Use balanced brace matching to find complete problem objects
+            problem_starts = []
+            for i, char in enumerate(response):
+                if response[i:i+16] == '"problem_number"':
+                    # Found start of a problem, now find the matching closing brace
+                    # Go back to find the opening brace
+                    brace_start = response.rfind('{', 0, i)
+                    if brace_start != -1:
+                        problem_starts.append(brace_start)
             
-            for match in matches:
-                problem_str = match.group(0)
+            for problem_start in problem_starts:
+                # Find the matching closing brace using balanced brace counting
+                brace_count = 0
+                problem_end = problem_start
+                in_string = False
+                escape_next = False
                 
-                # Try to find the explanation field even if JSON is truncated
-                # Look for "explanation" field anywhere after "correct_answer"
-                explanation_start = problem_str.find('"explanation"')
-                if explanation_start != -1:
-                    # Extract everything from "explanation" to the end (or next field)
-                    # This handles truncated JSON where explanation might not be closed
-                    explanation_part = problem_str[explanation_start:]
-                    # Find the colon after "explanation"
-                    colon_pos = explanation_part.find(':')
-                    if colon_pos != -1:
-                        # Find the opening quote
-                        quote_start = explanation_part.find('"', colon_pos)
-                        if quote_start != -1:
-                            # Extract the explanation value - handle unterminated strings
-                            explanation_value = explanation_part[quote_start + 1:]
-                            # Remove any trailing comma or brace
-                            explanation_value = explanation_value.rstrip(',}').rstrip()
-                            # If it doesn't end with a quote, it's truncated - take what we have
-                            if explanation_value.endswith('"'):
-                                explanation_value = explanation_value[:-1]
-                            # Unescape the explanation
-                            explanation_text = explanation_value.replace('\\"', '"').replace('\\\\', '\\').replace('\\n', '\n').strip()
-                            
-                            # Only proceed if we have a non-empty explanation
-                            if explanation_text:
-                                # Try to close the JSON object properly
-                                if not problem_str.rstrip().endswith('}'):
-                                    # Add the explanation field properly closed
-                                    problem_str = problem_str.rstrip().rstrip(',') + f', "explanation": "{explanation_text.replace(\'"\', \'\\\\"\')}"' + '}'
-                                else:
-                                    # If already closed, we need to insert/update explanation
-                                    # For now, we'll extract manually
-                                    pass
+                for i in range(problem_start, len(response)):
+                    char = response[i]
+                    
+                    if escape_next:
+                        escape_next = False
+                        continue
+                    
+                    if char == '\\':
+                        escape_next = True
+                        continue
+                    
+                    if char == '"' and not escape_next:
+                        in_string = not in_string
+                        continue
+                    
+                    if not in_string:
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                problem_end = i + 1
+                                break
                 
-                # Ensure it's properly closed if we don't have explanation yet
-                if not problem_str.rstrip().endswith('}'):
-                    # Try to close it
-                    problem_str = problem_str.rstrip().rstrip(',') + '}'
+                if brace_count == 0:
+                    problem_str = response[problem_start:problem_end]
+                else:
+                    # Truncated - take what we have
+                    problem_str = response[problem_start:]
                 
                 try:
                     # First try to parse as JSON - handle escaped backslashes
