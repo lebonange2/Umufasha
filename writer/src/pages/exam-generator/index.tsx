@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InlineMath, BlockMath } from 'react-katex';
+import { InlineMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
 
 interface ExamGeneratorProject {
@@ -26,6 +26,47 @@ const PHASE_NAMES: Record<string, string> = {
   validation: 'Validation',
   final_review: 'Final Review',
   complete: 'Complete'
+};
+
+// Helper function to render LaTeX in text
+const renderLaTeX = (text: string): JSX.Element | string => {
+  if (!text) return '';
+  
+  // Split text by LaTeX delimiters: \( \) for inline, \[ \] for block
+  const parts: (string | JSX.Element)[] = [];
+  let key = 0;
+  
+  // Handle inline math \( ... \)
+  const inlinePattern = /\\?\(([^)]+)\\?\)/g;
+  let match;
+  let currentIndex = 0;
+  
+  while ((match = inlinePattern.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > currentIndex) {
+      parts.push(text.substring(currentIndex, match.index));
+    }
+    // Add LaTeX math
+    try {
+      parts.push(<InlineMath key={key++} math={match[1]} />);
+    } catch (e) {
+      // If LaTeX parsing fails, just show the original text
+      parts.push(match[0]);
+    }
+    currentIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (currentIndex < text.length) {
+    parts.push(text.substring(currentIndex));
+  }
+  
+  // If no LaTeX found, return original text
+  if (parts.length === 0 || (parts.length === 1 && typeof parts[0] === 'string')) {
+    return text;
+  }
+  
+  return <>{parts}</>;
 };
 
 export default function ExamGeneratorPage() {

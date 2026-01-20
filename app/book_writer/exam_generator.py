@@ -1374,9 +1374,29 @@ Provide a comprehensive review in JSON format:
                     pass
         
         if json_data:
-            review.update(json_data)
+            try:
+                # Safely update review with extracted data
+                if isinstance(json_data, dict):
+                    review.update({
+                        "overall_quality": json_data.get("overall_quality", "unknown"),
+                        "approval_status": json_data.get("approval_status", "unknown"),
+                        "issues_found": json_data.get("issues_found", []),
+                        "problems_needing_revision": json_data.get("problems_needing_revision", []),
+                        "recommendations": json_data.get("recommendations", [])
+                    })
+            except Exception as e:
+                logger.warning(f"Error updating review data: {e}")
+                review["issues_found"].append(f"Could not parse review response: {str(e)}")
         else:
-            review["issues_found"].append("Could not parse review response")
+            # Try to extract at least some information from the response text
+            if "approved" in response.lower() or "approve" in response.lower():
+                review["approval_status"] = "approved"
+            elif "reject" in response.lower() or "rejected" in response.lower():
+                review["approval_status"] = "rejected"
+            elif "revision" in response.lower() or "revise" in response.lower():
+                review["approval_status"] = "needs_revision"
+            
+            review["issues_found"].append("Could not parse review response as JSON, extracted partial information")
         
         return review
 
