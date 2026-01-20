@@ -383,7 +383,7 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
                 "D": "Fourth choice with LaTeX: \\(7 - \\sqrt{{1}}\\)"
             }},
             "correct_answer": "A",
-            "explanation": "Explanation with LaTeX: The conjugate of \\(\\sqrt{{7}} - 1\\) is \\(\\sqrt{{7}} + 1\\).",
+            "explanation": "To rationalize the denominator \\(\\sqrt{{7}} - 1\\), we multiply both numerator and denominator by the conjugate \\(\\sqrt{{7}} + 1\\). The conjugate of a binomial \\(a - b\\) is \\(a + b\\). When we multiply \\((\\sqrt{{7}} - 1)(\\sqrt{{7}} + 1)\\), we get \\(7 - 1 = 6\\), which eliminates the radical from the denominator. Therefore, the conjugate \\(\\sqrt{{7}} + 1\\) (choice A) is correct. Choice B is the original denominator, not the conjugate. Choices C and D are incorrect as they don't follow the conjugate pattern.",
             "topic": "{objective_text}",
             "difficulty": "easy"
         }}
@@ -758,7 +758,7 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
                 "D": "Fourth choice with LaTeX: \\(7 - \\sqrt{{1}}\\)"
             }},
             "correct_answer": "A",
-            "explanation": "Explanation with LaTeX: The conjugate of \\(\\sqrt{{7}} - 1\\) is \\(\\sqrt{{7}} + 1\\).",
+            "explanation": "To rationalize the denominator \\(\\sqrt{{7}} - 1\\), we multiply both numerator and denominator by the conjugate \\(\\sqrt{{7}} + 1\\). The conjugate of a binomial \\(a - b\\) is \\(a + b\\). When we multiply \\((\\sqrt{{7}} - 1)(\\sqrt{{7}} + 1)\\), we get \\(7 - 1 = 6\\), which eliminates the radical from the denominator. Therefore, the conjugate \\(\\sqrt{{7}} + 1\\) (choice A) is correct. Choice B is the original denominator, not the conjugate. Choices C and D are incorrect as they don't follow the conjugate pattern.",
             "topic": "Topic name",
             "difficulty": "easy"
         }},
@@ -772,7 +772,7 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
                 "D": "Choice D with LaTeX: \\(2x + 1\\)"
             }},
             "correct_answer": "B",
-            "explanation": "Explanation with LaTeX: \\(\\sqrt{{x^2 + 2x + 1}} = \\sqrt{{(x+1)^2}} = |x+1|\\).",
+            "explanation": "To simplify \\(\\sqrt{{x^2 + 2x + 1}}\\), we first recognize that \\(x^2 + 2x + 1\\) is a perfect square trinomial. Factoring gives us \\((x+1)^2\\). Therefore, \\(\\sqrt{{x^2 + 2x + 1}} = \\sqrt{{(x+1)^2}} = |x+1|\\). Since the square root of a square is the absolute value, the answer is \\(|x+1|\\) (choice B). Choice A is incorrect because we cannot simply take \\(x+1\\) without the absolute value. Choices C and D are incorrect as they don't represent the simplified form.",
             "topic": "Topic",
             "difficulty": "medium"
         }}
