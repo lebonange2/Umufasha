@@ -700,6 +700,21 @@ Your task is to generate questions that:
 
 CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
 
+LATEX FORMATTING REQUIREMENTS:
+- Use LaTeX syntax for ALL mathematical expressions, formulas, equations, and symbols
+- Use \\( and \\) for inline math (e.g., \\(x^2 + 3x - 4\\))
+- Use \\[ and \\] for display math (e.g., \\[\\frac{a}{b}\\])
+- Common LaTeX symbols:
+  * Fractions: \\frac{numerator}{denominator} (e.g., \\frac{3}{\\sqrt{7} - 1})
+  * Square roots: \\sqrt{expression} (e.g., \\sqrt{25} or \\sqrt{x + 1})
+  * Powers: ^{exponent} (e.g., x^2, a^{n+1})
+  * Subscripts: _{subscript} (e.g., x_1, a_n)
+  * Greek letters: \\alpha, \\beta, \\gamma, \\theta, \\pi, etc.
+  * Operators: \\times, \\div, \\pm, \\mp, \\leq, \\geq, \\neq, \\approx
+  * Sets: \\in, \\notin, \\subset, \\cup, \\cap
+  * Other: \\infty, \\sum, \\prod, \\int, \\lim
+- Always use LaTeX for mathematical notation - never use plain text for math
+
 You MUST respond with valid JSON only. Do not include any text before or after the JSON."""
         
         # Use more content (up to 5000 chars) for better context
