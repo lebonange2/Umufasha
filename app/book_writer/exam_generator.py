@@ -360,20 +360,27 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
     "problems": [
         {{
             "problem_number": 1,
-            "question": "Question text here?",
+            "question": "Question text with LaTeX? For example: To rationalize the denominator of \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), what conjugate should be used?",
             "choices": {{
-                "A": "First choice",
-                "B": "Second choice",
-                "C": "Third choice",
-                "D": "Fourth choice"
+                "A": "First choice with LaTeX: \\(\\sqrt{{7}} + 1\\)",
+                "B": "Second choice with LaTeX: \\(\\sqrt{{7}} - 1\\)",
+                "C": "Third choice with LaTeX: \\(7 + \\sqrt{{1}}\\)",
+                "D": "Fourth choice with LaTeX: \\(7 - \\sqrt{{1}}\\)"
             }},
             "correct_answer": "A",
-            "explanation": "Explanation of why the correct answer is correct",
+            "explanation": "Explanation with LaTeX: The conjugate of \\(\\sqrt{{7}} - 1\\) is \\(\\sqrt{{7}} + 1\\).",
             "topic": "{objective_text}",
             "difficulty": "easy"
         }}
     ]
 }}
+
+IMPORTANT LATEX EXAMPLES:
+- Fractions: \\(\\frac{{a}}{{b}}\\), \\(\\frac{{3x + 2}}{{x - 1}}\\)
+- Square roots: \\(\\sqrt{{x}}\\), \\(\\sqrt{{x^2 + 1}}\\)
+- Powers: \\(x^2\\), \\(a^{{n+1}}\\)
+- Complex expressions: \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), \\(\\sqrt{{\\frac{{a}}{{b}}}}\\)
+- Always escape curly braces in JSON strings by doubling them: {{ and }}
 
 CRITICAL REQUIREMENTS:
 - Generate exactly {num_problems} problems
@@ -713,12 +720,12 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
     "problems": [
         {{
             "problem_number": 1,
-            "question": "Question text here?",
+            "question": "Question text with LaTeX? For example: To rationalize the denominator of \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), what conjugate should be used?",
             "choices": {{
-                "A": "First choice",
-                "B": "Second choice",
-                "C": "Third choice",
-                "D": "Fourth choice"
+                "A": "First choice with LaTeX: \\(\\sqrt{{7}} + 1\\)",
+                "B": "Second choice with LaTeX: \\(\\sqrt{{7}} - 1\\)",
+                "C": "Third choice with LaTeX: \\(7 + \\sqrt{{1}}\\)",
+                "D": "Fourth choice with LaTeX: \\(7 - \\sqrt{{1}}\\)"
             }},
             "correct_answer": "A",
             "explanation": "Explanation of why the correct answer is correct",
@@ -747,7 +754,15 @@ CRITICAL REQUIREMENTS:
 - Each problem must have exactly 4 choices (A, B, C, D)
 - Each problem must have exactly ONE correct answer
 - The correct_answer must be one of: A, B, C, or D
-- Respond with ONLY the JSON object, no other text"""
+- Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
+- Always escape curly braces in JSON strings by doubling them: {{ and }}
+- Respond with ONLY the JSON object, no other text
+
+LATEX EXAMPLES:
+- Fractions: \\(\\frac{{a}}{{b}}\\), \\(\\frac{{3x + 2}}{{x - 1}}\\)
+- Square roots: \\(\\sqrt{{x}}\\), \\(\\sqrt{{x^2 + 1}}\\)
+- Powers: \\(x^2\\), \\(a^{{n+1}}\\)
+- Complex expressions: \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), \\(\\sqrt{{\\frac{{a}}{{b}}}}\\)"""
         
         # Retry logic - try up to 3 times
         max_retries = 3
