@@ -266,13 +266,50 @@ class ProblemGeneratorAgent(BaseAgent):
             problems_found = []
             
             # Look for problem objects - they start with "problem_number"
-            # Use a more flexible pattern to find problem objects
-            pattern = r'\{\s*"problem_number"\s*:\s*\d+.*?"correct_answer"\s*:\s*"[ABCD]".*?\}'
+            # Use a more flexible pattern to find problem objects that includes explanation field
+            # Look for problem objects that have at least question, choices, and correct_answer
+            # We'll extract explanation separately to handle truncation
+            pattern = r'\{\s*"problem_number"\s*:\s*\d+[^}]*"correct_answer"\s*:\s*"[ABCD]"[^}]*'
             matches = list(re.finditer(pattern, response, re.DOTALL))
             
             for match in matches:
                 problem_str = match.group(0)
-                # Ensure it's properly closed
+                
+                # Try to find the explanation field even if JSON is truncated
+                # Look for "explanation" field anywhere after "correct_answer"
+                explanation_start = problem_str.find('"explanation"')
+                if explanation_start != -1:
+                    # Extract everything from "explanation" to the end (or next field)
+                    # This handles truncated JSON where explanation might not be closed
+                    explanation_part = problem_str[explanation_start:]
+                    # Find the colon after "explanation"
+                    colon_pos = explanation_part.find(':')
+                    if colon_pos != -1:
+                        # Find the opening quote
+                        quote_start = explanation_part.find('"', colon_pos)
+                        if quote_start != -1:
+                            # Extract the explanation value - handle unterminated strings
+                            explanation_value = explanation_part[quote_start + 1:]
+                            # Remove any trailing comma or brace
+                            explanation_value = explanation_value.rstrip(',}').rstrip()
+                            # If it doesn't end with a quote, it's truncated - take what we have
+                            if explanation_value.endswith('"'):
+                                explanation_value = explanation_value[:-1]
+                            # Unescape the explanation
+                            explanation_text = explanation_value.replace('\\"', '"').replace('\\\\', '\\').replace('\\n', '\n').strip()
+                            
+                            # Only proceed if we have a non-empty explanation
+                            if explanation_text:
+                                # Try to close the JSON object properly
+                                if not problem_str.rstrip().endswith('}'):
+                                    # Add the explanation field properly closed
+                                    problem_str = problem_str.rstrip().rstrip(',') + f', "explanation": "{explanation_text.replace(\'"\', \'\\\\"\')}"' + '}'
+                                else:
+                                    # If already closed, we need to insert/update explanation
+                                    # For now, we'll extract manually
+                                    pass
+                
+                # Ensure it's properly closed if we don't have explanation yet
                 if not problem_str.rstrip().endswith('}'):
                     # Try to close it
                     problem_str = problem_str.rstrip().rstrip(',') + '}'
@@ -504,6 +541,21 @@ CRITICAL REQUIREMENTS:
             try:
                 response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
                 logger.info(f"Problem generation attempt {attempt + 1} for objective '{objective_text}'", response_length=len(response))
+                
+                # Debug: Log a preview of the response to see what the LLM is generating
+                if response:
+                    preview = response[:500] if len(response) > 500 else response
+                    logger.debug(f"Response preview (first 500 chars): {preview}")
+                    # Check if explanation field is present in response
+                    if '"explanation"' in response:
+                        logger.debug("Found 'explanation' field in response")
+                        # Try to find a sample of the explanation
+                        exp_idx = response.find('"explanation"')
+                        if exp_idx != -1:
+                            exp_sample = response[exp_idx:exp_idx+200]
+                            logger.debug(f"Explanation field sample: {exp_sample}")
+                    else:
+                        logger.warning("No 'explanation' field found in LLM response!")
                 
                 # Check if response is empty
                 if not response or len(response.strip()) == 0:
