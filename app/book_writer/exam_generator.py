@@ -1178,6 +1178,9 @@ class ReviewAgent(BaseAgent):
     
     async def review_exam(self, problems: List[ExamProblem], validation_results: List[Dict[str, Any]], content: str) -> Dict[str, Any]:
         """Perform final review of the entire exam."""
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
         system_prompt = """You are a Review Agent responsible for final quality assurance of exam problems.
 Your task is to:
 1. Review all problems for consistency
