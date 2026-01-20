@@ -495,20 +495,16 @@ export default function ExamGeneratorPage() {
               <div className="text-lg font-semibold">{PHASE_NAMES[project.current_phase] || project.current_phase}</div>
             </div>
             <div>
-              <div className="text-sm text-gray-600"># of Problems per Learning Objective</div>
-              <div className="text-lg font-semibold">{project.num_problems}</div>
-              {project.num_objectives && project.total_problems && (
+              <div className="text-sm text-gray-600">Total Problems</div>
+              <div className="text-lg font-semibold">
+                {project.total_problems || (project.num_objectives ? project.num_objectives * project.num_problems : project.num_problems)}
+              </div>
+              {project.num_objectives && (
                 <div className="text-xs text-gray-500 mt-1">
-                  {project.num_objectives} objectives × {project.num_problems} = {project.total_problems} total problems
+                  {project.num_objectives} objectives × {project.num_problems} per objective
                 </div>
               )}
             </div>
-            {project.num_objectives && (
-              <div>
-                <div className="text-sm text-gray-600">Total Problems</div>
-                <div className="text-lg font-semibold">{project.total_problems || (project.num_objectives * project.num_problems)}</div>
-              </div>
-            )}
             <div>
               <div className="text-sm text-gray-600">Validation Iterations</div>
               <div className="text-lg font-semibold">{project.validation_iterations}</div>
