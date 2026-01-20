@@ -336,6 +336,15 @@ Your task is to generate questions that:
 
 CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
 
+EXPLANATION REQUIREMENTS:
+- Every problem MUST include a comprehensive explanation
+- The explanation must clearly explain WHY the correct answer is correct
+- Include step-by-step reasoning when applicable (especially for mathematical problems)
+- Explain why the correct answer is the best choice
+- Optionally mention why other choices are incorrect (this helps students learn)
+- Use LaTeX formatting for any mathematical expressions in the explanation
+- The explanation should be educational and help students understand the concept
+
 LATEX FORMATTING REQUIREMENTS:
 - Use LaTeX syntax for ALL mathematical expressions, formulas, equations, and symbols
 - Use \\( and \\) for inline math (e.g., \\(x^2 + 3x - 4\\))
@@ -403,6 +412,10 @@ CRITICAL REQUIREMENTS:
 - Each problem must have exactly 4 choices (A, B, C, D)
 - Each problem must have exactly ONE correct answer
 - The correct_answer must be one of: A, B, C, or D
+- Each problem MUST include a detailed explanation that explains WHY the correct answer is correct
+- Explanations should include step-by-step reasoning for mathematical problems
+- Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
+- Always escape curly braces in JSON strings by doubling them: {{ and }}
 - Respond with ONLY the JSON object, no other text"""
         
         # Retry logic - try up to 3 times
@@ -714,6 +727,15 @@ Your task is to generate questions that:
 6. Include appropriate difficulty levels
 
 CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
+
+EXPLANATION REQUIREMENTS:
+- Every problem MUST include a comprehensive explanation
+- The explanation must clearly explain WHY the correct answer is correct
+- Include step-by-step reasoning when applicable (especially for mathematical problems)
+- Explain why the correct answer is the best choice
+- Optionally mention why other choices are incorrect (this helps students learn)
+- Use LaTeX formatting for any mathematical expressions in the explanation
+- The explanation should be educational and help students understand the concept
 
 LATEX FORMATTING REQUIREMENTS:
 - Use LaTeX syntax for ALL mathematical expressions, formulas, equations, and symbols
