@@ -534,13 +534,27 @@ async def get_exam_generator_project(
             project_data = active_projects[project_id]
             project = project_data["project"]
             
+            # Calculate total if not already set
+            num_objectives = project_data.get("num_objectives", 0)
+            total_problems = project_data.get("total_problems", 0)
+            
+            # If not calculated yet, extract learning objectives
+            if num_objectives == 0 or total_problems == 0:
+                learning_objectives = project_data["company"].content_analyst._extract_learning_objectives(project.input_content)
+                num_objectives = len(learning_objectives) if learning_objectives else 1
+                total_problems = num_objectives * project.num_problems
+                project_data["num_objectives"] = num_objectives
+                project_data["total_problems"] = total_problems
+            
             return ExamGeneratorProjectResponse(
                 project_id=project_id,
                 input_file_path=project_data.get("input_file_path", ""),
                 output_directory=project.output_directory,
                 current_phase=project_data.get("current_phase", project.current_phase.value),
                 status=project_data.get("status", project.status),
-                num_problems=project.num_problems,
+                num_problems=project.num_problems,  # Per objective
+                num_objectives=num_objectives,
+                total_problems=total_problems,
                 validation_iterations=project.validation_iterations,
                 model=project_data.get("model", "qwen3:30b"),
                 problems=project_data.get("problems", [p.to_dict() for p in project.problems]),
@@ -558,13 +572,33 @@ async def get_exam_generator_project(
         if not db_project:
             raise HTTPException(status_code=404, detail="Project not found")
         
+        # Extract learning objectives and calculate total
+        num_objectives = 0
+        total_problems = 0
+        if db_project.project_data and isinstance(db_project.project_data, dict):
+            num_objectives = db_project.project_data.get("num_objectives", 0)
+            total_problems = db_project.project_data.get("total_problems", 0)
+        
+        # If not in project_data, calculate it
+        if num_objectives == 0 or total_problems == 0:
+            try:
+                company = ExamGeneratorCompany(model=db_project.model or "qwen3:30b")
+                learning_objectives = company.content_analyst._extract_learning_objectives(db_project.input_content or "")
+                num_objectives = len(learning_objectives) if learning_objectives else 1
+                total_problems = num_objectives * (db_project.num_problems or 10)
+            except:
+                num_objectives = 1
+                total_problems = db_project.num_problems or 10
+        
         return ExamGeneratorProjectResponse(
             project_id=db_project.id,
             input_file_path=db_project.input_file_path or "",
             output_directory=db_project.output_directory or "exam_outputs",
             current_phase=db_project.current_phase or "content_analysis",
             status=db_project.status or "in_progress",
-            num_problems=db_project.num_problems or 10,
+            num_problems=db_project.num_problems or 10,  # Per objective
+            num_objectives=num_objectives,
+            total_problems=total_problems,
             validation_iterations=db_project.validation_iterations or 3,
             model=db_project.model or "qwen3:30b",
             problems=db_project.problems or [],
