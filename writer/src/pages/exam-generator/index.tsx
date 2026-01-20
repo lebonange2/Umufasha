@@ -205,6 +205,7 @@ export default function ExamGeneratorPage() {
         projectData = await response.json();
       }
 
+      console.log('Created project - num_objectives:', projectData.num_objectives, 'total_problems:', projectData.total_problems, 'num_problems:', projectData.num_problems);
       setProject(projectData);
     } catch (err: any) {
       console.error('Create project error:', err);
