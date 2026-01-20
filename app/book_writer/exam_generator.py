@@ -120,12 +120,13 @@ class ContentAnalystAgent(BaseAgent):
         """Extract learning objectives from the content text."""
         objectives = []
         # Pattern to match numbered learning objectives (e.g., 1.1.1.1, 1.1.1.2, etc.)
-        # Also matches lines that look like learning objectives
+        # Must have at least 3 dots (4 numbers) to be a learning objective, not a section header
         lines = content.split('\n')
         for line in lines:
             line = line.strip()
             # Match patterns like "1.1.1.1 Objective text" or "1.1.1.1. Objective text"
-            if re.match(r'^\d+(\.\d+)+', line):
+            # Require at least 4 numbers separated by dots (e.g., 1.1.1.1)
+            if re.match(r'^\d+\.\d+\.\d+\.\d+', line):
                 # Extract the objective text (everything after the number)
                 objective_text = re.sub(r'^\d+(\.\d+)+\.?\s*', '', line).strip()
                 if objective_text:
