@@ -102,7 +102,9 @@ class ExamGeneratorProjectResponse(BaseModel):
     output_directory: str
     current_phase: str
     status: str
-    num_problems: int
+    num_problems: int  # This is now problems per objective
+    num_objectives: int = 0  # Number of learning objectives found
+    total_problems: int = 0  # Total problems: num_objectives * num_problems
     validation_iterations: int
     model: Optional[str] = "qwen3:30b"
     problems: List[Dict[str, Any]] = []
@@ -138,13 +140,18 @@ async def create_exam_generator_project(
             logger.error("Failed to initialize ExamGeneratorCompany", error=str(e), exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to initialize exam generator: {str(e)}")
         
+        # Extract learning objectives to calculate total problems
+        learning_objectives = company.content_analyst._extract_learning_objectives(project.input_content)
+        num_objectives = len(learning_objectives) if learning_objectives else 1
+        total_problems = num_objectives * project.num_problems
+        
         # Initialize project
         exam_project = ExamProject(
             project_id=project_id,
             input_file_path="",  # Will be set if file uploaded
             input_content=project.input_content,
             output_directory=project.output_directory,
-            num_problems=project.num_problems,
+            num_problems=project.num_problems,  # This is per objective
             validation_iterations=project.validation_iterations
         )
         
@@ -155,7 +162,9 @@ async def create_exam_generator_project(
             "model": model,
             "input_content": project.input_content,
             "output_directory": project.output_directory,
-            "num_problems": project.num_problems,
+            "num_problems": project.num_problems,  # Per objective
+            "num_objectives": num_objectives,
+            "total_problems": total_problems,
             "validation_iterations": project.validation_iterations,
             "current_phase": "content_analysis",
             "status": "in_progress"
@@ -169,9 +178,12 @@ async def create_exam_generator_project(
             "model": model,
             "current_phase": "content_analysis",
             "status": "in_progress",
-            "num_problems": project.num_problems,
+            "num_problems": project.num_problems,  # Per objective
             "validation_iterations": project.validation_iterations,
-            "project_data": {},
+            "project_data": {
+                "num_objectives": num_objectives,
+                "total_problems": total_problems
+            },
             "problems": [],
             "validation_results": [],
             "final_review": None,
@@ -186,7 +198,9 @@ async def create_exam_generator_project(
             output_directory=project.output_directory,
             current_phase="content_analysis",
             status="in_progress",
-            num_problems=project.num_problems,
+            num_problems=project.num_problems,  # Per objective
+            num_objectives=num_objectives,
+            total_problems=total_problems,
             validation_iterations=project.validation_iterations,
             model=model
         )
@@ -236,7 +250,7 @@ async def upload_input_file(
         if project_id in active_projects:
             active_projects[project_id]["input_file_path"] = file.filename
         
-        # Update database
+        # Update database with calculated values
         project_data = {
             "input_file_path": file.filename,
             "input_content": input_content,
@@ -244,9 +258,12 @@ async def upload_input_file(
             "model": model or "qwen3:30b",
             "current_phase": "content_analysis",
             "status": "in_progress",
-            "num_problems": num_problems,
+            "num_problems": num_problems,  # Per objective
             "validation_iterations": validation_iterations,
-            "project_data": {},
+            "project_data": {
+                "num_objectives": response.num_objectives,
+                "total_problems": response.total_problems
+            },
             "problems": [],
             "validation_results": [],
             "final_review": None,

@@ -7,7 +7,9 @@ interface ExamGeneratorProject {
   output_directory: string;
   current_phase: string;
   status: string;
-  num_problems: number;
+  num_problems: number;  // Problems per objective
+  num_objectives?: number;  // Number of learning objectives
+  total_problems?: number;  // Total problems: num_objectives * num_problems
   validation_iterations: number;
   model: string;
   problems: any[];
@@ -493,9 +495,20 @@ export default function ExamGeneratorPage() {
               <div className="text-lg font-semibold">{PHASE_NAMES[project.current_phase] || project.current_phase}</div>
             </div>
             <div>
-              <div className="text-sm text-gray-600">Number of Problems</div>
+              <div className="text-sm text-gray-600"># of Problems per Learning Objective</div>
               <div className="text-lg font-semibold">{project.num_problems}</div>
+              {project.num_objectives && project.total_problems && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {project.num_objectives} objectives × {project.num_problems} = {project.total_problems} total problems
+                </div>
+              )}
             </div>
+            {project.num_objectives && (
+              <div>
+                <div className="text-sm text-gray-600">Total Problems</div>
+                <div className="text-lg font-semibold">{project.total_problems || (project.num_objectives * project.num_problems)}</div>
+              </div>
+            )}
             <div>
               <div className="text-sm text-gray-600">Validation Iterations</div>
               <div className="text-lg font-semibold">{project.validation_iterations}</div>
