@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface ExamGeneratorProject {
@@ -269,7 +269,15 @@ export default function ExamGeneratorPage() {
       <div className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-4xl mx-auto">
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h1 className="text-3xl font-bold mb-6">Exam Generator</h1>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold">Exam Generator</h1>
+              <button
+                onClick={() => navigate('/')}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                Back to Writer
+              </button>
+            </div>
             <p className="text-gray-600 mb-6">
               Generate high-quality multiple choice exam questions from text content using AI agents.
               The system validates questions through multiple iterations to ensure correctness.
@@ -440,12 +448,20 @@ export default function ExamGeneratorPage() {
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h1 className="text-3xl font-bold">Exam Generator</h1>
-            <button
-              onClick={() => setProject(null)}
-              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-            >
-              New Project
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setProject(null)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                New Project
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Back to Writer
+              </button>
+            </div>
           </div>
 
           {error && (

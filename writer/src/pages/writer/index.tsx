@@ -550,6 +550,14 @@ export default function WriterPage() {
               >
                 🎙️ PDF to Audio
               </button>
+              <button
+                onClick={() => navigate('/exam-generator')}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-100 bg-orange-50"
+                aria-label="Exam Generator"
+                title="Generate multiple choice exam questions from text content"
+              >
+                📝 Exam Generator
+              </button>
             </div>
           </div>
         </div>
