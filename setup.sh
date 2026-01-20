@@ -1322,40 +1322,101 @@ print_success "Stop script created"
 
 # Setup Ollama for local AI models (required for local LLM)
 print_status "Setting up Ollama for local AI models..."
-if ! command -v ollama &> /dev/null; then
+OLLAMA_INSTALLED=false
+
+# Check if Ollama is installed
+if command -v ollama &> /dev/null; then
+    print_success "Ollama is already installed"
+    OLLAMA_INSTALLED=true
+    # Verify it works
+    if ollama --version &> /dev/null; then
+        print_success "Ollama version: $(ollama --version 2>&1 | head -1)"
+    fi
+else
     print_status "Installing Ollama..."
     print_status "This will download and install Ollama (required for local LLM models)..."
-    if curl -fsSL https://ollama.com/install.sh | sh; then
-        print_success "Ollama installed successfully"
-        # Add Ollama to PATH if not already there
-        if ! echo "$PATH" | grep -q "/usr/local/bin"; then
-            export PATH="$PATH:/usr/local/bin"
+    
+    # Try installation
+    INSTALL_OUTPUT=$(curl -fsSL https://ollama.com/install.sh 2>&1 | sh 2>&1)
+    INSTALL_EXIT=$?
+    
+    if [ $INSTALL_EXIT -eq 0 ]; then
+        # Add Ollama to PATH
+        export PATH="$PATH:/usr/local/bin"
+        hash -r 2>/dev/null || true
+        
+        # Verify installation
+        sleep 2
+        if command -v ollama &> /dev/null; then
+            print_success "Ollama installed successfully"
+            OLLAMA_INSTALLED=true
+        else
+            # Try to find ollama in common locations
+            if [ -f /usr/local/bin/ollama ]; then
+                export PATH="$PATH:/usr/local/bin"
+                hash -r 2>/dev/null || true
+                if command -v ollama &> /dev/null; then
+                    print_success "Ollama installed at /usr/local/bin/ollama"
+                    OLLAMA_INSTALLED=true
+                fi
+            fi
         fi
-    else
+    fi
+    
+    if [ "$OLLAMA_INSTALLED" = false ]; then
         print_error "Ollama installation failed!"
         print_error "The app requires Ollama for local LLM models."
         print_error "Please install manually: curl -fsSL https://ollama.com/install.sh | sh"
-        exit 1
+        print_error "Or on RunPod, run: ./setup_ollama.sh"
+        print_warning "Continuing setup, but local AI features will not work until Ollama is installed"
     fi
-else
-    print_success "Ollama is already installed"
 fi
 
 # Start Ollama in background if not running (only if installed)
-if command -v ollama &> /dev/null; then
-    if ! pgrep -x "ollama" > /dev/null; then
+if [ "$OLLAMA_INSTALLED" = true ]; then
+    # Check if Ollama service is running
+    OLLAMA_RUNNING=false
+    
+    # Check if process is running
+    if pgrep -x "ollama" > /dev/null 2>&1; then
+        OLLAMA_RUNNING=true
+    fi
+    
+    # Check if API is accessible
+    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+        OLLAMA_RUNNING=true
+        print_success "Ollama server is already running and accessible"
+    fi
+    
+    if [ "$OLLAMA_RUNNING" = false ]; then
         print_status "Starting Ollama server..."
-        ollama serve > /tmp/ollama.log 2>&1 &
+        
+        # Ensure PATH includes ollama location
+        export PATH="$PATH:/usr/local/bin"
+        hash -r 2>/dev/null || true
+        
+        # Start Ollama in background
+        nohup ollama serve > /tmp/ollama.log 2>&1 &
         OLLAMA_PID=$!
-        sleep 3
-        if kill -0 $OLLAMA_PID 2>/dev/null && curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-            print_success "Ollama server started (PID: $OLLAMA_PID)"
-        else
+        
+        # Wait for server to start
+        print_status "Waiting for Ollama server to start..."
+        for i in {1..10}; do
+            sleep 2
+            if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+                print_success "Ollama server started successfully (PID: $OLLAMA_PID)"
+                OLLAMA_RUNNING=true
+                break
+            fi
+            echo -n "."
+        done
+        echo ""
+        
+        if [ "$OLLAMA_RUNNING" = false ]; then
             print_warning "Ollama server may have failed to start. Check /tmp/ollama.log"
-            print_warning "You can start it manually later with: ollama serve"
+            print_warning "You can start it manually with: ollama serve"
+            print_warning "Or run in background: nohup ollama serve > /tmp/ollama.log 2>&1 &"
         fi
-    else
-        print_success "Ollama server is already running"
     fi
     
     # Download both required models: llama3:latest and qwen3:30b
