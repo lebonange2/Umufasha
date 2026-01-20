@@ -1288,16 +1288,52 @@ class ExamGeneratorCompany:
         logger.info("Content analysis complete", topics_count=len(analysis.get("key_topics", [])))
         update_progress("content_analysis", 25, f"Identified {len(analysis.get('key_topics', []))} key topics")
         
+        # Extract learning objectives
+        learning_objectives = analysis.get("learning_objectives", [])
+        if not learning_objectives:
+            # Fallback: extract from content directly
+            learning_objectives = self.content_analyst._extract_learning_objectives(project.input_content)
+            learning_objectives = [{"number": str(i+1), "objective": obj} for i, obj in enumerate(learning_objectives)]
+        
+        logger.info(f"Found {len(learning_objectives)} learning objectives")
+        
+        # Calculate problems per objective
+        num_objectives = len(learning_objectives) if learning_objectives else 1
+        problems_per_objective = max(1, project.num_problems // num_objectives)
+        remaining_problems = project.num_problems % num_objectives if num_objectives > 0 else 0
+        
+        logger.info(f"Generating {problems_per_objective} problems per objective (total: {project.num_problems})")
+        
         # Phase 2: Problem Generation
         project.current_phase = ExamPhase.PROBLEM_GENERATION
-        update_progress("problem_generation", 30, f"Generating {project.num_problems} problems...")
-        logger.info("Starting problem generation phase", num_problems=project.num_problems)
+        update_progress("problem_generation", 30, f"Generating {project.num_problems} problems for {num_objectives} learning objectives...")
+        logger.info("Starting problem generation phase", num_problems=project.num_problems, num_objectives=num_objectives)
         
-        problems = await self.problem_generator.generate_problems(
-            project.input_content,
-            analysis,
-            project.num_problems
-        )
+        all_problems = []
+        for idx, objective in enumerate(learning_objectives):
+            # Determine how many problems for this objective
+            num_probs_for_obj = problems_per_objective
+            if idx < remaining_problems:
+                num_probs_for_obj += 1
+            
+            update_progress("problem_generation", 30 + int(50 * idx / num_objectives), 
+                          f"Generating {num_probs_for_obj} problems for objective: {objective.get('objective', objective)}")
+            
+            # Generate problems for this specific objective
+            objective_problems = await self.problem_generator.generate_problems_for_objective(
+                project.input_content,
+                analysis,
+                objective,
+                num_probs_for_obj
+            )
+            
+            all_problems.extend(objective_problems)
+            
+            if len(all_problems) >= project.num_problems:
+                all_problems = all_problems[:project.num_problems]
+                break
+        
+        problems = all_problems
         project.problems = problems
         
         if not problems:
