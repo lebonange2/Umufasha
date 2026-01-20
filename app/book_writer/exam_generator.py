@@ -317,8 +317,20 @@ CRITICAL REQUIREMENTS:
                 try:
                     json_data = json.loads(response.strip())
                     logger.info(f"Successfully parsed JSON using method 1 (full response)")
-                except Exception as e:
+                except json.JSONDecodeError as e:
                     logger.debug(f"Method 1 failed: {e}")
+                    # Try to fix common JSON issues and retry
+                    if "Unterminated string" in str(e) or "Expecting" in str(e):
+                        try:
+                            # Try to fix unterminated strings by finding the JSON object boundaries
+                            fixed_response = self._try_fix_json(response)
+                            if fixed_response:
+                                json_data = json.loads(fixed_response)
+                                logger.info(f"Successfully parsed JSON using method 1 after fixing")
+                        except:
+                            pass
+                except Exception as e:
+                    logger.debug(f"Method 1 failed with non-JSON error: {e}")
                     pass
                 
                 # Method 2: Look for JSON object with balanced braces (handles nested structures)
@@ -392,35 +404,78 @@ CRITICAL REQUIREMENTS:
                         # Find the start of the array
                         array_start = response.find('[', array_match.end())
                         if array_start != -1:
-                            # Find matching closing bracket
+                            # Find matching closing bracket (handle nested structures)
                             bracket_count = 0
                             array_end = array_start
+                            in_string = False
+                            escape_next = False
+                            
                             for i in range(array_start, len(response)):
-                                if response[i] == '[':
-                                    bracket_count += 1
-                                elif response[i] == ']':
-                                    bracket_count -= 1
-                                    if bracket_count == 0:
-                                        array_end = i + 1
-                                        break
+                                char = response[i]
+                                
+                                if escape_next:
+                                    escape_next = False
+                                    continue
+                                
+                                if char == '\\':
+                                    escape_next = True
+                                    continue
+                                
+                                if char == '"' and not escape_next:
+                                    in_string = not in_string
+                                    continue
+                                
+                                if not in_string:
+                                    if char == '[':
+                                        bracket_count += 1
+                                    elif char == ']':
+                                        bracket_count -= 1
+                                        if bracket_count == 0:
+                                            array_end = i + 1
+                                            break
                             
                             if bracket_count == 0:
                                 try:
                                     array_str = response[array_start:array_end]
                                     problems_list = json.loads(array_str)
-                                    # Wrap in expected format
-                                    json_data = {"problems": problems_list}
-                                    logger.info("Successfully extracted problems array using method 5")
+                                    
+                                    # Validate that we got a list of dictionaries
+                                    if isinstance(problems_list, list) and len(problems_list) > 0:
+                                        # Check if first element is a dict (problem object)
+                                        if isinstance(problems_list[0], dict):
+                                            # Wrap in expected format
+                                            json_data = {"problems": problems_list}
+                                            logger.info(f"Successfully extracted {len(problems_list)} problems using method 5")
+                                        else:
+                                            logger.warning(f"Method 5 extracted array but first element is not a dict: {type(problems_list[0])}")
+                                    else:
+                                        logger.warning(f"Method 5 extracted invalid array: {problems_list}")
                                 except Exception as e:
-                                    logger.debug(f"Failed to parse problems array: {e}")
+                                    logger.debug(f"Failed to parse problems array: {e}, array_str preview: {array_str[:200] if 'array_str' in locals() else 'N/A'}")
                                     pass
                 
                 if json_data:
                     problem_list = json_data.get("problems", [])
                     logger.info(f"Extracted {len(problem_list)} problems from JSON")
                     
+                    # Validate that problem_list is actually a list of dictionaries
+                    if not isinstance(problem_list, list):
+                        logger.error(f"Expected list but got {type(problem_list)}: {problem_list}")
+                        problem_list = []
+                    else:
+                        # Filter out non-dict items
+                        valid_problems = [p for p in problem_list if isinstance(p, dict)]
+                        if len(valid_problems) != len(problem_list):
+                            logger.warning(f"Filtered out {len(problem_list) - len(valid_problems)} non-dict items from problem list")
+                            problem_list = valid_problems
+                    
                     for i, p in enumerate(problem_list, 1):
                         try:
+                            # Ensure p is a dictionary
+                            if not isinstance(p, dict):
+                                logger.warning(f"Problem {i} is not a dictionary (type: {type(p)}), skipping")
+                                continue
+                            
                             # Validate required fields
                             if not p.get("question") or not p.get("choices"):
                                 logger.warning(f"Problem {i} missing required fields, skipping")
@@ -458,11 +513,12 @@ CRITICAL REQUIREMENTS:
                     # If we got enough problems, break
                     if len(problems) >= num_problems:
                         problems = problems[:num_problems]  # Trim to exact number
+                        logger.info(f"Successfully generated {len(problems)} problems, stopping retries")
                         break
                     elif len(problems) > 0:
-                        # Got some problems but not enough - continue to next attempt
-                        logger.warning(f"Only generated {len(problems)}/{num_problems} problems, retrying...")
-                        problems = []  # Clear and retry
+                        # Got some problems but not enough - keep them and continue to next attempt
+                        logger.warning(f"Only generated {len(problems)}/{num_problems} problems so far, continuing to accumulate...")
+                        # Don't clear problems - accumulate across attempts
                 else:
                     logger.warning(f"Could not extract JSON from response (attempt {attempt + 1})")
                     # Log more of the response for debugging
