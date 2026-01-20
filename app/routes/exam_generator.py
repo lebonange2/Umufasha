@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, UploadFile, File, Form
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 import structlog
@@ -215,10 +215,10 @@ async def create_exam_generator_project(
 @router.post("/api/exam-generator/projects/upload")
 async def upload_input_file(
     file: UploadFile = File(...),
-    output_directory: str = "exam_outputs",
-    num_problems: int = 10,
-    validation_iterations: int = 3,
-    model: Optional[str] = "qwen3:30b",
+    output_directory: str = Form("exam_outputs"),
+    num_problems: int = Form(10),
+    validation_iterations: int = Form(3),
+    model: Optional[str] = Form("qwen3:30b"),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload a text file and create an exam generator project."""
