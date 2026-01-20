@@ -336,6 +336,21 @@ Your task is to generate questions that:
 
 CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
 
+LATEX FORMATTING REQUIREMENTS:
+- Use LaTeX syntax for ALL mathematical expressions, formulas, equations, and symbols
+- Use \\( and \\) for inline math (e.g., \\(x^2 + 3x - 4\\))
+- Use \\[ and \\] for display math (e.g., \\[\\frac{a}{b}\\])
+- Common LaTeX symbols:
+  * Fractions: \\frac{numerator}{denominator} (e.g., \\frac{3}{\\sqrt{7} - 1})
+  * Square roots: \\sqrt{expression} (e.g., \\sqrt{25} or \\sqrt{x + 1})
+  * Powers: ^{exponent} (e.g., x^2, a^{n+1})
+  * Subscripts: _{subscript} (e.g., x_1, a_n)
+  * Greek letters: \\alpha, \\beta, \\gamma, \\theta, \\pi, etc.
+  * Operators: \\times, \\div, \\pm, \\mp, \\leq, \\geq, \\neq, \\approx
+  * Sets: \\in, \\notin, \\subset, \\cup, \\cap
+  * Other: \\infty, \\sum, \\prod, \\int, \\lim
+- Always use LaTeX for mathematical notation - never use plain text for math
+
 You MUST respond with valid JSON only. Do not include any text before or after the JSON."""
         
         # Use more content (up to 5000 chars) for better context
@@ -743,21 +758,21 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
                 "D": "Fourth choice with LaTeX: \\(7 - \\sqrt{{1}}\\)"
             }},
             "correct_answer": "A",
-            "explanation": "Explanation of why the correct answer is correct",
+            "explanation": "Explanation with LaTeX: The conjugate of \\(\\sqrt{{7}} - 1\\) is \\(\\sqrt{{7}} + 1\\).",
             "topic": "Topic name",
             "difficulty": "easy"
         }},
         {{
             "problem_number": 2,
-            "question": "Another question?",
+            "question": "Another question with LaTeX? For example: Simplify \\(\\sqrt{{x^2 + 2x + 1}}\\).",
             "choices": {{
-                "A": "Choice A",
-                "B": "Choice B",
-                "C": "Choice C",
-                "D": "Choice D"
+                "A": "Choice A with LaTeX: \\(x + 1\\)",
+                "B": "Choice B with LaTeX: \\(x - 1\\)",
+                "C": "Choice C with LaTeX: \\(x^2 + 1\\)",
+                "D": "Choice D with LaTeX: \\(2x + 1\\)"
             }},
             "correct_answer": "B",
-            "explanation": "Explanation",
+            "explanation": "Explanation with LaTeX: \\(\\sqrt{{x^2 + 2x + 1}} = \\sqrt{{(x+1)^2}} = |x+1|\\).",
             "topic": "Topic",
             "difficulty": "medium"
         }}
@@ -769,6 +784,8 @@ CRITICAL REQUIREMENTS:
 - Each problem must have exactly 4 choices (A, B, C, D)
 - Each problem must have exactly ONE correct answer
 - The correct_answer must be one of: A, B, C, or D
+- Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
+- Always escape curly braces in JSON strings by doubling them: {{ and }}
 - Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
 - Always escape curly braces in JSON strings by doubling them: {{ and }}
 - Respond with ONLY the JSON object, no other text
