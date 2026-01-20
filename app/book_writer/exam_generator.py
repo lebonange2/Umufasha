@@ -222,47 +222,62 @@ class ProblemGeneratorAgent(BaseAgent):
         super().__init__("Problem Generator", "Exam Problem Creator", llm_client)
     
     def _try_fix_json(self, response: str) -> Optional[str]:
-        """Try to fix common JSON issues like unterminated strings."""
+        """Try to fix common JSON issues like unterminated strings by extracting complete problem objects."""
         try:
-            # Find the main JSON object
-            start_idx = response.find('{')
-            if start_idx == -1:
-                return None
+            import structlog
+            logger = structlog.get_logger(__name__)
             
-            # Try to find the matching closing brace, handling unterminated strings
-            brace_count = 0
-            end_idx = start_idx
-            in_string = False
-            escape_next = False
+            # Strategy: Extract all complete problem objects we can find
+            problems_found = []
             
-            for i in range(start_idx, len(response)):
-                char = response[i]
-                
-                if escape_next:
-                    escape_next = False
-                    continue
-                
-                if char == '\\':
-                    escape_next = True
-                    continue
-                
-                if char == '"' and not escape_next:
-                    in_string = not in_string
-                    continue
-                
-                if not in_string:
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            end_idx = i + 1
-                            break
+            # Look for problem objects - they start with "problem_number"
+            # Use a more flexible pattern to find problem objects
+            pattern = r'\{\s*"problem_number"\s*:\s*\d+.*?"correct_answer"\s*:\s*"[ABCD]".*?\}'
+            matches = list(re.finditer(pattern, response, re.DOTALL))
             
-            if brace_count == 0:
-                return response[start_idx:end_idx]
-        except:
-            pass
+            for match in matches:
+                problem_str = match.group(0)
+                # Ensure it's properly closed
+                if not problem_str.rstrip().endswith('}'):
+                    # Try to close it
+                    problem_str = problem_str.rstrip().rstrip(',') + '}'
+                
+                try:
+                    problem_obj = json.loads(problem_str)
+                    if isinstance(problem_obj, dict):
+                        # Validate it has required fields
+                        if "question" in problem_obj and "choices" in problem_obj and "correct_answer" in problem_obj:
+                            problems_found.append(problem_obj)
+                except:
+                    # Try to extract fields manually if JSON parsing fails
+                    try:
+                        # Extract key fields using regex
+                        question_match = re.search(r'"question"\s*:\s*"([^"]*)"', problem_str)
+                        correct_match = re.search(r'"correct_answer"\s*:\s*"([ABCD])"', problem_str)
+                        
+                        if question_match and correct_match:
+                            # Try to extract choices
+                            choices_match = re.search(r'"choices"\s*:\s*\{([^}]*)\}', problem_str, re.DOTALL)
+                            if choices_match:
+                                problems_found.append({
+                                    "problem_number": len(problems_found) + 1,
+                                    "question": question_match.group(1),
+                                    "choices": {"A": "", "B": "", "C": "", "D": ""},  # Placeholder
+                                    "correct_answer": correct_match.group(1),
+                                    "explanation": "",
+                                    "topic": "",
+                                    "difficulty": "medium"
+                                })
+                    except:
+                        continue
+            
+            if len(problems_found) > 0:
+                logger.info(f"Extracted {len(problems_found)} complete problems from truncated JSON")
+                return json.dumps({"problems": problems_found}, indent=2)
+        except Exception as e:
+            import structlog
+            logger = structlog.get_logger(__name__)
+            logger.debug(f"Error in _try_fix_json: {e}")
         
         return None
     
@@ -365,14 +380,15 @@ CRITICAL REQUIREMENTS:
                 except json.JSONDecodeError as e:
                     logger.debug(f"Method 1 failed: {e}")
                     # Try to fix common JSON issues and retry
-                    if "Unterminated string" in str(e) or "Expecting" in str(e):
+                    if "Unterminated string" in str(e) or "Expecting" in str(e) or "Invalid" in str(e):
                         try:
                             # Try to fix unterminated strings by finding the JSON object boundaries
                             fixed_response = self._try_fix_json(response)
                             if fixed_response:
                                 json_data = json.loads(fixed_response)
                                 logger.info(f"Successfully parsed JSON using method 1 after fixing")
-                        except:
+                        except Exception as fix_error:
+                            logger.debug(f"Failed to fix JSON: {fix_error}")
                             pass
                 except Exception as e:
                     logger.debug(f"Method 1 failed with non-JSON error: {e}")
