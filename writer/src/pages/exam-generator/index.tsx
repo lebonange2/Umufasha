@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { InlineMath, BlockMath } from 'react-katex';
+import 'katex/dist/katex.min.css';
 
 interface ExamGeneratorProject {
   project_id: string;
@@ -588,14 +590,20 @@ export default function ExamGeneratorPage() {
                   <div className="text-sm text-gray-600 mb-2">
                     Topic: {problem.topic} | Difficulty: {problem.difficulty}
                   </div>
-                  <div className="mb-2">{problem.question}</div>
+                  <div className="mb-2">{renderLaTeX(problem.question)}</div>
                   <div className="ml-4 space-y-1">
                     {Object.entries(problem.choices || {}).map(([choice, text]: [string, any]) => (
                       <div key={choice} className="text-sm">
-                        {choice}. {text} {choice === problem.correct_answer && '✓'}
+                        {choice}. {renderLaTeX(String(text))} {choice === problem.correct_answer && <span className="text-green-600 font-bold">✓</span>}
                       </div>
                     ))}
                   </div>
+                  {problem.explanation && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="text-sm font-semibold mb-1">Explanation:</div>
+                      <div className="text-sm text-gray-700">{renderLaTeX(problem.explanation)}</div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

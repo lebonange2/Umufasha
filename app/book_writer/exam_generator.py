@@ -278,33 +278,64 @@ class ProblemGeneratorAgent(BaseAgent):
                     problem_str = problem_str.rstrip().rstrip(',') + '}'
                 
                 try:
-                    problem_obj = json.loads(problem_str)
-                    if isinstance(problem_obj, dict):
-                        # Validate it has required fields
-                        if "question" in problem_obj and "choices" in problem_obj and "correct_answer" in problem_obj:
-                            problems_found.append(problem_obj)
-                except:
-                    # Try to extract fields manually if JSON parsing fails
+                    # First try to parse as JSON - handle escaped backslashes
+                    # Replace single backslashes that aren't part of escape sequences
+                    # This is a workaround for LaTeX backslashes in JSON strings
+                    problem_str_fixed = problem_str
+                    # Try to fix common LaTeX escape issues
+                    # Don't fix if it's already valid JSON
                     try:
-                        # Extract key fields using regex
-                        question_match = re.search(r'"question"\s*:\s*"([^"]*)"', problem_str)
+                        problem_obj = json.loads(problem_str)
+                    except json.JSONDecodeError as e:
+                        # If JSON parsing fails, try to extract fields manually
+                        # Extract key fields using regex that handles escaped quotes
+                        question_match = re.search(r'"question"\s*:\s*"((?:[^"\\]|\\.)*)"', problem_str, re.DOTALL)
                         correct_match = re.search(r'"correct_answer"\s*:\s*"([ABCD])"', problem_str)
                         
-                        if question_match and correct_match:
-                            # Try to extract choices
-                            choices_match = re.search(r'"choices"\s*:\s*\{([^}]*)\}', problem_str, re.DOTALL)
-                            if choices_match:
-                                problems_found.append({
-                                    "problem_number": len(problems_found) + 1,
-                                    "question": question_match.group(1),
-                                    "choices": {"A": "", "B": "", "C": "", "D": ""},  # Placeholder
-                                    "correct_answer": correct_match.group(1),
-                                    "explanation": "",
-                                    "topic": "",
-                                    "difficulty": "medium"
-                                })
-                    except:
+                        # Extract choices - handle nested JSON structure
+                        choices_dict = {}
+                        for choice in ["A", "B", "C", "D"]:
+                            # Look for "A": "value" pattern, handling escaped quotes
+                            choice_pattern = f'"{choice}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'
+                            choice_match = re.search(choice_pattern, problem_str, re.DOTALL)
+                            if choice_match:
+                                choices_dict[choice] = choice_match.group(1).replace('\\"', '"').replace('\\\\', '\\')
+                        
+                        # Extract explanation
+                        explanation_match = re.search(r'"explanation"\s*:\s*"((?:[^"\\]|\\.)*)"', problem_str, re.DOTALL)
+                        explanation = explanation_match.group(1).replace('\\"', '"').replace('\\\\', '\\') if explanation_match else ""
+                        
+                        # Extract topic and difficulty
+                        topic_match = re.search(r'"topic"\s*:\s*"((?:[^"\\]|\\.)*)"', problem_str)
+                        topic = topic_match.group(1).replace('\\"', '"').replace('\\\\', '\\') if topic_match else ""
+                        
+                        difficulty_match = re.search(r'"difficulty"\s*:\s*"([^"]*)"', problem_str)
+                        difficulty = difficulty_match.group(1) if difficulty_match else "medium"
+                        
+                        if question_match and correct_match and len(choices_dict) == 4:
+                            problems_found.append({
+                                "problem_number": len(problems_found) + 1,
+                                "question": question_match.group(1).replace('\\"', '"').replace('\\\\', '\\'),
+                                "choices": choices_dict,
+                                "correct_answer": correct_match.group(1),
+                                "explanation": explanation,
+                                "topic": topic,
+                                "difficulty": difficulty
+                            })
                         continue
+                    
+                    # If JSON parsing succeeded, validate and add
+                    if isinstance(problem_obj, dict):
+                        # Validate it has required fields with non-empty values
+                        if ("question" in problem_obj and problem_obj["question"] and
+                            "choices" in problem_obj and isinstance(problem_obj["choices"], dict) and
+                            len(problem_obj["choices"]) == 4 and
+                            all(v and isinstance(v, str) and v.strip() for v in problem_obj["choices"].values()) and
+                            "correct_answer" in problem_obj):
+                            problems_found.append(problem_obj)
+                except Exception as e:
+                    logger.debug(f"Error extracting problem from JSON: {e}")
+                    continue
             
             if len(problems_found) > 0:
                 logger.info(f"Extracted {len(problems_found)} complete problems from truncated JSON")
