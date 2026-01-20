@@ -356,7 +356,7 @@ export default function ExamGeneratorPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Number of Problems
+                    Number of Problems per Learning Objective
                   </label>
                   <input
                     type="number"
@@ -366,6 +366,9 @@ export default function ExamGeneratorPage() {
                     onChange={(e) => setNumProblems(parseInt(e.target.value) || 10)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Each learning objective in your input will get this many problems
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
