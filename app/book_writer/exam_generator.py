@@ -625,26 +625,26 @@ CRITICAL REQUIREMENTS:
                                 logger.warning(f"Problem {i} is not a dictionary (type: {type(p)}), skipping")
                                 continue
                             
-                            # Validate required fields
-                            if not p.get("question") or not p.get("choices"):
-                                logger.warning(f"Problem {i} missing required fields, skipping")
+                            # Validate required fields - but allow problems with empty choices to pass through
+                            # The validator will catch and fix these later
+                            if not p.get("question"):
+                                logger.warning(f"Problem {i} missing question, skipping")
                                 continue
                             
-                            # Extract choices and validate they're not empty
+                            # Extract choices - allow empty choices, validator will fix them
                             choices = p.get("choices", {})
                             if not isinstance(choices, dict):
-                                logger.warning(f"Problem {i} has invalid choices type: {type(choices)}, skipping")
-                                continue
+                                # Create empty choices dict if invalid
+                                choices = {}
                             
-                            # Validate all choices have non-empty text
-                            valid_choices = {}
+                            # Ensure all choice keys exist (even if empty)
                             for key in ["A", "B", "C", "D"]:
-                                if key in choices and choices[key] and str(choices[key]).strip():
-                                    valid_choices[key] = str(choices[key]).strip()
-                            
-                            if len(valid_choices) != 4:
-                                logger.warning(f"Problem {i} has {len(valid_choices)} valid choices (expected 4), skipping. Choices: {choices}")
-                                continue
+                                if key not in choices:
+                                    choices[key] = ""
+                                elif choices[key]:
+                                    choices[key] = str(choices[key]).strip()
+                                else:
+                                    choices[key] = ""
                             
                             # Extract topic/subtopic from objective number
                             obj_number = objective.get("number", "")
@@ -660,8 +660,8 @@ CRITICAL REQUIREMENTS:
                             problem = ExamProblem(
                                 problem_number=len(problems) + 1,
                                 question=p.get("question", "").strip(),
-                                choices=valid_choices,
-                                correct_answer=p.get("correct_answer", "A").strip().upper(),
+                                choices=choices,  # Allow empty choices - validator will fix
+                                correct_answer=p.get("correct_answer", "A").strip().upper() if p.get("correct_answer") else "A",
                                 explanation=p.get("explanation", "").strip(),
                                 topic=p.get("topic", objective_text).strip(),
                                 difficulty=p.get("difficulty", "medium").strip().lower(),
@@ -671,14 +671,15 @@ CRITICAL REQUIREMENTS:
                                 subtopic_number=subtopic_num
                             )
                             
-                            # Validate problem structure
+                            # Only validate that question exists - allow problems with empty choices through
                             if not problem.question:
                                 logger.warning(f"Problem {i} has empty question, skipping")
                                 continue
                             
-                            if problem.correct_answer not in problem.choices:
-                                logger.warning(f"Problem {i} has invalid correct_answer {problem.correct_answer}, skipping")
-                                continue
+                            # Log if choices are empty - validator will fix this
+                            empty_choice_count = sum(1 for v in choices.values() if not v or not v.strip())
+                            if empty_choice_count > 0:
+                                logger.info(f"Problem {i} has {empty_choice_count} empty choices - will be fixed by validator")
                             
                             problems.append(problem)
                             logger.info(f"Added problem {problem.problem_number}: {problem.question[:50]}...")
@@ -1095,6 +1096,49 @@ class ValidationAgent(BaseAgent):
     
     async def validate_problem(self, problem: ExamProblem, content: str) -> Dict[str, Any]:
         """Validate a single problem by attempting to answer it."""
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
+        # First check for structural issues (empty choices, missing fields)
+        issues = []
+        
+        # Check for empty choices
+        empty_choices = []
+        for key in ["A", "B", "C", "D"]:
+            choice_text = problem.choices.get(key, "")
+            if not choice_text or not str(choice_text).strip():
+                empty_choices.append(key)
+        
+        if empty_choices:
+            issues.append(f"Missing or empty choices: {', '.join(empty_choices)}")
+            logger.warning(f"Problem {problem.problem_number} has empty choices: {empty_choices}")
+        
+        # Check if question is empty
+        if not problem.question or not problem.question.strip():
+            issues.append("Question is empty or missing")
+        
+        # Check if correct_answer is valid
+        if problem.correct_answer not in ["A", "B", "C", "D"]:
+            issues.append(f"Invalid correct_answer: {problem.correct_answer}")
+        elif problem.correct_answer in empty_choices:
+            issues.append(f"Correct answer {problem.correct_answer} is empty")
+        
+        # If there are structural issues, mark as invalid immediately
+        if issues:
+            return {
+                "problem_number": problem.problem_number,
+                "selected_answer": None,
+                "matches_correct": False,
+                "is_ambiguous": False,
+                "other_correct_answers": [],
+                "explanation_accurate": False,
+                "issues": issues,
+                "validation_status": "invalid",
+                "needs_fixing": True,
+                "fix_type": "empty_choices" if empty_choices else "structural"
+            }
+        
+        # If no structural issues, proceed with content validation
         system_prompt = """You are a Validation Agent that takes exams to verify their correctness.
 Your task is to:
 1. Read the question carefully
@@ -1210,6 +1254,154 @@ Respond in JSON format:
         return results
 
 
+class ProblemFixerAgent(BaseAgent):
+    """Fixes individual problems by generating missing choices and answers."""
+    
+    def __init__(self, llm_client: LLMClient):
+        super().__init__("Problem Fixer", "Problem Repair Specialist", llm_client)
+    
+    async def fix_problem(self, problem: ExamProblem, content: str, analysis: Dict[str, Any]) -> ExamProblem:
+        """Fix a problem by generating missing choices and correct answer."""
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
+        logger.info(f"Fixing problem {problem.problem_number}: {problem.question[:50]}...")
+        
+        system_prompt = """You are a Problem Fixer Agent specializing in completing incomplete exam problems.
+Your task is to:
+1. Analyze the question
+2. Generate 4 complete answer choices (A, B, C, D)
+3. Determine the correct answer
+4. Ensure all choices are plausible and only one is correct
+5. Generate an explanation for why the correct answer is correct
+
+CRITICAL: You must generate choices that are directly related to the question and ensure exactly ONE correct answer."""
+        
+        # Find the learning objective context
+        objective_context = ""
+        if problem.learning_objective_text:
+            objective_context = f"\nLearning Objective: {problem.learning_objective_number} - {problem.learning_objective_text}"
+        
+        user_prompt = f"""Fix this incomplete exam problem by generating the missing choices and correct answer:
+
+Question: {problem.question}
+
+Current Choices (may be empty):
+A. {problem.choices.get('A', '')}
+B. {problem.choices.get('B', '')}
+C. {problem.choices.get('C', '')}
+D. {problem.choices.get('D', '')}
+
+{objective_context}
+
+Content Reference:
+{content[:2000]}
+
+Analysis:
+{json.dumps(analysis, indent=2)}
+
+You MUST respond with ONLY valid JSON in this exact format:
+{{
+    "choices": {{
+        "A": "First choice text (must be complete and meaningful)",
+        "B": "Second choice text (must be complete and meaningful)",
+        "C": "Third choice text (must be complete and meaningful)",
+        "D": "Fourth choice text (must be complete and meaningful)"
+    }},
+    "correct_answer": "A|B|C|D",
+    "explanation": "Detailed explanation of why the correct answer is correct"
+}}
+
+CRITICAL REQUIREMENTS:
+- All 4 choices must be complete, non-empty, and meaningful
+- All choices must be plausible answers to the question
+- Exactly ONE choice must be correct
+- The correct_answer must be one of: A, B, C, or D
+- The explanation must clearly explain why the correct answer is correct
+- Respond with ONLY the JSON object, no other text"""
+        
+        response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
+        
+        # Extract JSON from response
+        json_data = None
+        
+        # Try multiple JSON extraction methods
+        try:
+            json_data = json.loads(response.strip())
+        except:
+            # Try balanced braces
+            start_idx = response.find('{')
+            if start_idx != -1:
+                brace_count = 0
+                end_idx = start_idx
+                for i in range(start_idx, len(response)):
+                    if response[i] == '{':
+                        brace_count += 1
+                    elif response[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+                
+                if brace_count == 0:
+                    try:
+                        json_str = response[start_idx:end_idx]
+                        json_data = json.loads(json_str)
+                    except:
+                        pass
+        
+        if not json_data:
+            # Try markdown code blocks
+            code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if code_block_match:
+                try:
+                    json_data = json.loads(code_block_match.group(1))
+                except:
+                    pass
+        
+        if json_data:
+            # Update the problem with fixed choices and answer
+            fixed_choices = json_data.get("choices", {})
+            correct_answer = json_data.get("correct_answer", "A").strip().upper()
+            explanation = json_data.get("explanation", problem.explanation)
+            
+            # Validate fixed choices
+            if isinstance(fixed_choices, dict) and len(fixed_choices) == 4:
+                # Ensure all choices are non-empty
+                all_valid = True
+                for key in ["A", "B", "C", "D"]:
+                    if key not in fixed_choices or not str(fixed_choices[key]).strip():
+                        all_valid = False
+                        break
+                
+                if all_valid and correct_answer in fixed_choices:
+                    # Create fixed problem
+                    fixed_problem = ExamProblem(
+                        problem_number=problem.problem_number,
+                        question=problem.question,
+                        choices=fixed_choices,
+                        correct_answer=correct_answer,
+                        explanation=explanation if explanation else problem.explanation,
+                        topic=problem.topic,
+                        difficulty=problem.difficulty,
+                        learning_objective_number=problem.learning_objective_number,
+                        learning_objective_text=problem.learning_objective_text,
+                        topic_number=problem.topic_number,
+                        subtopic_number=problem.subtopic_number
+                    )
+                    logger.info(f"Successfully fixed problem {problem.problem_number}")
+                    return fixed_problem
+                else:
+                    logger.warning(f"Fixed choices are invalid for problem {problem.problem_number}")
+            else:
+                logger.warning(f"Invalid choices format in fix response for problem {problem.problem_number}")
+        else:
+            logger.error(f"Could not parse fix response for problem {problem.problem_number}")
+        
+        # If fixing failed, return original problem (will be caught in next validation iteration)
+        return problem
+
+
 class ReviewAgent(BaseAgent):
     """Final review agent that ensures all problems meet quality standards."""
     
@@ -1281,18 +1473,37 @@ IMPORTANT: You MUST respond with ONLY valid JSON. Do not include any explanatory
         invalid_count = sum(1 for v in validation_results if v.get("validation_status") != "valid")
         ambiguous_count = sum(1 for v in validation_results if v.get("is_ambiguous", False))
         
+        # Check for section header completeness (learning objective metadata)
+        problems_missing_headers = []
+        for idx, problem in enumerate(problems, 1):
+            if not problem.learning_objective_number or not problem.learning_objective_text:
+                problems_missing_headers.append(idx)
+        
+        header_issues = []
+        if problems_missing_headers:
+            header_issues.append(f"Problems {', '.join(map(str, problems_missing_headers))} are missing learning objective metadata (section headers)")
+        
         user_prompt = f"""Review the complete exam:
 
 Content Length: {len(content)} characters
 Number of Problems: {len(problems)}
 Invalid Problems: {invalid_count}
 Ambiguous Problems: {ambiguous_count}
+Problems Missing Section Headers: {len(problems_missing_headers)}
+
+IMPORTANT: Check that:
+1. All problems have complete choices (A, B, C, D) with non-empty text
+2. All problems have correct answers
+3. All problems have learning objective metadata for proper section headers
+4. Section headers are properly organized by topic/subtopic/learning objective
 
 Problems:
 {json.dumps([p.to_dict() for p in problems], indent=2)}
 
 Validation Results:
 {json.dumps(validation_results, indent=2)}
+
+{"Section Header Issues: " + "; ".join(header_issues) if header_issues else ""}
 
 Provide a comprehensive review in JSON format:
 {{
@@ -1458,6 +1669,7 @@ class ExamGeneratorCompany:
         self.content_analyst = ContentAnalystAgent(self.llm_client)
         self.problem_generator = ProblemGeneratorAgent(self.llm_client)
         self.validation_agent = ValidationAgent(self.llm_client)
+        self.problem_fixer = ProblemFixerAgent(self.llm_client)
         self.review_agent = ReviewAgent(self.llm_client)
         
         self.project: Optional[ExamProject] = None
@@ -1603,8 +1815,19 @@ class ExamGeneratorCompany:
                 if v.get("validation_status") != "valid" or v.get("is_ambiguous", False)
             ]
             
+            # Separate problems that need fixing (empty choices) from those that need regeneration
+            problems_needing_fixing = [
+                v for v in invalid_problems 
+                if v.get("needs_fixing") and v.get("fix_type") == "empty_choices"
+            ]
+            problems_needing_regeneration = [
+                v for v in invalid_problems
+                if not v.get("needs_fixing") or v.get("fix_type") != "empty_choices"
+            ]
+            
             valid_count = len(validation_results) - len(invalid_problems)
             logger.info(f"Iteration {iteration + 1}: {valid_count}/{len(validation_results)} problems valid")
+            logger.info(f"Problems needing fixing: {len(problems_needing_fixing)}, needing regeneration: {len(problems_needing_regeneration)}")
             update_progress("validation", 60 + (iteration * 10), f"{valid_count}/{len(validation_results)} problems validated")
             
             if not invalid_problems:
@@ -1613,11 +1836,29 @@ class ExamGeneratorCompany:
                 update_progress("validation", 85, "All problems validated successfully")
                 break
             
-            # Regenerate invalid problems
-            if iteration < max_iterations - 1:
-                invalid_indices = [v["problem_number"] - 1 for v in invalid_problems]
+            # Fix problems with empty choices using ProblemFixerAgent
+            if problems_needing_fixing and iteration < max_iterations - 1:
+                logger.info(f"Fixing {len(problems_needing_fixing)} problems with empty choices")
+                update_progress("validation", 70 + (iteration * 5), f"Fixing {len(problems_needing_fixing)} problems with empty choices...")
+                
+                for validation_result in problems_needing_fixing:
+                    problem_idx = validation_result["problem_number"] - 1
+                    if problem_idx < len(problems):
+                        original_problem = problems[problem_idx]
+                        # Fix the problem
+                        fixed_problem = await self.problem_fixer.fix_problem(
+                            original_problem,
+                            project.input_content,
+                            analysis
+                        )
+                        problems[problem_idx] = fixed_problem
+                        logger.info(f"Fixed problem {problem_idx + 1}")
+            
+            # Regenerate other invalid problems (ambiguous, wrong answers, etc.)
+            if problems_needing_regeneration and iteration < max_iterations - 1:
+                invalid_indices = [v["problem_number"] - 1 for v in problems_needing_regeneration]
                 logger.info(f"Regenerating {len(invalid_indices)} invalid problems")
-                update_progress("validation", 70 + (iteration * 5), f"Regenerating {len(invalid_indices)} invalid problems...")
+                update_progress("validation", 75 + (iteration * 5), f"Regenerating {len(invalid_indices)} invalid problems...")
                 
                 for idx in invalid_indices:
                     if idx < len(problems):
@@ -1628,8 +1869,14 @@ class ExamGeneratorCompany:
                             1
                         )
                         if new_problems:
-                            problems[idx] = new_problems[0]
-                            problems[idx].problem_number = idx + 1
+                            # Preserve learning objective metadata
+                            new_problem = new_problems[0]
+                            new_problem.problem_number = idx + 1
+                            new_problem.learning_objective_number = problems[idx].learning_objective_number
+                            new_problem.learning_objective_text = problems[idx].learning_objective_text
+                            new_problem.topic_number = problems[idx].topic_number
+                            new_problem.subtopic_number = problems[idx].subtopic_number
+                            problems[idx] = new_problem
                             logger.info(f"Regenerated problem {idx + 1}")
         
         project.validation_results = all_validation_results
