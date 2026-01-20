@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { InlineMath } from 'react-katex';
-import 'katex/dist/katex.min.css';
 
 interface ExamGeneratorProject {
   project_id: string;
@@ -26,75 +24,6 @@ const PHASE_NAMES: Record<string, string> = {
   validation: 'Validation',
   final_review: 'Final Review',
   complete: 'Complete'
-};
-
-// Helper function to render LaTeX in text
-const renderLaTeX = (text: string): JSX.Element | string => {
-  if (!text) return '';
-  
-  // Split text by LaTeX delimiters: $...$ or \( \) for inline, \[ \] for block
-  const parts: (string | JSX.Element)[] = [];
-  let key = 0;
-  let currentIndex = 0;
-  
-  // Handle both $...$ and \(...\) formats
-  // First handle $...$ (more common in LLM outputs)
-  const dollarPattern = /\$([^$]+)\$/g;
-  let match;
-  
-  while ((match = dollarPattern.exec(text)) !== null) {
-    // Add text before the match
-    if (match.index > currentIndex) {
-      parts.push(text.substring(currentIndex, match.index));
-    }
-    // Add LaTeX math
-    try {
-      parts.push(<InlineMath key={key++} math={match[1]} />);
-    } catch (e) {
-      // If LaTeX parsing fails, just show the original text
-      parts.push(match[0]);
-    }
-    currentIndex = match.index + match[0].length;
-  }
-  
-  // If we found $ delimiters, add remaining text and return
-  if (currentIndex > 0) {
-    if (currentIndex < text.length) {
-      parts.push(text.substring(currentIndex));
-    }
-    return <>{parts}</>;
-  }
-  
-  // If no $ delimiters found, try \(...\) format
-  const parenPattern = /\\?\(([^)]+)\\?\)/g;
-  currentIndex = 0;
-  
-  while ((match = parenPattern.exec(text)) !== null) {
-    // Add text before the match
-    if (match.index > currentIndex) {
-      parts.push(text.substring(currentIndex, match.index));
-    }
-    // Add LaTeX math
-    try {
-      parts.push(<InlineMath key={key++} math={match[1]} />);
-    } catch (e) {
-      // If LaTeX parsing fails, just show the original text
-      parts.push(match[0]);
-    }
-    currentIndex = match.index + match[0].length;
-  }
-  
-  // Add remaining text
-  if (currentIndex < text.length) {
-    parts.push(text.substring(currentIndex));
-  }
-  
-  // If no LaTeX found, return original text
-  if (parts.length === 0 || (parts.length === 1 && typeof parts[0] === 'string' && parts[0] === text)) {
-    return text;
-  }
-  
-  return <>{parts}</>;
 };
 
 export default function ExamGeneratorPage() {
@@ -659,20 +588,14 @@ export default function ExamGeneratorPage() {
                   <div className="text-sm text-gray-600 mb-2">
                     Topic: {problem.topic} | Difficulty: {problem.difficulty}
                   </div>
-                  <div className="mb-2">{renderLaTeX(problem.question)}</div>
+                  <div className="mb-2">{problem.question}</div>
                   <div className="ml-4 space-y-1">
                     {Object.entries(problem.choices || {}).map(([choice, text]: [string, any]) => (
                       <div key={choice} className="text-sm">
-                        {choice}. {renderLaTeX(String(text))} {choice === problem.correct_answer && <span className="text-green-600 font-bold">✓</span>}
+                        {choice}. {text} {choice === problem.correct_answer && '✓'}
                       </div>
                     ))}
                   </div>
-                  {problem.explanation && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="text-sm font-semibold mb-1">Explanation:</div>
-                      <div className="text-sm text-gray-700">{renderLaTeX(problem.explanation)}</div>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>

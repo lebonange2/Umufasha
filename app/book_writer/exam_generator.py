@@ -266,159 +266,45 @@ class ProblemGeneratorAgent(BaseAgent):
             problems_found = []
             
             # Look for problem objects - they start with "problem_number"
-            # Use balanced brace matching to find complete problem objects
-            problem_starts = []
-            for i, char in enumerate(response):
-                if response[i:i+16] == '"problem_number"':
-                    # Found start of a problem, now find the matching closing brace
-                    # Go back to find the opening brace
-                    brace_start = response.rfind('{', 0, i)
-                    if brace_start != -1:
-                        problem_starts.append(brace_start)
+            # Use a more flexible pattern to find problem objects
+            pattern = r'\{\s*"problem_number"\s*:\s*\d+.*?"correct_answer"\s*:\s*"[ABCD]".*?\}'
+            matches = list(re.finditer(pattern, response, re.DOTALL))
             
-            for problem_start in problem_starts:
-                # Find the matching closing brace using balanced brace counting
-                brace_count = 0
-                problem_end = problem_start
-                in_string = False
-                escape_next = False
-                
-                for i in range(problem_start, len(response)):
-                    char = response[i]
-                    
-                    if escape_next:
-                        escape_next = False
-                        continue
-                    
-                    if char == '\\':
-                        escape_next = True
-                        continue
-                    
-                    if char == '"' and not escape_next:
-                        in_string = not in_string
-                        continue
-                    
-                    if not in_string:
-                        if char == '{':
-                            brace_count += 1
-                        elif char == '}':
-                            brace_count -= 1
-                            if brace_count == 0:
-                                problem_end = i + 1
-                                break
-                
-                if brace_count == 0:
-                    problem_str = response[problem_start:problem_end]
-                else:
-                    # Truncated - take what we have
-                    problem_str = response[problem_start:]
+            for match in matches:
+                problem_str = match.group(0)
+                # Ensure it's properly closed
+                if not problem_str.rstrip().endswith('}'):
+                    # Try to close it
+                    problem_str = problem_str.rstrip().rstrip(',') + '}'
                 
                 try:
-                    # First try to parse as JSON - handle escaped backslashes
-                    # Replace single backslashes that aren't part of escape sequences
-                    # This is a workaround for LaTeX backslashes in JSON strings
-                    problem_str_fixed = problem_str
-                    # Try to fix common LaTeX escape issues
-                    # Don't fix if it's already valid JSON
+                    problem_obj = json.loads(problem_str)
+                    if isinstance(problem_obj, dict):
+                        # Validate it has required fields
+                        if "question" in problem_obj and "choices" in problem_obj and "correct_answer" in problem_obj:
+                            problems_found.append(problem_obj)
+                except:
+                    # Try to extract fields manually if JSON parsing fails
                     try:
-                        problem_obj = json.loads(problem_str)
-                    except json.JSONDecodeError as e:
-                        # If JSON parsing fails, try to extract fields manually
-                        # Extract key fields using regex that handles escaped quotes
-                        question_match = re.search(r'"question"\s*:\s*"((?:[^"\\]|\\.)*)"', problem_str, re.DOTALL)
+                        # Extract key fields using regex
+                        question_match = re.search(r'"question"\s*:\s*"([^"]*)"', problem_str)
                         correct_match = re.search(r'"correct_answer"\s*:\s*"([ABCD])"', problem_str)
                         
-                        # Extract choices - handle nested JSON structure
-                        choices_dict = {}
-                        for choice in ["A", "B", "C", "D"]:
-                            # Look for "A": "value" pattern, handling escaped quotes
-                            choice_pattern = f'"{choice}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'
-                            choice_match = re.search(choice_pattern, problem_str, re.DOTALL)
-                            if choice_match:
-                                choices_dict[choice] = choice_match.group(1).replace('\\"', '"').replace('\\\\', '\\')
-                        
-                        # Extract explanation - handle multi-line and escaped characters
-                        # Try to find explanation field, handling escaped quotes and newlines
-                        explanation_match = re.search(r'"explanation"\s*:\s*"((?:[^"\\]|\\.|\\n)*)"', problem_str, re.DOTALL)
-                        if not explanation_match:
-                            # Try alternative pattern for unterminated strings - look for explanation field and extract until end or next field
-                            explanation_start = problem_str.find('"explanation"')
-                            if explanation_start != -1:
-                                # Find the colon after "explanation"
-                                colon_pos = problem_str.find(':', explanation_start)
-                                if colon_pos != -1:
-                                    # Find the opening quote
-                                    quote_start = problem_str.find('"', colon_pos)
-                                    if quote_start != -1:
-                                        # Extract until we find a closing quote that's not escaped, or end of string
-                                        explanation_text = ""
-                                        i = quote_start + 1
-                                        while i < len(problem_str):
-                                            if problem_str[i] == '\\' and i + 1 < len(problem_str):
-                                                explanation_text += problem_str[i:i+2]
-                                                i += 2
-                                            elif problem_str[i] == '"':
-                                                # Check if this is followed by comma or closing brace (end of field)
-                                                j = i + 1
-                                                while j < len(problem_str) and problem_str[j] in ' \t\n\r':
-                                                    j += 1
-                                                if j < len(problem_str) and problem_str[j] in ',}':
-                                                    break
-                                                explanation_text += problem_str[i]
-                                                i += 1
-                                            else:
-                                                explanation_text += problem_str[i]
-                                                i += 1
-                                        explanation = explanation_text.replace('\\"', '"').replace('\\\\', '\\').replace('\\n', '\n').strip()
-                                    else:
-                                        explanation = ""
-                                else:
-                                    explanation = ""
-                            else:
-                                explanation = ""
-                        else:
-                            explanation = explanation_match.group(1).replace('\\"', '"').replace('\\\\', '\\').replace('\\n', '\n').strip()
-                        
-                        # Extract topic and difficulty
-                        topic_match = re.search(r'"topic"\s*:\s*"((?:[^"\\]|\\.)*)"', problem_str)
-                        topic = topic_match.group(1).replace('\\"', '"').replace('\\\\', '\\') if topic_match else ""
-                        
-                        difficulty_match = re.search(r'"difficulty"\s*:\s*"([^"]*)"', problem_str)
-                        difficulty = difficulty_match.group(1) if difficulty_match else "medium"
-                        
-                        # Only add if we have all required fields including non-empty explanation
-                        if question_match and correct_match and len(choices_dict) == 4 and explanation:
-                            problems_found.append({
-                                "problem_number": len(problems_found) + 1,
-                                "question": question_match.group(1).replace('\\"', '"').replace('\\\\', '\\'),
-                                "choices": choices_dict,
-                                "correct_answer": correct_match.group(1),
-                                "explanation": explanation,
-                                "topic": topic,
-                                "difficulty": difficulty
-                            })
-                        else:
-                            logger.debug(f"Skipping problem in _try_fix_json: question={bool(question_match)}, choices={len(choices_dict)}, explanation={bool(explanation)}")
+                        if question_match and correct_match:
+                            # Try to extract choices
+                            choices_match = re.search(r'"choices"\s*:\s*\{([^}]*)\}', problem_str, re.DOTALL)
+                            if choices_match:
+                                problems_found.append({
+                                    "problem_number": len(problems_found) + 1,
+                                    "question": question_match.group(1),
+                                    "choices": {"A": "", "B": "", "C": "", "D": ""},  # Placeholder
+                                    "correct_answer": correct_match.group(1),
+                                    "explanation": "",
+                                    "topic": "",
+                                    "difficulty": "medium"
+                                })
+                    except:
                         continue
-                    
-                    # If JSON parsing succeeded, validate and add
-                    if isinstance(problem_obj, dict):
-                        # Validate it has required fields with non-empty values
-                        choices = problem_obj.get("choices", {})
-                        explanation = problem_obj.get("explanation", "").strip()
-                        
-                        if ("question" in problem_obj and problem_obj["question"] and
-                            "choices" in problem_obj and isinstance(choices, dict) and
-                            len(choices) == 4 and
-                            all(v and isinstance(v, str) and v.strip() for v in choices.values()) and
-                            "correct_answer" in problem_obj and
-                            explanation):  # Ensure explanation is not empty
-                            problems_found.append(problem_obj)
-                        else:
-                            logger.debug(f"Skipping problem due to missing fields: question={bool(problem_obj.get('question'))}, choices_valid={len(choices) == 4 and all(v and isinstance(v, str) and v.strip() for v in choices.values())}, explanation={bool(explanation)}")
-                except Exception as e:
-                    logger.debug(f"Error extracting problem from JSON: {e}")
-                    continue
             
             if len(problems_found) > 0:
                 logger.info(f"Extracted {len(problems_found)} complete problems from truncated JSON")
@@ -450,30 +336,6 @@ Your task is to generate questions that:
 
 CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
 
-EXPLANATION REQUIREMENTS:
-- Every problem MUST include a comprehensive explanation
-- The explanation must clearly explain WHY the correct answer is correct
-- Include step-by-step reasoning when applicable (especially for mathematical problems)
-- Explain why the correct answer is the best choice
-- Optionally mention why other choices are incorrect (this helps students learn)
-- Use LaTeX formatting for any mathematical expressions in the explanation
-- The explanation should be educational and help students understand the concept
-
-LATEX FORMATTING REQUIREMENTS:
-- Use LaTeX syntax for ALL mathematical expressions, formulas, equations, and symbols
-- Use \\( and \\) for inline math (e.g., \\(x^2 + 3x - 4\\))
-- Use \\[ and \\] for display math (e.g., \\[\\frac{a}{b}\\])
-- Common LaTeX symbols:
-  * Fractions: \\frac{numerator}{denominator} (e.g., \\frac{3}{\\sqrt{7} - 1})
-  * Square roots: \\sqrt{expression} (e.g., \\sqrt{25} or \\sqrt{x + 1})
-  * Powers: ^{exponent} (e.g., x^2, a^{n+1})
-  * Subscripts: _{subscript} (e.g., x_1, a_n)
-  * Greek letters: \\alpha, \\beta, \\gamma, \\theta, \\pi, etc.
-  * Operators: \\times, \\div, \\pm, \\mp, \\leq, \\geq, \\neq, \\approx
-  * Sets: \\in, \\notin, \\subset, \\cup, \\cap
-  * Other: \\infty, \\sum, \\prod, \\int, \\lim
-- Always use LaTeX for mathematical notation - never use plain text for math
-
 You MUST respond with valid JSON only. Do not include any text before or after the JSON."""
         
         # Use more content (up to 5000 chars) for better context
@@ -498,27 +360,20 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
     "problems": [
         {{
             "problem_number": 1,
-            "question": "Question text with LaTeX? For example: To rationalize the denominator of \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), what conjugate should be used?",
+            "question": "Question text here?",
             "choices": {{
-                "A": "First choice with LaTeX: \\(\\sqrt{{7}} + 1\\)",
-                "B": "Second choice with LaTeX: \\(\\sqrt{{7}} - 1\\)",
-                "C": "Third choice with LaTeX: \\(7 + \\sqrt{{1}}\\)",
-                "D": "Fourth choice with LaTeX: \\(7 - \\sqrt{{1}}\\)"
+                "A": "First choice",
+                "B": "Second choice",
+                "C": "Third choice",
+                "D": "Fourth choice"
             }},
             "correct_answer": "A",
-            "explanation": "To rationalize the denominator \\(\\sqrt{{7}} - 1\\), we multiply both numerator and denominator by the conjugate \\(\\sqrt{{7}} + 1\\). The conjugate of a binomial \\(a - b\\) is \\(a + b\\). When we multiply \\((\\sqrt{{7}} - 1)(\\sqrt{{7}} + 1)\\), we get \\(7 - 1 = 6\\), which eliminates the radical from the denominator. Therefore, the conjugate \\(\\sqrt{{7}} + 1\\) (choice A) is correct. Choice B is the original denominator, not the conjugate. Choices C and D are incorrect as they don't follow the conjugate pattern.",
+            "explanation": "Explanation of why the correct answer is correct",
             "topic": "{objective_text}",
             "difficulty": "easy"
         }}
     ]
 }}
-
-IMPORTANT LATEX EXAMPLES:
-- Fractions: \\(\\frac{{a}}{{b}}\\), \\(\\frac{{3x + 2}}{{x - 1}}\\)
-- Square roots: \\(\\sqrt{{x}}\\), \\(\\sqrt{{x^2 + 1}}\\)
-- Powers: \\(x^2\\), \\(a^{{n+1}}\\)
-- Complex expressions: \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), \\(\\sqrt{{\\frac{{a}}{{b}}}}\\)
-- Always escape curly braces in JSON strings by doubling them: {{ and }}
 
 CRITICAL REQUIREMENTS:
 - Generate exactly {num_problems} problems
@@ -526,10 +381,6 @@ CRITICAL REQUIREMENTS:
 - Each problem must have exactly 4 choices (A, B, C, D)
 - Each problem must have exactly ONE correct answer
 - The correct_answer must be one of: A, B, C, or D
-- Each problem MUST include a detailed explanation that explains WHY the correct answer is correct
-- Explanations should include step-by-step reasoning for mathematical problems
-- Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
-- Always escape curly braces in JSON strings by doubling them: {{ and }}
 - Respond with ONLY the JSON object, no other text"""
         
         # Retry logic - try up to 3 times
@@ -540,21 +391,6 @@ CRITICAL REQUIREMENTS:
             try:
                 response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
                 logger.info(f"Problem generation attempt {attempt + 1} for objective '{objective_text}'", response_length=len(response))
-                
-                # Debug: Log a preview of the response to see what the LLM is generating
-                if response:
-                    preview = response[:500] if len(response) > 500 else response
-                    logger.debug(f"Response preview (first 500 chars): {preview}")
-                    # Check if explanation field is present in response
-                    if '"explanation"' in response:
-                        logger.debug("Found 'explanation' field in response")
-                        # Try to find a sample of the explanation
-                        exp_idx = response.find('"explanation"')
-                        if exp_idx != -1:
-                            exp_sample = response[exp_idx:exp_idx+200]
-                            logger.debug(f"Explanation field sample: {exp_sample}")
-                    else:
-                        logger.warning("No 'explanation' field found in LLM response!")
                 
                 # Check if response is empty
                 if not response or len(response.strip()) == 0:
@@ -718,15 +554,41 @@ CRITICAL REQUIREMENTS:
                                     logger.debug(f"Failed to parse problems array: {e}, array_str preview: {array_str[:200] if 'array_str' in locals() else 'N/A'}")
                                     pass
                 
-                # Method 6: Try to extract partial problems from truncated JSON using _try_fix_json
+                # Method 6: Try to extract partial problems from truncated JSON
                 if not json_data:
-                    fixed_json = self._try_fix_json(response)
-                    if fixed_json:
+                    # Look for complete problem objects even if the JSON is truncated
+                    problems_found = []
+                    # Find all problem objects using regex
+                    problem_pattern = r'\{\s*"problem_number"\s*:\s*\d+[^}]*"correct_answer"\s*:\s*"[ABCD]"[^}]*\}'
+                    matches = re.finditer(problem_pattern, response, re.DOTALL)
+                    
+                    for match in matches:
                         try:
-                            json_data = json.loads(fixed_json)
-                            logger.info(f"Successfully extracted problems using method 6 (_try_fix_json)")
+                            problem_str = match.group(0)
+                            # Try to close the object if needed
+                            if not problem_str.endswith('}'):
+                                # Find the last complete field before truncation
+                                # Look for the last "correct_answer" field
+                                last_correct = problem_str.rfind('"correct_answer"')
+                                if last_correct != -1:
+                                    # Find the closing quote and value
+                                    value_start = problem_str.find(':', last_correct) + 1
+                                    value_end = problem_str.find(',', value_start)
+                                    if value_end == -1:
+                                        value_end = problem_str.find('}', value_start)
+                                    if value_end != -1:
+                                        # Close the object
+                                        problem_str = problem_str[:value_end] + '}'
+                            
+                            problem_obj = json.loads(problem_str)
+                            if isinstance(problem_obj, dict) and "question" in problem_obj and "choices" in problem_obj:
+                                problems_found.append(problem_obj)
                         except:
-                            pass
+                            continue
+                    
+                    if len(problems_found) > 0:
+                        json_data = {"problems": problems_found}
+                        logger.info(f"Successfully extracted {len(problems_found)} partial problems using method 6")
                 
                 if json_data:
                     problem_list = json_data.get("problems", [])
@@ -755,43 +617,12 @@ CRITICAL REQUIREMENTS:
                                 logger.warning(f"Problem {i} missing required fields, skipping")
                                 continue
                             
-                            # Get choices and validate they're not empty
-                            choices = p.get("choices", {})
-                            if not isinstance(choices, dict):
-                                logger.warning(f"Problem {i} has invalid choices type: {type(choices)}, skipping")
-                                continue
-                            
-                            # Check if choices are empty strings
-                            choices_valid = False
-                            if len(choices) == 4:
-                                choices_valid = all(
-                                    key in choices and 
-                                    isinstance(choices[key], str) and 
-                                    choices[key].strip() != ""
-                                    for key in ["A", "B", "C", "D"]
-                                )
-                            
-                            if not choices_valid:
-                                logger.warning(f"Problem {i} has empty or invalid choices: {choices}, skipping")
-                                continue
-                            
-                            # Validate explanation is not empty
-                            explanation = p.get("explanation", "").strip()
-                            if not explanation:
-                                logger.warning(f"Problem {i} has empty explanation, skipping. Problem keys: {list(p.keys())}, explanation value: {repr(p.get('explanation'))}")
-                                # Log the full problem for debugging
-                                try:
-                                    logger.debug(f"Full problem object: {json.dumps(p, indent=2, default=str)}")
-                                except:
-                                    logger.debug(f"Full problem object (repr): {repr(p)}")
-                                continue
-                            
                             problem = ExamProblem(
                                 problem_number=len(problems) + 1,
                                 question=p.get("question", "").strip(),
-                                choices=choices,
+                                choices=p.get("choices", {}),
                                 correct_answer=p.get("correct_answer", "A").strip().upper(),
-                                explanation=explanation,
+                                explanation=p.get("explanation", "").strip(),
                                 topic=p.get("topic", objective_text).strip(),
                                 difficulty=p.get("difficulty", "medium").strip().lower()
                             )
@@ -862,30 +693,6 @@ Your task is to generate questions that:
 
 CRITICAL: Each question must have exactly ONE correct answer. All other choices must be clearly incorrect.
 
-EXPLANATION REQUIREMENTS:
-- Every problem MUST include a comprehensive explanation
-- The explanation must clearly explain WHY the correct answer is correct
-- Include step-by-step reasoning when applicable (especially for mathematical problems)
-- Explain why the correct answer is the best choice
-- Optionally mention why other choices are incorrect (this helps students learn)
-- Use LaTeX formatting for any mathematical expressions in the explanation
-- The explanation should be educational and help students understand the concept
-
-LATEX FORMATTING REQUIREMENTS:
-- Use LaTeX syntax for ALL mathematical expressions, formulas, equations, and symbols
-- Use \\( and \\) for inline math (e.g., \\(x^2 + 3x - 4\\))
-- Use \\[ and \\] for display math (e.g., \\[\\frac{a}{b}\\])
-- Common LaTeX symbols:
-  * Fractions: \\frac{numerator}{denominator} (e.g., \\frac{3}{\\sqrt{7} - 1})
-  * Square roots: \\sqrt{expression} (e.g., \\sqrt{25} or \\sqrt{x + 1})
-  * Powers: ^{exponent} (e.g., x^2, a^{n+1})
-  * Subscripts: _{subscript} (e.g., x_1, a_n)
-  * Greek letters: \\alpha, \\beta, \\gamma, \\theta, \\pi, etc.
-  * Operators: \\times, \\div, \\pm, \\mp, \\leq, \\geq, \\neq, \\approx
-  * Sets: \\in, \\notin, \\subset, \\cup, \\cap
-  * Other: \\infty, \\sum, \\prod, \\int, \\lim
-- Always use LaTeX for mathematical notation - never use plain text for math
-
 You MUST respond with valid JSON only. Do not include any text before or after the JSON."""
         
         # Use more content (up to 5000 chars) for better context
@@ -906,29 +713,29 @@ You MUST respond with ONLY valid JSON in this exact format (no markdown, no code
     "problems": [
         {{
             "problem_number": 1,
-            "question": "Question text with LaTeX? For example: To rationalize the denominator of \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), what conjugate should be used?",
+            "question": "Question text here?",
             "choices": {{
-                "A": "First choice with LaTeX: \\(\\sqrt{{7}} + 1\\)",
-                "B": "Second choice with LaTeX: \\(\\sqrt{{7}} - 1\\)",
-                "C": "Third choice with LaTeX: \\(7 + \\sqrt{{1}}\\)",
-                "D": "Fourth choice with LaTeX: \\(7 - \\sqrt{{1}}\\)"
+                "A": "First choice",
+                "B": "Second choice",
+                "C": "Third choice",
+                "D": "Fourth choice"
             }},
             "correct_answer": "A",
-            "explanation": "To rationalize the denominator \\(\\sqrt{{7}} - 1\\), we multiply both numerator and denominator by the conjugate \\(\\sqrt{{7}} + 1\\). The conjugate of a binomial \\(a - b\\) is \\(a + b\\). When we multiply \\((\\sqrt{{7}} - 1)(\\sqrt{{7}} + 1)\\), we get \\(7 - 1 = 6\\), which eliminates the radical from the denominator. Therefore, the conjugate \\(\\sqrt{{7}} + 1\\) (choice A) is correct. Choice B is the original denominator, not the conjugate. Choices C and D are incorrect as they don't follow the conjugate pattern.",
+            "explanation": "Explanation of why the correct answer is correct",
             "topic": "Topic name",
             "difficulty": "easy"
         }},
         {{
             "problem_number": 2,
-            "question": "Another question with LaTeX? For example: Simplify \\(\\sqrt{{x^2 + 2x + 1}}\\).",
+            "question": "Another question?",
             "choices": {{
-                "A": "Choice A with LaTeX: \\(x + 1\\)",
-                "B": "Choice B with LaTeX: \\(x - 1\\)",
-                "C": "Choice C with LaTeX: \\(x^2 + 1\\)",
-                "D": "Choice D with LaTeX: \\(2x + 1\\)"
+                "A": "Choice A",
+                "B": "Choice B",
+                "C": "Choice C",
+                "D": "Choice D"
             }},
             "correct_answer": "B",
-            "explanation": "To simplify \\(\\sqrt{{x^2 + 2x + 1}}\\), we first recognize that \\(x^2 + 2x + 1\\) is a perfect square trinomial. Factoring gives us \\((x+1)^2\\). Therefore, \\(\\sqrt{{x^2 + 2x + 1}} = \\sqrt{{(x+1)^2}} = |x+1|\\). Since the square root of a square is the absolute value, the answer is \\(|x+1|\\) (choice B). Choice A is incorrect because we cannot simply take \\(x+1\\) without the absolute value. Choices C and D are incorrect as they don't represent the simplified form.",
+            "explanation": "Explanation",
             "topic": "Topic",
             "difficulty": "medium"
         }}
@@ -940,17 +747,7 @@ CRITICAL REQUIREMENTS:
 - Each problem must have exactly 4 choices (A, B, C, D)
 - Each problem must have exactly ONE correct answer
 - The correct_answer must be one of: A, B, C, or D
-- Each problem MUST include a detailed explanation that explains WHY the correct answer is correct
-- Explanations should include step-by-step reasoning for mathematical problems
-- Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
-- Always escape curly braces in JSON strings by doubling them: {{ and }}
-- Respond with ONLY the JSON object, no other text
-
-LATEX EXAMPLES:
-- Fractions: \\(\\frac{{a}}{{b}}\\), \\(\\frac{{3x + 2}}{{x - 1}}\\)
-- Square roots: \\(\\sqrt{{x}}\\), \\(\\sqrt{{x^2 + 1}}\\)
-- Powers: \\(x^2\\), \\(a^{{n+1}}\\)
-- Complex expressions: \\(\\frac{{3}}{{\\sqrt{{7}} - 1}}\\), \\(\\sqrt{{\\frac{{a}}{{b}}}}\\)"""
+- Respond with ONLY the JSON object, no other text"""
         
         # Retry logic - try up to 3 times
         max_retries = 3
@@ -1144,43 +941,12 @@ LATEX EXAMPLES:
                                 logger.warning(f"Problem {i} missing required fields, skipping")
                                 continue
                             
-                            # Get choices and validate they're not empty
-                            choices = p.get("choices", {})
-                            if not isinstance(choices, dict):
-                                logger.warning(f"Problem {i} has invalid choices type: {type(choices)}, skipping")
-                                continue
-                            
-                            # Check if choices are empty strings
-                            choices_valid = False
-                            if len(choices) == 4:
-                                choices_valid = all(
-                                    key in choices and 
-                                    isinstance(choices[key], str) and 
-                                    choices[key].strip() != ""
-                                    for key in ["A", "B", "C", "D"]
-                                )
-                            
-                            if not choices_valid:
-                                logger.warning(f"Problem {i} has empty or invalid choices: {choices}, skipping")
-                                continue
-                            
-                            # Validate explanation is not empty
-                            explanation = p.get("explanation", "").strip()
-                            if not explanation:
-                                logger.warning(f"Problem {i} has empty explanation, skipping. Problem keys: {list(p.keys())}, explanation value: {repr(p.get('explanation'))}")
-                                # Log the full problem for debugging
-                                try:
-                                    logger.debug(f"Full problem object: {json.dumps(p, indent=2, default=str)}")
-                                except:
-                                    logger.debug(f"Full problem object (repr): {repr(p)}")
-                                continue
-                            
                             problem = ExamProblem(
                                 problem_number=p.get("problem_number", i),
                                 question=p.get("question", "").strip(),
-                                choices=choices,
+                                choices=p.get("choices", {}),
                                 correct_answer=p.get("correct_answer", "A").strip().upper(),
-                                explanation=explanation,
+                                explanation=p.get("explanation", "").strip(),
                                 topic=p.get("topic", "").strip(),
                                 difficulty=p.get("difficulty", "medium").strip().lower()
                             )
@@ -1228,12 +994,9 @@ LATEX EXAMPLES:
                 if attempt < max_retries - 1:
                     await asyncio.sleep(2)  # Wait before retry
         
-                if not problems:
-                    logger.error(f"Failed to generate any problems after {max_retries} attempts")
-                    raise Exception(f"Failed to generate problems. The LLM did not return valid problem data after {max_retries} attempts. This may be due to empty choices or explanations in the generated problems.")
-                
-                if len(problems) < num_problems:
-                    logger.warning(f"Only generated {len(problems)}/{num_problems} problems. Some problems may have been rejected due to empty choices or explanations.")
+        if not problems:
+            logger.error(f"Failed to generate any problems after {max_retries} attempts")
+            raise Exception(f"Failed to generate problems. The LLM did not return valid problem data after {max_retries} attempts.")
         
         logger.info(f"Successfully generated {len(problems)} problems")
         return problems
@@ -1456,29 +1219,9 @@ Provide a comprehensive review in JSON format:
                     pass
         
         if json_data:
-            try:
-                # Safely update review with extracted data
-                if isinstance(json_data, dict):
-                    review.update({
-                        "overall_quality": json_data.get("overall_quality", "unknown"),
-                        "approval_status": json_data.get("approval_status", "unknown"),
-                        "issues_found": json_data.get("issues_found", []),
-                        "problems_needing_revision": json_data.get("problems_needing_revision", []),
-                        "recommendations": json_data.get("recommendations", [])
-                    })
-            except Exception as e:
-                logger.warning(f"Error updating review data: {e}")
-                review["issues_found"].append(f"Could not parse review response: {str(e)}")
+            review.update(json_data)
         else:
-            # Try to extract at least some information from the response text
-            if "approved" in response.lower() or "approve" in response.lower():
-                review["approval_status"] = "approved"
-            elif "reject" in response.lower() or "rejected" in response.lower():
-                review["approval_status"] = "rejected"
-            elif "revision" in response.lower() or "revise" in response.lower():
-                review["approval_status"] = "needs_revision"
-            
-            review["issues_found"].append("Could not parse review response as JSON, extracted partial information")
+            review["issues_found"].append("Could not parse review response")
         
         return review
 
