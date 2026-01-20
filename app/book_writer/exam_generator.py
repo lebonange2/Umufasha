@@ -784,8 +784,8 @@ CRITICAL REQUIREMENTS:
 - Each problem must have exactly 4 choices (A, B, C, D)
 - Each problem must have exactly ONE correct answer
 - The correct_answer must be one of: A, B, C, or D
-- Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
-- Always escape curly braces in JSON strings by doubling them: {{ and }}
+- Each problem MUST include a detailed explanation that explains WHY the correct answer is correct
+- Explanations should include step-by-step reasoning for mathematical problems
 - Use LaTeX formatting for ALL mathematical expressions in questions, choices, and explanations
 - Always escape curly braces in JSON strings by doubling them: {{ and }}
 - Respond with ONLY the JSON object, no other text
