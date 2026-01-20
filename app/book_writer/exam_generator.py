@@ -652,12 +652,38 @@ CRITICAL REQUIREMENTS:
                                 logger.warning(f"Problem {i} missing required fields, skipping")
                                 continue
                             
+                            # Get choices and validate they're not empty
+                            choices = p.get("choices", {})
+                            if not isinstance(choices, dict):
+                                logger.warning(f"Problem {i} has invalid choices type: {type(choices)}, skipping")
+                                continue
+                            
+                            # Check if choices are empty strings
+                            choices_valid = False
+                            if len(choices) == 4:
+                                choices_valid = all(
+                                    key in choices and 
+                                    isinstance(choices[key], str) and 
+                                    choices[key].strip() != ""
+                                    for key in ["A", "B", "C", "D"]
+                                )
+                            
+                            if not choices_valid:
+                                logger.warning(f"Problem {i} has empty or invalid choices: {choices}, skipping")
+                                continue
+                            
+                            # Validate explanation is not empty
+                            explanation = p.get("explanation", "").strip()
+                            if not explanation:
+                                logger.warning(f"Problem {i} has empty explanation, skipping")
+                                continue
+                            
                             problem = ExamProblem(
                                 problem_number=len(problems) + 1,
                                 question=p.get("question", "").strip(),
-                                choices=p.get("choices", {}),
+                                choices=choices,
                                 correct_answer=p.get("correct_answer", "A").strip().upper(),
-                                explanation=p.get("explanation", "").strip(),
+                                explanation=explanation,
                                 topic=p.get("topic", objective_text).strip(),
                                 difficulty=p.get("difficulty", "medium").strip().lower()
                             )
@@ -1010,12 +1036,38 @@ LATEX EXAMPLES:
                                 logger.warning(f"Problem {i} missing required fields, skipping")
                                 continue
                             
+                            # Get choices and validate they're not empty
+                            choices = p.get("choices", {})
+                            if not isinstance(choices, dict):
+                                logger.warning(f"Problem {i} has invalid choices type: {type(choices)}, skipping")
+                                continue
+                            
+                            # Check if choices are empty strings
+                            choices_valid = False
+                            if len(choices) == 4:
+                                choices_valid = all(
+                                    key in choices and 
+                                    isinstance(choices[key], str) and 
+                                    choices[key].strip() != ""
+                                    for key in ["A", "B", "C", "D"]
+                                )
+                            
+                            if not choices_valid:
+                                logger.warning(f"Problem {i} has empty or invalid choices: {choices}, skipping")
+                                continue
+                            
+                            # Validate explanation is not empty
+                            explanation = p.get("explanation", "").strip()
+                            if not explanation:
+                                logger.warning(f"Problem {i} has empty explanation, skipping")
+                                continue
+                            
                             problem = ExamProblem(
                                 problem_number=p.get("problem_number", i),
                                 question=p.get("question", "").strip(),
-                                choices=p.get("choices", {}),
+                                choices=choices,
                                 correct_answer=p.get("correct_answer", "A").strip().upper(),
-                                explanation=p.get("explanation", "").strip(),
+                                explanation=explanation,
                                 topic=p.get("topic", "").strip(),
                                 difficulty=p.get("difficulty", "medium").strip().lower()
                             )
