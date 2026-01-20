@@ -38,6 +38,10 @@ class ExamProblem:
     explanation: str
     topic: str
     difficulty: str  # "easy", "medium", "hard"
+    learning_objective_number: str = ""  # e.g., "1.1.1.1"
+    learning_objective_text: str = ""  # e.g., "Evaluate square roots"
+    topic_number: str = ""  # e.g., "1" from "1.1.1.1"
+    subtopic_number: str = ""  # e.g., "1.1" from "1.1.1.1"
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -48,7 +52,11 @@ class ExamProblem:
             "correct_answer": self.correct_answer,
             "explanation": self.explanation,
             "topic": self.topic,
-            "difficulty": self.difficulty
+            "difficulty": self.difficulty,
+            "learning_objective_number": self.learning_objective_number,
+            "learning_objective_text": self.learning_objective_text,
+            "topic_number": self.topic_number,
+            "subtopic_number": self.subtopic_number
         }
     
     @classmethod
@@ -61,7 +69,11 @@ class ExamProblem:
             correct_answer=data["correct_answer"],
             explanation=data["explanation"],
             topic=data.get("topic", ""),
-            difficulty=data.get("difficulty", "medium")
+            difficulty=data.get("difficulty", "medium"),
+            learning_objective_number=data.get("learning_objective_number", ""),
+            learning_objective_text=data.get("learning_objective_text", ""),
+            topic_number=data.get("topic_number", ""),
+            subtopic_number=data.get("subtopic_number", "")
         )
 
 
@@ -617,23 +629,50 @@ CRITICAL REQUIREMENTS:
                                 logger.warning(f"Problem {i} missing required fields, skipping")
                                 continue
                             
+                            # Extract choices and validate they're not empty
+                            choices = p.get("choices", {})
+                            if not isinstance(choices, dict):
+                                logger.warning(f"Problem {i} has invalid choices type: {type(choices)}, skipping")
+                                continue
+                            
+                            # Validate all choices have non-empty text
+                            valid_choices = {}
+                            for key in ["A", "B", "C", "D"]:
+                                if key in choices and choices[key] and str(choices[key]).strip():
+                                    valid_choices[key] = str(choices[key]).strip()
+                            
+                            if len(valid_choices) != 4:
+                                logger.warning(f"Problem {i} has {len(valid_choices)} valid choices (expected 4), skipping. Choices: {choices}")
+                                continue
+                            
+                            # Extract topic/subtopic from objective number
+                            obj_number = objective.get("number", "")
+                            topic_num = ""
+                            subtopic_num = ""
+                            if obj_number:
+                                parts = obj_number.split(".")
+                                if len(parts) >= 1:
+                                    topic_num = parts[0]
+                                if len(parts) >= 2:
+                                    subtopic_num = ".".join(parts[:2])
+                            
                             problem = ExamProblem(
                                 problem_number=len(problems) + 1,
                                 question=p.get("question", "").strip(),
-                                choices=p.get("choices", {}),
+                                choices=valid_choices,
                                 correct_answer=p.get("correct_answer", "A").strip().upper(),
                                 explanation=p.get("explanation", "").strip(),
                                 topic=p.get("topic", objective_text).strip(),
-                                difficulty=p.get("difficulty", "medium").strip().lower()
+                                difficulty=p.get("difficulty", "medium").strip().lower(),
+                                learning_objective_number=obj_number,
+                                learning_objective_text=objective_text,
+                                topic_number=topic_num,
+                                subtopic_number=subtopic_num
                             )
                             
                             # Validate problem structure
                             if not problem.question:
                                 logger.warning(f"Problem {i} has empty question, skipping")
-                                continue
-                            
-                            if len(problem.choices) != 4:
-                                logger.warning(f"Problem {i} has {len(problem.choices)} choices (expected 4), skipping")
                                 continue
                             
                             if problem.correct_answer not in problem.choices:
@@ -655,6 +694,51 @@ CRITICAL REQUIREMENTS:
                         # Got some problems but not enough - keep them and continue to next attempt
                         logger.warning(f"Only generated {len(problems)}/{num_problems} problems so far for objective '{objective_text}', continuing to accumulate...")
                         # Don't clear problems - accumulate across attempts
+                        # Adjust prompt to generate remaining problems
+                        remaining = num_problems - len(problems)
+                        if remaining > 0 and attempt < max_retries - 1:
+                            # Update the prompt to generate only the remaining problems
+                            current_prompt = f"""Generate exactly {remaining} more multiple choice questions SPECIFICALLY for this learning objective:
+
+LEARNING OBJECTIVE: {objective_number} - {objective_text}
+
+You have already generated {len(problems)} problems. Generate {remaining} MORE problems.
+
+Content:
+{content_preview}
+
+Analysis:
+{json.dumps(analysis, indent=2)}
+
+IMPORTANT: All {remaining} questions MUST be directly related to the learning objective: "{objective_text}"
+
+You MUST respond with ONLY valid JSON in this exact format (no markdown, no code blocks, just pure JSON):
+{{
+    "problems": [
+        {{
+            "problem_number": 1,
+            "question": "Question text here?",
+            "choices": {{
+                "A": "First choice",
+                "B": "Second choice",
+                "C": "Third choice",
+                "D": "Fourth choice"
+            }},
+            "correct_answer": "A",
+            "explanation": "Explanation of why the correct answer is correct",
+            "topic": "{objective_text}",
+            "difficulty": "easy"
+        }}
+    ]
+}}
+
+CRITICAL REQUIREMENTS:
+- Generate exactly {remaining} problems
+- Each problem must be directly related to: {objective_text}
+- Each problem must have exactly 4 choices (A, B, C, D) with NON-EMPTY text
+- Each problem must have exactly ONE correct answer
+- The correct_answer must be one of: A, B, C, or D
+- Respond with ONLY the JSON object, no other text"""
                 else:
                     logger.warning(f"Could not extract JSON from response (attempt {attempt + 1})")
                     # Log more of the response for debugging
@@ -1435,23 +1519,51 @@ class ExamGeneratorCompany:
         update_progress("problem_generation", 30, f"Generating {problems_per_objective} problems per objective for {num_objectives} learning objectives (total: {total_problems})...")
         logger.info("Starting problem generation phase", problems_per_objective=problems_per_objective, num_objectives=num_objectives, total_problems=total_problems)
         
-        all_problems = []
-        for idx, objective in enumerate(learning_objectives):
-            # Each objective gets the same number of problems
+        # Generate problems in parallel for all objectives
+        async def generate_for_objective(obj_idx: int, objective: Dict[str, Any]) -> List[ExamProblem]:
+            """Generate problems for a single objective."""
             num_probs_for_obj = problems_per_objective
+            update_progress("problem_generation", 30 + int(50 * obj_idx / num_objectives), 
+                          f"Generating {num_probs_for_obj} problems for objective {obj_idx + 1}/{num_objectives}: {objective.get('objective', objective)}")
             
-            update_progress("problem_generation", 30 + int(50 * idx / num_objectives), 
-                          f"Generating {num_probs_for_obj} problems for objective {idx + 1}/{num_objectives}: {objective.get('objective', objective)}")
+            # Generate problems for this specific objective with retries until we get enough
+            max_attempts = 5  # More attempts to ensure we get all problems
+            all_obj_problems = []
             
-            # Generate problems for this specific objective
-            objective_problems = await self.problem_generator.generate_problems_for_objective(
-                project.input_content,
-                analysis,
-                objective,
-                num_probs_for_obj
-            )
+            for attempt in range(max_attempts):
+                objective_problems = await self.problem_generator.generate_problems_for_objective(
+                    project.input_content,
+                    analysis,
+                    objective,
+                    num_probs_for_obj
+                )
+                
+                all_obj_problems.extend(objective_problems)
+                
+                # If we have enough problems, break
+                if len(all_obj_problems) >= num_probs_for_obj:
+                    all_obj_problems = all_obj_problems[:num_probs_for_obj]  # Trim to exact number
+                    break
+                elif attempt < max_attempts - 1:
+                    logger.warning(f"Objective {obj_idx + 1}: Only got {len(all_obj_problems)}/{num_probs_for_obj} problems, retrying...")
+                    await asyncio.sleep(1)  # Brief pause before retry
             
-            all_problems.extend(objective_problems)
+            if len(all_obj_problems) < num_probs_for_obj:
+                logger.error(f"Objective {obj_idx + 1}: Only generated {len(all_obj_problems)}/{num_probs_for_obj} problems after {max_attempts} attempts")
+            
+            return all_obj_problems
+        
+        # Generate all objectives in parallel
+        logger.info(f"Generating problems for {num_objectives} objectives in parallel...")
+        tasks = [generate_for_objective(idx, obj) for idx, obj in enumerate(learning_objectives)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        all_problems = []
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Error generating problems for objective {idx + 1}: {result}")
+                continue
+            all_problems.extend(result)
         
         problems = all_problems
         project.problems = problems
@@ -1564,15 +1676,46 @@ class ExamGeneratorCompany:
         return problems, review
     
     def format_problems_file(self, problems: List[ExamProblem]) -> str:
-        """Format problems for Problems.txt file."""
+        """Format problems for Problems.txt file with section headers."""
         lines = []
         lines.append("=" * 80)
         lines.append("EXAM PROBLEMS")
         lines.append("=" * 80)
         lines.append("")
         
-        for problem in problems:
-            lines.append(f"Problem {problem.problem_number}")
+        # Sort problems by learning objective number, then by problem number
+        sorted_problems = sorted(problems, key=lambda p: (
+            p.learning_objective_number or "",
+            p.problem_number
+        ))
+        
+        # Group problems by learning objective
+        current_obj = None
+        problem_num = 1
+        
+        for problem in sorted_problems:
+            obj_key = (problem.learning_objective_number, problem.learning_objective_text, 
+                      problem.topic_number, problem.subtopic_number)
+            
+            # Add section header when learning objective changes
+            if obj_key != current_obj:
+                if current_obj is not None:
+                    lines.append("")  # Extra space between sections
+                
+                current_obj = obj_key
+                lines.append("=" * 80)
+                if problem.topic_number:
+                    lines.append(f"TOPIC {problem.topic_number}")
+                if problem.subtopic_number and problem.subtopic_number != problem.topic_number:
+                    lines.append(f"SUBTopic {problem.subtopic_number}")
+                if problem.learning_objective_number:
+                    lines.append(f"LEARNING OBJECTIVE {problem.learning_objective_number}: {problem.learning_objective_text}")
+                if problem.topic:
+                    lines.append(f"Topic: {problem.topic}")
+                lines.append("=" * 80)
+                lines.append("")
+            
+            lines.append(f"Problem {problem_num}")
             lines.append("-" * 80)
             lines.append(f"Topic: {problem.topic}")
             lines.append(f"Difficulty: {problem.difficulty}")
@@ -1581,23 +1724,56 @@ class ExamGeneratorCompany:
             lines.append("")
             lines.append("Choices:")
             for choice, text in sorted(problem.choices.items()):
-                lines.append(f"  {choice}. {text}")
+                if text:  # Only add non-empty choices
+                    lines.append(f"  {choice}. {text}")
             lines.append("")
             lines.append("=" * 80)
             lines.append("")
+            problem_num += 1
         
         return "\n".join(lines)
     
     def format_solutions_file(self, problems: List[ExamProblem]) -> str:
-        """Format solutions for Solutions.txt file."""
+        """Format solutions for Solutions.txt file with section headers."""
         lines = []
         lines.append("=" * 80)
         lines.append("EXAM SOLUTIONS")
         lines.append("=" * 80)
         lines.append("")
         
-        for problem in problems:
-            lines.append(f"Problem {problem.problem_number}")
+        # Sort problems by learning objective number, then by problem number
+        sorted_problems = sorted(problems, key=lambda p: (
+            p.learning_objective_number or "",
+            p.problem_number
+        ))
+        
+        # Group problems by learning objective
+        current_obj = None
+        problem_num = 1
+        
+        for problem in sorted_problems:
+            obj_key = (problem.learning_objective_number, problem.learning_objective_text, 
+                      problem.topic_number, problem.subtopic_number)
+            
+            # Add section header when learning objective changes
+            if obj_key != current_obj:
+                if current_obj is not None:
+                    lines.append("")  # Extra space between sections
+                
+                current_obj = obj_key
+                lines.append("=" * 80)
+                if problem.topic_number:
+                    lines.append(f"TOPIC {problem.topic_number}")
+                if problem.subtopic_number and problem.subtopic_number != problem.topic_number:
+                    lines.append(f"SUBTopic {problem.subtopic_number}")
+                if problem.learning_objective_number:
+                    lines.append(f"LEARNING OBJECTIVE {problem.learning_objective_number}: {problem.learning_objective_text}")
+                if problem.topic:
+                    lines.append(f"Topic: {problem.topic}")
+                lines.append("=" * 80)
+                lines.append("")
+            
+            lines.append(f"Problem {problem_num}")
             lines.append("-" * 80)
             lines.append(f"Correct Answer: {problem.correct_answer}")
             lines.append("")
@@ -1606,19 +1782,51 @@ class ExamGeneratorCompany:
             lines.append("")
             lines.append("=" * 80)
             lines.append("")
+            problem_num += 1
         
         return "\n".join(lines)
     
     def format_combined_file(self, problems: List[ExamProblem]) -> str:
-        """Format problems with solutions for Problems_with_solutions.txt file."""
+        """Format problems with solutions for Problems_with_solutions.txt file with section headers."""
         lines = []
         lines.append("=" * 80)
         lines.append("EXAM PROBLEMS WITH SOLUTIONS")
         lines.append("=" * 80)
         lines.append("")
         
-        for problem in problems:
-            lines.append(f"Problem {problem.problem_number}")
+        # Sort problems by learning objective number, then by problem number
+        sorted_problems = sorted(problems, key=lambda p: (
+            p.learning_objective_number or "",
+            p.problem_number
+        ))
+        
+        # Group problems by learning objective
+        current_obj = None
+        problem_num = 1
+        
+        for problem in sorted_problems:
+            obj_key = (problem.learning_objective_number, problem.learning_objective_text, 
+                      problem.topic_number, problem.subtopic_number)
+            
+            # Add section header when learning objective changes
+            if obj_key != current_obj:
+                if current_obj is not None:
+                    lines.append("")  # Extra space between sections
+                
+                current_obj = obj_key
+                lines.append("=" * 80)
+                if problem.topic_number:
+                    lines.append(f"TOPIC {problem.topic_number}")
+                if problem.subtopic_number and problem.subtopic_number != problem.topic_number:
+                    lines.append(f"SUBTopic {problem.subtopic_number}")
+                if problem.learning_objective_number:
+                    lines.append(f"LEARNING OBJECTIVE {problem.learning_objective_number}: {problem.learning_objective_text}")
+                if problem.topic:
+                    lines.append(f"Topic: {problem.topic}")
+                lines.append("=" * 80)
+                lines.append("")
+            
+            lines.append(f"Problem {problem_num}")
             lines.append("-" * 80)
             lines.append(f"Topic: {problem.topic}")
             lines.append(f"Difficulty: {problem.difficulty}")
@@ -1627,8 +1835,9 @@ class ExamGeneratorCompany:
             lines.append("")
             lines.append("Choices:")
             for choice, text in sorted(problem.choices.items()):
-                marker = " ✓" if choice == problem.correct_answer else ""
-                lines.append(f"  {choice}. {text}{marker}")
+                if text:  # Only add non-empty choices
+                    marker = " ✓" if choice == problem.correct_answer else ""
+                    lines.append(f"  {choice}. {text}{marker}")
             lines.append("")
             lines.append(f"Correct Answer: {problem.correct_answer}")
             lines.append("")
@@ -1637,6 +1846,7 @@ class ExamGeneratorCompany:
             lines.append("")
             lines.append("=" * 80)
             lines.append("")
+            problem_num += 1
         
         return "\n".join(lines)
     
@@ -1657,10 +1867,18 @@ class ExamGeneratorCompany:
         
         logger.info(f"Saving {len(problems)} problems to files", output_dir=str(output_dir))
         
+        # Renumber problems sequentially after sorting by learning objective
+        sorted_problems = sorted(problems, key=lambda p: (
+            p.learning_objective_number or "",
+            p.problem_number
+        ))
+        for idx, problem in enumerate(sorted_problems, 1):
+            problem.problem_number = idx
+        
         # Generate file contents
-        problems_text = self.format_problems_file(problems)
-        solutions_text = self.format_solutions_file(problems)
-        combined_text = self.format_combined_file(problems)
+        problems_text = self.format_problems_file(sorted_problems)
+        solutions_text = self.format_solutions_file(sorted_problems)
+        combined_text = self.format_combined_file(sorted_problems)
         
         # Validate file contents are not empty
         if not problems_text.strip() or not solutions_text.strip() or not combined_text.strip():
