@@ -395,13 +395,14 @@ CRITICAL REQUIREMENTS:
 - The correct_answer must be one of: A, B, C, or D
 - Respond with ONLY the JSON object, no other text"""
         
-        # Retry logic - try up to 3 times
-        max_retries = 3
+        # Retry logic - try up to 5 times to ensure we get all problems
+        max_retries = 5
         problems = []
+        current_prompt = user_prompt  # Use a variable that can be updated
         
         for attempt in range(max_retries):
             try:
-                response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
+                response = await self.llm_client.complete(system=system_prompt, user=current_prompt)
                 logger.info(f"Problem generation attempt {attempt + 1} for objective '{objective_text}'", response_length=len(response))
                 
                 # Check if response is empty
