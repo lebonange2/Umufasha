@@ -1131,6 +1131,51 @@ class ReviewAgent(BaseAgent):
     def __init__(self, llm_client: LLMClient):
         super().__init__("Review Agent", "Final Quality Reviewer", llm_client)
     
+    def _try_fix_json(self, response: str) -> Optional[str]:
+        """Try to fix common JSON issues in the response."""
+        try:
+            # Find the first { and try to extract a complete JSON object
+            start_idx = response.find('{')
+            if start_idx == -1:
+                return None
+            
+            # Find matching closing brace
+            brace_count = 0
+            end_idx = start_idx
+            in_string = False
+            escape_next = False
+            
+            for i in range(start_idx, len(response)):
+                char = response[i]
+                
+                if escape_next:
+                    escape_next = False
+                    continue
+                
+                if char == '\\':
+                    escape_next = True
+                    continue
+                
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+            
+            if brace_count == 0 and end_idx > start_idx:
+                return response[start_idx:end_idx]
+            
+            return None
+        except Exception:
+            return None
+    
     async def review_exam(self, problems: List[ExamProblem], validation_results: List[Dict[str, Any]], content: str) -> Dict[str, Any]:
         """Perform final review of the entire exam."""
         system_prompt = """You are a Review Agent responsible for final quality assurance of exam problems.
@@ -1140,7 +1185,9 @@ Your task is to:
 3. Verify explanations are accurate
 4. Check for appropriate difficulty distribution
 5. Ensure questions cover the content adequately
-6. Identify any remaining issues"""
+6. Identify any remaining issues
+
+IMPORTANT: You MUST respond with ONLY valid JSON. Do not include any explanatory text before or after the JSON."""
         
         # Count validation issues
         invalid_count = sum(1 for v in validation_results if v.get("validation_status") != "valid")
@@ -1184,7 +1231,21 @@ Provide a comprehensive review in JSON format:
         # Method 1: Try parsing the entire response
         try:
             json_data = json.loads(response.strip())
-        except:
+            logger.info("Successfully parsed review JSON using method 1 (full response)")
+        except json.JSONDecodeError as e:
+            logger.debug(f"Method 1 failed: {e}")
+            # Try to fix common JSON issues and retry
+            if "Unterminated string" in str(e) or "Expecting" in str(e) or "Invalid" in str(e):
+                try:
+                    fixed_response = self._try_fix_json(response)
+                    if fixed_response:
+                        json_data = json.loads(fixed_response)
+                        logger.info("Successfully parsed review JSON using method 1 after fixing")
+                except Exception as fix_error:
+                    logger.debug(f"Failed to fix JSON: {fix_error}")
+                    pass
+        except Exception as e:
+            logger.debug(f"Method 1 failed with non-JSON error: {e}")
             pass
         
         # Method 2: Extract JSON with balanced braces
@@ -1206,7 +1267,9 @@ Provide a comprehensive review in JSON format:
                     try:
                         json_str = response[start_idx:end_idx]
                         json_data = json.loads(json_str)
-                    except:
+                        logger.info(f"Successfully parsed review JSON using method 2 (balanced braces), length={len(json_str)}")
+                    except Exception as e:
+                        logger.debug(f"Method 2 failed: {e}, json_str preview: {json_str[:200] if len(json_str) > 200 else json_str}")
                         pass
         
         # Method 3: Try extracting from markdown code blocks
@@ -1215,12 +1278,71 @@ Provide a comprehensive review in JSON format:
             if code_block_match:
                 try:
                     json_data = json.loads(code_block_match.group(1))
-                except:
+                    logger.info("Successfully parsed review JSON using method 3 (code block)")
+                except Exception as e:
+                    logger.debug(f"Method 3 failed: {e}")
                     pass
         
+        # Method 4: Try to extract partial review data from truncated JSON
+        if not json_data:
+            # Look for key fields even if JSON is incomplete
+            try:
+                # Extract overall_quality
+                quality_match = re.search(r'"overall_quality"\s*:\s*"([^"]+)"', response)
+                if quality_match:
+                    review["overall_quality"] = quality_match.group(1)
+                
+                # Extract approval_status
+                status_match = re.search(r'"approval_status"\s*:\s*"([^"]+)"', response)
+                if status_match:
+                    review["approval_status"] = status_match.group(1)
+                
+                # Extract issues_found array
+                issues_match = re.search(r'"issues_found"\s*:\s*\[(.*?)\]', response, re.DOTALL)
+                if issues_match:
+                    issues_str = issues_match.group(1)
+                    # Extract quoted strings
+                    issue_items = re.findall(r'"([^"]+)"', issues_str)
+                    if issue_items:
+                        review["issues_found"] = issue_items
+                
+                # Extract recommendations array
+                rec_match = re.search(r'"recommendations"\s*:\s*\[(.*?)\]', response, re.DOTALL)
+                if rec_match:
+                    rec_str = rec_match.group(1)
+                    rec_items = re.findall(r'"([^"]+)"', rec_str)
+                    if rec_items:
+                        review["recommendations"] = rec_items
+                
+                # Extract problems_needing_revision array
+                prob_match = re.search(r'"problems_needing_revision"\s*:\s*\[(.*?)\]', response, re.DOTALL)
+                if prob_match:
+                    prob_str = prob_match.group(1)
+                    prob_items = re.findall(r'(\d+)', prob_str)
+                    if prob_items:
+                        review["problems_needing_revision"] = [int(p) for p in prob_items]
+                
+                # If we extracted at least one field, consider it partial success
+                if review["overall_quality"] != "unknown" or review["approval_status"] != "unknown" or review["issues_found"]:
+                    logger.info("Successfully extracted partial review data using method 4 (regex extraction)")
+                    json_data = review  # Use the partially extracted data
+            except Exception as e:
+                logger.debug(f"Method 4 failed: {e}")
+                pass
+        
         if json_data:
-            review.update(json_data)
+            # Safely update review with extracted data
+            if isinstance(json_data, dict):
+                for key in ["overall_quality", "approval_status", "issues_found", "problems_needing_revision", "recommendations"]:
+                    if key in json_data:
+                        review[key] = json_data[key]
+                logger.info(f"Review parsed successfully: quality={review.get('overall_quality')}, status={review.get('approval_status')}")
+            else:
+                logger.warning(f"Extracted JSON data is not a dict: {type(json_data)}")
+                review["issues_found"].append("Could not parse review response: invalid format")
         else:
+            logger.warning("Could not parse review response using any method")
+            logger.debug(f"Response preview: {response[:500] if len(response) > 500 else response}")
             review["issues_found"].append("Could not parse review response")
         
         return review
