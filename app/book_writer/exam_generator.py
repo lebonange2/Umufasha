@@ -366,7 +366,10 @@ CRITICAL REQUIREMENTS:
                 if not response or len(response.strip()) == 0:
                     logger.warning(f"Empty response from LLM (attempt {attempt + 1})")
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(2)  # Wait before retry
+                        # Increase wait time with each retry
+                        wait_time = 2 * (attempt + 1)
+                        logger.info(f"Waiting {wait_time} seconds before retry...")
+                        await asyncio.sleep(wait_time)
                     continue
                 
                 # Extract problems from response
