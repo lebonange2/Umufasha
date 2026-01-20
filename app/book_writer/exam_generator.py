@@ -221,6 +221,51 @@ class ProblemGeneratorAgent(BaseAgent):
     def __init__(self, llm_client: LLMClient):
         super().__init__("Problem Generator", "Exam Problem Creator", llm_client)
     
+    def _try_fix_json(self, response: str) -> Optional[str]:
+        """Try to fix common JSON issues like unterminated strings."""
+        try:
+            # Find the main JSON object
+            start_idx = response.find('{')
+            if start_idx == -1:
+                return None
+            
+            # Try to find the matching closing brace, handling unterminated strings
+            brace_count = 0
+            end_idx = start_idx
+            in_string = False
+            escape_next = False
+            
+            for i in range(start_idx, len(response)):
+                char = response[i]
+                
+                if escape_next:
+                    escape_next = False
+                    continue
+                
+                if char == '\\':
+                    escape_next = True
+                    continue
+                
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            end_idx = i + 1
+                            break
+            
+            if brace_count == 0:
+                return response[start_idx:end_idx]
+        except:
+            pass
+        
+        return None
+    
     async def generate_problems(self, content: str, analysis: Dict[str, Any], num_problems: int) -> List[ExamProblem]:
         """Generate multiple choice problems based on content and analysis."""
         import structlog
