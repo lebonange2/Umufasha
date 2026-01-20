@@ -29,6 +29,9 @@ active_projects: Dict[str, Dict[str, Any]] = {}
 # Store generation status for background tasks
 generation_status: Dict[str, Dict[str, Any]] = {}
 
+# Store phase logs for detailed tracking
+phase_logs: Dict[str, List[Dict[str, Any]]] = {}
+
 
 async def save_project_to_db(project_id: str, project_data: Dict[str, Any], db: AsyncSession) -> None:
     """Save project state to database."""
