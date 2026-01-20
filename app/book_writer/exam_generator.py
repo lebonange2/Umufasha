@@ -1644,6 +1644,12 @@ Provide a comprehensive review in JSON format:
             logger.debug(f"Response preview: {response[:500] if len(response) > 500 else response}")
             review["issues_found"].append("Could not parse review response")
         
+        # Add section header issues to review if any
+        if header_issues:
+            review["issues_found"].extend(header_issues)
+            if review.get("approval_status") == "approved":
+                review["approval_status"] = "needs_revision"
+        
         return review
 
 
