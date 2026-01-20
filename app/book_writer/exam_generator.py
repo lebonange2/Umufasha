@@ -779,7 +779,12 @@ CRITICAL REQUIREMENTS:
                             # Validate explanation is not empty
                             explanation = p.get("explanation", "").strip()
                             if not explanation:
-                                logger.warning(f"Problem {i} has empty explanation, skipping")
+                                logger.warning(f"Problem {i} has empty explanation, skipping. Problem keys: {list(p.keys())}, explanation value: {repr(p.get('explanation'))}")
+                                # Log the full problem for debugging
+                                try:
+                                    logger.debug(f"Full problem object: {json.dumps(p, indent=2, default=str)}")
+                                except:
+                                    logger.debug(f"Full problem object (repr): {repr(p)}")
                                 continue
                             
                             problem = ExamProblem(
@@ -1163,7 +1168,12 @@ LATEX EXAMPLES:
                             # Validate explanation is not empty
                             explanation = p.get("explanation", "").strip()
                             if not explanation:
-                                logger.warning(f"Problem {i} has empty explanation, skipping")
+                                logger.warning(f"Problem {i} has empty explanation, skipping. Problem keys: {list(p.keys())}, explanation value: {repr(p.get('explanation'))}")
+                                # Log the full problem for debugging
+                                try:
+                                    logger.debug(f"Full problem object: {json.dumps(p, indent=2, default=str)}")
+                                except:
+                                    logger.debug(f"Full problem object (repr): {repr(p)}")
                                 continue
                             
                             problem = ExamProblem(
