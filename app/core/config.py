@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gemma2:2b"  # Default local model (small, fast, low memory)
     LLM_LOCAL_URL: str = "http://localhost:11434/v1"  # Ollama default URL
     # OpenAI Configuration (for local use with OpenAI API)
-    OPENAI_API_KEY: Optional[str] = None  # Required when LLM_PROVIDER=openai
+    # Note: OPENAI_API_KEY is read directly from environment variable, not from config
     OPENAI_MODEL: str = "gpt-4o"  # Default OpenAI model (gpt-4o, gpt-4o-mini, etc.)
     USE_MOCK_LLM: bool = False  # Set to True for testing with instant mock responses
     # Legacy fields (deprecated, kept for backwards compatibility)

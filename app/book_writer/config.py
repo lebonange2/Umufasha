@@ -1,4 +1,5 @@
 """Configuration for the book generation system."""
+import os
 from typing import Dict
 from app.core.config import settings
 
@@ -19,11 +20,12 @@ def get_config() -> Dict:
         # OpenAI configuration
         config["base_url"] = "https://api.openai.com/v1"
         config["model"] = getattr(settings, "OPENAI_MODEL", "gpt-4o")
-        config["api_key"] = settings.OPENAI_API_KEY
+        # Read API key directly from environment variable
+        config["api_key"] = os.environ.get("OPENAI_API_KEY")
         if not config["api_key"]:
             raise ValueError(
-                "OPENAI_API_KEY is required when LLM_PROVIDER=openai. "
-                "Set it in .env file or environment variable: OPENAI_API_KEY=your-key"
+                "OPENAI_API_KEY environment variable is required when LLM_PROVIDER=openai. "
+                "Set it as an environment variable: export OPENAI_API_KEY=your-key"
             )
     else:
         # Local (Ollama) configuration

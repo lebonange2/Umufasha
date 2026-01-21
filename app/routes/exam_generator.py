@@ -137,11 +137,13 @@ async def create_exam_generator_project(
             provider = settings.LLM_PROVIDER.lower()
         
         # Validate OpenAI API key if using OpenAI
-        if provider == "openai" and not settings.OPENAI_API_KEY:
+        # Read directly from environment variable
+        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        if provider == "openai" and not openai_api_key:
             raise HTTPException(
                 status_code=400,
-                detail="OPENAI_API_KEY is required when using OpenAI provider. "
-                       "Set it in .env file: OPENAI_API_KEY=your-key"
+                detail="OPENAI_API_KEY environment variable is required when using OpenAI provider. "
+                       "Set it as an environment variable: export OPENAI_API_KEY=your-key"
             )
         
         # Temporarily override provider via environment variable if project specifies it

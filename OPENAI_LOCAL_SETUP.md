@@ -6,20 +6,22 @@ The exam generator now supports running locally using OpenAI API with GPT-4o, in
 
 ## Configuration
 
-### Option 1: Environment Variables (.env file)
+### Option 1: Environment Variables
 
-Add the following to your `.env` file:
+Set the following environment variables:
 
 ```bash
 # Use OpenAI provider
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-your-openai-api-key-here
-OPENAI_MODEL=gpt-4o
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-your-openai-api-key-here
+export OPENAI_MODEL=gpt-4o
 
 # Or use local (Ollama) provider
-# LLM_PROVIDER=local
-# LLM_MODEL=qwen3:30b
+# export LLM_PROVIDER=local
+# export LLM_MODEL=qwen3:30b
 ```
+
+**Note:** `OPENAI_API_KEY` must be set as an environment variable (not in `.env` file) for security. You can also add it to your `.env` file, but the code reads it directly from the environment.
 
 ### Option 2: UI Selection
 
@@ -37,13 +39,15 @@ The exam generator UI now includes a **Provider** dropdown where you can select:
 
 ### 2. Configure Environment
 
-Add to your `.env` file:
+Set environment variables:
 
 ```bash
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-your-key-here
-OPENAI_MODEL=gpt-4o
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-your-key-here
+export OPENAI_MODEL=gpt-4o
 ```
+
+**Note:** `OPENAI_API_KEY` is read directly from environment variables for security. You can also add it to `.env` file, but it's recommended to use environment variables.
 
 ### 3. Start the Application
 
@@ -132,9 +136,11 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### "OPENAI_API_KEY is required" Error
 
 **Solution:**
-1. Check `.env` file has `OPENAI_API_KEY=sk-your-key`
-2. Restart the server after adding the key
-3. Verify the key is valid at https://platform.openai.com/api-keys
+1. Set the environment variable: `export OPENAI_API_KEY=sk-your-key`
+2. Restart the server after setting the key
+3. Verify the key is set: `echo $OPENAI_API_KEY`
+4. Verify the key is valid at https://platform.openai.com/api-keys
+5. If using `.env` file, ensure it's loaded (some systems require explicit loading)
 
 ### API Rate Limits
 
@@ -150,17 +156,37 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - Check your OpenAI account billing status
 - Try `gpt-4o-mini` as an alternative
 
-## Example .env Configuration
+## Example Environment Configuration
+
+### Using Environment Variables (Recommended)
 
 ```bash
-# For local development with OpenAI
+# Set environment variables
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=sk-proj-abc123...
+export OPENAI_MODEL=gpt-4o
+
+# Database and other settings (can be in .env)
+export DATABASE_URL=postgresql://...
+export REDIS_URL=redis://...
+```
+
+### Using .env File
+
+```bash
+# .env file (OPENAI_API_KEY will be read from environment, not from this file)
 LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-proj-abc123...
 OPENAI_MODEL=gpt-4o
 
 # Database and other settings
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
+```
+
+**Important:** `OPENAI_API_KEY` must be set as an environment variable. If you want to use `.env` file, you need to export it:
+```bash
+source .env  # If your .env file has export statements
+# Or manually: export OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2)
 ```
 
 ## Testing
