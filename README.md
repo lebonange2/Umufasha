@@ -44,7 +44,48 @@ An intelligent personal assistant that calls or emails you about appointments, p
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Local Setup (Recommended for Development)
+
+Run the application locally using OpenAI API (no GPU or Docker required):
+
+```bash
+# First time setup
+./setup_and_run_local.sh
+```
+
+This script will:
+- ✅ Check Python version
+- ✅ Create virtual environment (if needed)
+- ✅ Install dependencies
+- ✅ Prompt for OpenAI API key
+- ✅ Initialize database
+- ✅ Start the server
+
+**Prerequisites for Local Setup:**
+- Python 3.8+
+- OpenAI API key (get one at https://platform.openai.com/api-keys)
+
+**Quick Start (after initial setup):**
+```bash
+# Set your OpenAI API key
+export OPENAI_API_KEY=sk-your-key-here
+
+# Start the application
+./QUICK_START_LOCAL.sh
+```
+
+**Access the Application:**
+- **Main**: http://localhost:8000
+- **Exam Generator**: http://localhost:8000/writer/exam-generator
+- **Writer**: http://localhost:8000/writer
+- **API Docs**: http://localhost:8000/docs
+- **Admin Panel**: http://localhost:8000/admin (admin/admin123)
+
+📖 **See [RUN_LOCALLY.md](RUN_LOCALLY.md) for detailed local setup instructions**
+
+### Option 2: Full Setup with Docker (Production/Advanced)
+
+**Prerequisites:**
 - **Python 3.8+** (required)
 - **Docker Compose** (REQUIRED - setup will fail without it)
   - Install via: `sudo apt-get install -y docker-compose` (Debian/Ubuntu)
@@ -52,19 +93,19 @@ An intelligent personal assistant that calls or emails you about appointments, p
   - Or: `pip3 install --user docker-compose`
   - Or: Install Docker Desktop (includes Docker Compose V2)
 
-### One-Command Setup
+**One-Command Setup:**
 ```bash
 ./setup.sh
 ```
 **Note**: Setup will fail if Docker Compose is not installed. Install it first if needed.
 
-### Start the Application
+**Start the Application:**
 ```bash
 ./start.sh
 ```
 **Note**: Application startup will fail if Docker Compose is not available.
 
-### Access Admin Interface
+**Access Admin Interface:**
 - **URL**: http://localhost:8000/admin
 - **Login**: admin / admin123
 
@@ -79,9 +120,12 @@ The application runs in **Mock Mode** by default:
 ## 📚 Documentation
 
 ### Getting Started
+- **[Run Locally](RUN_LOCALLY.md)** - Complete guide for local development with OpenAI API
+- **[OpenAI Local Setup](OPENAI_LOCAL_SETUP.md)** - Detailed OpenAI configuration
 - **[Quick Start Guide](QUICKSTART.md)** - Get up and running in minutes
 - **[How to Run](HOW_TO_RUN.md)** - Detailed setup and running instructions
 - **[RunPod GPU Setup](RUNPOD_GPU_SETUP.md)** - Run in browser with GPU acceleration
+- **[Multi-GPU Parallel Processing](MULTI_GPU_PARALLEL_PROCESSING.md)** - Multi-GPU setup for RunPod
 - **[API Documentation](http://localhost:8000/docs)** - Interactive API docs
 
 ### Writer Assistant
@@ -101,10 +145,18 @@ The application runs in **Mock Mode** by default:
 
 ## 🔧 Helper Scripts
 
+### Local Development Scripts
 | Script | Purpose |
 |--------|---------|
-| `./setup.sh` | Complete setup and installation |
+| `./setup_and_run_local.sh` | **Local setup and run** - One-command setup for local development with OpenAI |
+| `./QUICK_START_LOCAL.sh` | **Quick start** - Fast startup for subsequent runs (assumes setup done) |
+
+### Production/Full Setup Scripts
+| Script | Purpose |
+|--------|---------|
+| `./setup.sh` | Complete setup and installation (with Docker) |
 | `./start.sh` | Start the application |
+| `./start_server.sh` | Start server (alternative method) |
 | `./stop.sh` | Stop the application |
 | `./test.sh` | Run tests and health checks |
 | `./demo.sh` | Interactive demo of all features |
@@ -309,6 +361,16 @@ chmod +x *.sh
 ```
 
 ## 🎉 Getting Started
+
+### Local Development (Recommended)
+
+1. **Setup & Run**: `./setup_and_run_local.sh`
+   - Enter your OpenAI API key when prompted
+   - Server will start automatically
+2. **Access**: http://localhost:8000/writer/exam-generator
+3. **Quick Start** (next time): `./QUICK_START_LOCAL.sh`
+
+### Full Setup (with Docker)
 
 1. **Setup**: `./setup.sh`
 2. **Start**: `./start.sh`
