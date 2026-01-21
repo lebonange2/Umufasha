@@ -1402,6 +1402,173 @@ CRITICAL REQUIREMENTS:
         return problem
 
 
+class ManagerAgent(BaseAgent):
+    """Manager agent that supervises corrections based on review feedback."""
+    
+    def __init__(self, llm_client: LLMClient):
+        super().__init__("Manager Agent", "Quality Control Manager", llm_client)
+    
+    async def fix_issues(self, problems: List[ExamProblem], review: Dict[str, Any], 
+                        content: str, analysis: Dict[str, Any]) -> List[ExamProblem]:
+        """Fix issues identified in the review."""
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
+        logger.info("ManagerAgent: Analyzing review feedback and supervising corrections")
+        
+        issues = review.get("issues_found", [])
+        problems_needing_revision = review.get("problems_needing_revision", [])
+        recommendations = review.get("recommendations", [])
+        
+        fixed_problems = problems.copy()
+        
+        # Fix learning objective metadata issues
+        metadata_issues = [issue for issue in issues if "learning objective metadata" in issue.lower() or "section headers" in issue.lower()]
+        if metadata_issues:
+            logger.info(f"Fixing learning objective metadata issues: {metadata_issues}")
+            
+            # Get learning objectives from analysis
+            learning_objectives = analysis.get("learning_objectives", [])
+            if not learning_objectives:
+                # Try to extract from content
+                learning_objectives = self._extract_learning_objectives_from_content(content)
+            
+            # Assign learning objectives to problems that are missing them
+            obj_idx = 0
+            for problem in fixed_problems:
+                if not problem.learning_objective_number or not problem.learning_objective_text:
+                    if obj_idx < len(learning_objectives):
+                        obj = learning_objectives[obj_idx]
+                        problem.learning_objective_number = obj.get("number", str(obj_idx + 1))
+                        problem.learning_objective_text = obj.get("objective", problem.topic)
+                        
+                        # Extract topic/subtopic from objective number
+                        obj_number = problem.learning_objective_number
+                        if obj_number:
+                            parts = obj_number.split(".")
+                            if len(parts) >= 1:
+                                problem.topic_number = parts[0]
+                            if len(parts) >= 2:
+                                problem.subtopic_number = ".".join(parts[:2])
+                        
+                        logger.info(f"Assigned learning objective {problem.learning_objective_number} to problem {problem.problem_number}")
+                        obj_idx += 1
+                    else:
+                        # Fallback: use topic as learning objective
+                        if problem.topic:
+                            problem.learning_objective_text = problem.topic
+                            problem.learning_objective_number = str(problem.problem_number)
+                            logger.info(f"Assigned fallback learning objective to problem {problem.problem_number}")
+        
+        # Fix other issues based on recommendations
+        for recommendation in recommendations:
+            logger.info(f"Processing recommendation: {recommendation}")
+            
+            # Check if recommendation is about learning objectives
+            if "learning objective" in recommendation.lower() or "metadata" in recommendation.lower():
+                # Already handled above
+                continue
+            
+            # Use LLM to interpret and fix other recommendations
+            system_prompt = """You are a Manager Agent supervising exam quality corrections.
+Your task is to interpret review recommendations and determine what specific fixes are needed for each problem."""
+            
+            user_prompt = f"""Review Recommendation: {recommendation}
+
+Current Problems:
+{json.dumps([p.to_dict() for p in fixed_problems], indent=2)}
+
+What specific fixes should be made? Respond in JSON format:
+{{
+    "fixes": [
+        {{
+            "problem_number": <number>,
+            "fix_type": "update_question|update_choices|update_explanation|update_metadata",
+            "description": "What needs to be fixed"
+        }}
+    ]
+}}"""
+            
+            try:
+                response = await self.llm_client.complete(system=system_prompt, user=user_prompt)
+                
+                # Try to parse JSON
+                json_data = None
+                try:
+                    json_data = json.loads(response.strip())
+                except:
+                    # Try balanced braces
+                    start_idx = response.find('{')
+                    if start_idx != -1:
+                        brace_count = 0
+                        end_idx = start_idx
+                        for i in range(start_idx, len(response)):
+                            if response[i] == '{':
+                                brace_count += 1
+                            elif response[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    end_idx = i + 1
+                                    break
+                        
+                        if brace_count == 0:
+                            try:
+                                json_str = response[start_idx:end_idx]
+                                json_data = json.loads(json_str)
+                            except:
+                                pass
+                
+                if json_data and "fixes" in json_data:
+                    for fix in json_data["fixes"]:
+                        prob_num = fix.get("problem_number")
+                        if prob_num and 1 <= prob_num <= len(fixed_problems):
+                            problem = fixed_problems[prob_num - 1]
+                            fix_type = fix.get("fix_type", "")
+                            
+                            if fix_type == "update_metadata":
+                                # Update learning objective metadata
+                                if "learning objective" in fix.get("description", "").lower():
+                                    # Try to extract from description or use topic
+                                    if problem.topic:
+                                        problem.learning_objective_text = problem.topic
+                                        problem.learning_objective_number = str(prob_num)
+                            # Add more fix types as needed
+            except Exception as e:
+                logger.warning(f"Error processing recommendation '{recommendation}': {e}")
+        
+        # Fix problems that were specifically flagged for revision
+        if problems_needing_revision:
+            logger.info(f"Fixing {len(problems_needing_revision)} problems flagged for revision")
+            for prob_num in problems_needing_revision:
+                if 1 <= prob_num <= len(fixed_problems):
+                    problem = fixed_problems[prob_num - 1]
+                    
+                    # If missing metadata, try to fix it
+                    if not problem.learning_objective_number or not problem.learning_objective_text:
+                        # Use topic as fallback
+                        if problem.topic:
+                            problem.learning_objective_text = problem.topic
+                            problem.learning_objective_number = str(prob_num)
+                            logger.info(f"Fixed metadata for problem {prob_num}")
+        
+        logger.info("ManagerAgent: Completed supervising corrections")
+        return fixed_problems
+    
+    def _extract_learning_objectives_from_content(self, content: str) -> List[Dict[str, Any]]:
+        """Extract learning objectives from content as fallback."""
+        objectives = []
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if re.match(r'^\d+\.\d+\.\d+\.\d+', line):
+                objective_text = re.sub(r'^\d+(\.\d+)+\.?\s*', '', line).strip()
+                if objective_text:
+                    number_match = re.match(r'^(\d+(\.\d+)+)', line)
+                    number = number_match.group(1) if number_match else ""
+                    objectives.append({"number": number, "objective": objective_text})
+        return objectives
+
+
 class ReviewAgent(BaseAgent):
     """Final review agent that ensures all problems meet quality standards."""
     
@@ -1676,6 +1843,7 @@ class ExamGeneratorCompany:
         self.problem_generator = ProblemGeneratorAgent(self.llm_client)
         self.validation_agent = ValidationAgent(self.llm_client)
         self.problem_fixer = ProblemFixerAgent(self.llm_client)
+        self.manager_agent = ManagerAgent(self.llm_client)
         self.review_agent = ReviewAgent(self.llm_client)
         
         self.project: Optional[ExamProject] = None
@@ -1888,44 +2056,83 @@ class ExamGeneratorCompany:
         project.validation_results = all_validation_results
         project.problems = problems
         
-        # Phase 4: Final Review
+        # Phase 4: Review-Fix Loop (until quality is excellent)
         project.current_phase = ExamPhase.FINAL_REVIEW
-        update_progress("final_review", 90, "Performing final quality review...")
-        logger.info("Starting final review phase")
+        max_review_iterations = 5  # Maximum number of review-fix cycles
+        review_iteration = 0
         
-        final_validation = all_validation_results[-1]["results"] if all_validation_results else []
-        review = await self.review_agent.review_exam(problems, final_validation, project.input_content)
-        project.final_review = review
-        logger.info("Final review complete", approval_status=review.get("approval_status"))
-        update_progress("final_review", 95, f"Review status: {review.get('approval_status', 'unknown')}")
+        while review_iteration < max_review_iterations:
+            review_iteration += 1
+            update_progress("final_review", 85 + (review_iteration * 2), f"Review iteration {review_iteration}/{max_review_iterations}...")
+            logger.info(f"Starting review iteration {review_iteration}")
+            
+            # Get latest validation results
+            final_validation = all_validation_results[-1]["results"] if all_validation_results else []
+            
+            # Review the exam
+            review = await self.review_agent.review_exam(problems, final_validation, project.input_content)
+            project.final_review = review
+            
+            overall_quality = review.get("overall_quality", "unknown").lower()
+            approval_status = review.get("approval_status", "unknown").lower()
+            
+            logger.info(f"Review iteration {review_iteration} complete", 
+                       overall_quality=overall_quality, 
+                       approval_status=approval_status)
+            update_progress("final_review", 87 + (review_iteration * 2), 
+                          f"Review: {overall_quality} - {approval_status}")
+            
+            # Check if quality is excellent
+            if overall_quality == "excellent" and approval_status == "approved":
+                logger.info("Exam quality is excellent! Review-fix loop complete.")
+                update_progress("final_review", 95, "Exam quality is excellent!")
+                break
+            
+            # If not excellent, use ManagerAgent to fix issues
+            logger.info("Quality not yet excellent. ManagerAgent supervising corrections...")
+            update_progress("final_review", 88 + (review_iteration * 2), 
+                          f"Fixing issues identified in review (iteration {review_iteration})...")
+            
+            # ManagerAgent fixes issues based on review feedback
+            fixed_problems = await self.manager_agent.fix_issues(
+                problems,
+                review,
+                project.input_content,
+                analysis
+            )
+            
+            # Update problems
+            problems = fixed_problems
+            project.problems = problems
+            
+            # Re-validate fixed problems
+            logger.info("Re-validating fixed problems...")
+            revalidation_results = await self.validation_agent.validate_all_problems(
+                problems,
+                project.input_content
+            )
+            all_validation_results.append({
+                "iteration": len(all_validation_results) + 1,
+                "results": revalidation_results,
+                "review_iteration": review_iteration
+            })
+            
+            logger.info(f"Completed review-fix iteration {review_iteration}")
         
-        # If review recommends revision, do one more pass
-        if review.get("approval_status") == "needs_revision" and max_iterations > 0:
-            # Regenerate problematic questions
-            problems_to_revise = review.get("problems_needing_revision", [])
-            if problems_to_revise:
-                for prob_num in problems_to_revise:
-                    idx = prob_num - 1
-                    if 0 <= idx < len(problems):
-                        new_problems = await self.problem_generator.generate_problems(
-                            project.input_content,
-                            analysis,
-                            1
-                        )
-                        if new_problems:
-                            problems[idx] = new_problems[0]
-                            problems[idx].problem_number = idx + 1
-                
-                # Final validation
-                final_validation = await self.validation_agent.validate_all_problems(
-                    problems,
-                    project.input_content
-                )
-                review = await self.review_agent.review_exam(problems, final_validation, project.input_content)
-                project.final_review = review
+        # Final review after all iterations
+        if review_iteration >= max_review_iterations:
+            logger.warning(f"Reached maximum review iterations ({max_review_iterations}). Using final review.")
+            final_validation = all_validation_results[-1]["results"] if all_validation_results else []
+            review = await self.review_agent.review_exam(problems, final_validation, project.input_content)
+            project.final_review = review
         
         project.current_phase = ExamPhase.COMPLETE
         project.status = "complete"
+        
+        logger.info("Exam generation complete", 
+                   final_quality=review.get("overall_quality"),
+                   final_status=review.get("approval_status"),
+                   review_iterations=review_iteration)
         
         return problems, review
     
