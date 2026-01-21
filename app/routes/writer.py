@@ -35,14 +35,29 @@ async def llm_endpoint(request: Request, llm_request: LLMRequest):
     Supports Server-Sent Events (SSE) streaming for real-time token delivery.
     """
     try:
-        # Force local provider (Ollama) - no API keys needed
-        provider = "local"
-        model = llm_request.model or settings.LLM_MODEL
-        base_url = getattr(settings, 'LLM_LOCAL_URL', 'http://localhost:11434/v1')
+        # Determine provider from settings or request
+        provider = settings.LLM_PROVIDER.lower() if hasattr(settings, 'LLM_PROVIDER') else "local"
         
-        # Create LLM client with local provider
+        # Get API key from environment if using OpenAI
+        api_key = None
+        if provider == "openai":
+            import os
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="OPENAI_API_KEY environment variable is required when using OpenAI provider"
+                )
+            base_url = "https://api.openai.com/v1"
+            model = llm_request.model or getattr(settings, 'OPENAI_MODEL', 'gpt-4o')
+        else:
+            # Local provider (Ollama)
+            base_url = getattr(settings, 'LLM_LOCAL_URL', 'http://localhost:11434/v1')
+            model = llm_request.model or settings.LLM_MODEL
+        
+        # Create LLM client
         llm_client = LLMClient(
-            api_key=None,  # No API key needed for local models
+            api_key=api_key,
             base_url=base_url,
             model=model,
             provider=provider
@@ -175,35 +190,50 @@ async def _load_document_contexts(document_ids: List[str]) -> List[str]:
 
 @router.get("/api/writer/models")
 async def get_available_models():
-    """Get list of available local models (Ollama) for writer."""
+    """Get list of available models (Ollama or OpenAI) for writer."""
     import httpx
-    local_models = []
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
-            if response.status_code == 200:
-                data = response.json()
-                local_models = [
-                    {"value": model["name"], "label": f"{model['name']} (Local)", "provider": "local"}
-                    for model in data.get("models", [])
-                ]
-    except:
-        pass
+    import os
     
-    # Default models if Ollama not available or empty
-    if not local_models:
-        local_models = [
-            {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
-            {"value": "llama3:latest", "label": "Llama 3 Latest (Local)", "provider": "local"},
-            {"value": "llama3.2:latest", "label": "Llama 3.2 (Latest)", "provider": "local"},
-            {"value": "mistral:latest", "label": "Mistral (Latest)", "provider": "local"},
-            {"value": "codellama:latest", "label": "CodeLlama (Latest)", "provider": "local"},
-            {"value": "phi3:latest", "label": "Phi-3 (Latest)", "provider": "local"},
+    provider = settings.LLM_PROVIDER.lower() if hasattr(settings, 'LLM_PROVIDER') else "local"
+    
+    models = []
+    
+    if provider == "openai":
+        # Return OpenAI models in the expected format
+        models = [
+            {"value": "gpt-4o", "label": "GPT-4o (OpenAI)", "provider": "openai"},
+            {"value": "gpt-4o-mini", "label": "GPT-4o Mini (OpenAI)", "provider": "openai"},
+            {"value": "gpt-4-turbo", "label": "GPT-4 Turbo (OpenAI)", "provider": "openai"},
+            {"value": "gpt-3.5-turbo", "label": "GPT-3.5 Turbo (OpenAI)", "provider": "openai"},
         ]
+    else:
+        # Get local models (Ollama)
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [
+                        {"value": model["name"], "label": f"{model['name']} (Local)", "provider": "local"}
+                        for model in data.get("models", [])
+                    ]
+        except:
+            pass
+        
+        # Default models if Ollama not available or empty
+        if not models:
+            models = [
+                {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
+                {"value": "llama3:latest", "label": "Llama 3 Latest (Local)", "provider": "local"},
+                {"value": "llama3.2:latest", "label": "Llama 3.2 (Latest)", "provider": "local"},
+                {"value": "mistral:latest", "label": "Mistral (Latest)", "provider": "local"},
+                {"value": "codellama:latest", "label": "CodeLlama (Latest)", "provider": "local"},
+                {"value": "phi3:latest", "label": "Phi-3 (Latest)", "provider": "local"},
+            ]
     
     return {
-        "models": local_models,
-        "local": local_models
+        "models": models,
+        "provider": provider
     }
 
 

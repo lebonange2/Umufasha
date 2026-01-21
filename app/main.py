@@ -230,7 +230,7 @@ async def writer_page(request: Request, path: str = ""):
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="brahttp://localhost:5173/src/main.tsx"></script>
+    <script type="module" src="http://localhost:5173/src/main.tsx"></script>
 </body>
 </html>
         """)
