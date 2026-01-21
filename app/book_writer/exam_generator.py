@@ -1245,13 +1245,53 @@ Respond in JSON format:
         
         return validation
     
-    async def validate_all_problems(self, problems: List[ExamProblem], content: str) -> List[Dict[str, Any]]:
-        """Validate all problems."""
-        results = []
-        for problem in problems:
-            result = await self.validate_problem(problem, content)
-            results.append(result)
-        return results
+    async def validate_all_problems(self, problems: List[ExamProblem], content: str, 
+                                   client_pool: Optional[List[LLMClient]] = None) -> List[Dict[str, Any]]:
+        """Validate all problems in parallel using client pool if available."""
+        if client_pool and len(client_pool) > 1:
+            # Parallel validation with client pool
+            import structlog
+            logger = structlog.get_logger(__name__)
+            logger.info(f"Validating {len(problems)} problems in parallel using {len(client_pool)} clients")
+            
+            async def validate_with_client(problem: ExamProblem, client: LLMClient) -> Dict[str, Any]:
+                """Validate a problem using a specific client."""
+                original_client = self.llm_client
+                try:
+                    self.llm_client = client
+                    return await self.validate_problem(problem, content)
+                finally:
+                    self.llm_client = original_client
+            
+            # Distribute problems across clients
+            tasks = [
+                validate_with_client(problem, client_pool[i % len(client_pool)])
+                for i, problem in enumerate(problems)
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Handle exceptions
+            final_results = []
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Error validating problem {i + 1}: {result}")
+                    # Return default invalid result
+                    final_results.append({
+                        "problem_number": problems[i].problem_number,
+                        "validation_status": "invalid",
+                        "issues": [f"Validation error: {str(result)}"]
+                    })
+                else:
+                    final_results.append(result)
+            
+            return final_results
+        else:
+            # Sequential validation (fallback)
+            results = []
+            for problem in problems:
+                result = await self.validate_problem(problem, content)
+                results.append(result)
+            return results
 
 
 class ProblemFixerAgent(BaseAgent):
@@ -1825,20 +1865,63 @@ class ExamGeneratorCompany:
     
     def __init__(self, model: Optional[str] = None):
         """Initialize the company with all agents."""
+        import os
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
         agent_config = get_config()
         
         selected_model = model or agent_config.get("model", "qwen3:30b")
         if selected_model not in ["llama3:latest", "qwen3:30b"]:
             selected_model = agent_config.get("model", "qwen3:30b")
         
-        self.llm_client = LLMClient(
-            api_key=None,
-            base_url=agent_config.get("base_url", "http://localhost:11434/v1"),
-            model=selected_model,
-            provider=agent_config.get("provider", "local")
-        )
+        # Detect number of GPUs and create multiple LLM clients for parallel processing
+        num_gpus = self._detect_num_gpus()
+        logger.info(f"Detected {num_gpus} GPU(s) for parallel processing")
         
-        # Create agents
+        # Create a pool of LLM clients, one per GPU (or multiple if only one GPU)
+        self.llm_clients = []
+        base_url_template = agent_config.get("base_url", "http://localhost:11434/v1")
+        
+        if num_gpus > 1:
+            # Multiple GPUs detected (RunPod or local): Create one client per GPU
+            # Ollama automatically uses all available GPUs for parallel requests
+            # By creating multiple clients, we ensure concurrent requests are distributed
+            # across GPUs when Ollama processes them in parallel
+            for gpu_idx in range(num_gpus):
+                # Use same base URL but create separate client instances for load balancing
+                # All clients point to the same Ollama instance, which will distribute
+                # concurrent requests across available GPUs
+                client = LLMClient(
+                    api_key=None,
+                    base_url=base_url_template,
+                    model=selected_model,
+                    provider=agent_config.get("provider", "local")
+                )
+                self.llm_clients.append(client)
+                logger.info(f"Created LLM client {gpu_idx + 1}/{num_gpus} for multi-GPU parallel processing")
+            
+            logger.info(f"Multi-GPU setup: {num_gpus} GPUs detected, {len(self.llm_clients)} clients created")
+            logger.info("Ollama will automatically distribute concurrent requests across all GPUs")
+        else:
+            # Single GPU or no GPU detection: Create multiple clients for concurrent requests
+            # Even with one GPU, multiple clients allow better async concurrency
+            # This helps when generating many problems in parallel
+            num_clients = min(4, os.cpu_count() or 2)  # Use up to 4 clients or CPU count
+            for i in range(num_clients):
+                client = LLMClient(
+                    api_key=None,
+                    base_url=base_url_template,
+                    model=selected_model,
+                    provider=agent_config.get("provider", "local")
+                )
+                self.llm_clients.append(client)
+            logger.info(f"Single GPU setup: Created {len(self.llm_clients)} LLM clients for concurrent processing")
+        
+        # Primary client (for backward compatibility)
+        self.llm_client = self.llm_clients[0]
+        
+        # Create agents with primary client (they'll use the client pool when needed)
         self.content_analyst = ContentAnalystAgent(self.llm_client)
         self.problem_generator = ProblemGeneratorAgent(self.llm_client)
         self.validation_agent = ValidationAgent(self.llm_client)
@@ -1846,7 +1929,105 @@ class ExamGeneratorCompany:
         self.manager_agent = ManagerAgent(self.llm_client)
         self.review_agent = ReviewAgent(self.llm_client)
         
+        # Store client pool for parallel operations
+        self.client_pool = self.llm_clients
+        self.current_client_idx = 0
+        
         self.project: Optional[ExamProject] = None
+    
+    def _detect_num_gpus(self) -> int:
+        """Detect number of available GPUs on RunPod or local system."""
+        import os
+        import subprocess
+        import structlog
+        logger = structlog.get_logger(__name__)
+        
+        # Method 1: Try nvidia-smi (works on RunPod and local systems with NVIDIA GPUs)
+        try:
+            result = subprocess.run(
+                ['nvidia-smi', '--list-gpus'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                gpu_lines = [line for line in result.stdout.strip().split('\n') if line.strip()]
+                gpu_count = len(gpu_lines)
+                if gpu_count > 0:
+                    logger.info(f"Detected {gpu_count} GPU(s) via nvidia-smi")
+                    return gpu_count
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+            logger.debug(f"nvidia-smi detection failed: {e}")
+        
+        # Method 2: Try nvidia-smi query (alternative method)
+        try:
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=count', '--format=csv,noheader'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    gpu_count = int(result.stdout.strip())
+                    if gpu_count > 0:
+                        logger.info(f"Detected {gpu_count} GPU(s) via nvidia-smi query")
+                        return gpu_count
+                except ValueError:
+                    pass
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+            logger.debug(f"nvidia-smi query detection failed: {e}")
+        
+        # Method 3: Try CUDA_VISIBLE_DEVICES environment variable (RunPod often sets this)
+        cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+        if cuda_visible:
+            try:
+                # Parse comma-separated GPU indices
+                gpu_indices = [int(x.strip()) for x in cuda_visible.split(',') if x.strip() and x.strip() != '-1']
+                if gpu_indices:
+                    logger.info(f"Detected {len(gpu_indices)} GPU(s) via CUDA_VISIBLE_DEVICES")
+                    return len(gpu_indices)
+            except ValueError:
+                pass
+        
+        # Method 4: Try PyTorch if available
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_count = torch.cuda.device_count()
+                if gpu_count > 0:
+                    logger.info(f"Detected {gpu_count} GPU(s) via PyTorch")
+                    return gpu_count
+        except ImportError:
+            pass
+        
+        # Method 5: Check for RunPod-specific GPU detection
+        # RunPod sometimes exposes GPU info in /proc or environment
+        try:
+            # Check for NVIDIA device files
+            import glob
+            nvidia_devices = glob.glob('/dev/nvidia*')
+            if nvidia_devices:
+                # Count unique GPU devices (nvidia0, nvidia1, etc.)
+                gpu_devices = [d for d in nvidia_devices if '/dev/nvidia' in d and d.replace('/dev/nvidia', '').isdigit()]
+                if gpu_devices:
+                    gpu_count = len(set([d.replace('/dev/nvidia', '') for d in gpu_devices]))
+                    if gpu_count > 0:
+                        logger.info(f"Detected {gpu_count} GPU(s) via /dev/nvidia* devices")
+                        return gpu_count
+        except Exception as e:
+            logger.debug(f"Device file detection failed: {e}")
+        
+        # Default: assume 2 GPUs (user mentioned having 2 on RunPod)
+        # This allows the system to create multiple clients for better concurrency
+        logger.warning("Could not detect GPU count, defaulting to 2 GPUs for parallel processing")
+        return 2
+    
+    def _get_client_for_task(self) -> LLMClient:
+        """Get an LLM client from the pool using round-robin."""
+        client = self.llm_clients[self.current_client_idx]
+        self.current_client_idx = (self.current_client_idx + 1) % len(self.llm_clients)
+        return client
     
     async def generate_exam(self, project: ExamProject, max_iterations: int = 3, 
                            progress_callback: Optional[Callable[[str, int, str], None]] = None) -> Tuple[List[ExamProblem], Dict[str, Any]]:
@@ -1940,9 +2121,35 @@ class ExamGeneratorCompany:
             
             return all_obj_problems
         
-        # Generate all objectives in parallel
-        logger.info(f"Generating problems for {num_objectives} objectives in parallel...")
-        tasks = [generate_for_objective(idx, obj) for idx, obj in enumerate(learning_objectives)]
+        # Generate all objectives in parallel with GPU load balancing
+        # On RunPod with multiple GPUs, Ollama will automatically distribute
+        # concurrent requests across all available GPUs
+        logger.info(f"Generating problems for {num_objectives} objectives in parallel using {len(self.client_pool)} LLM client(s)...")
+        logger.info(f"Concurrent requests will be distributed across {len(self.client_pool)} client(s) for optimal GPU utilization")
+        
+        # Create tasks with client assignment for better GPU utilization
+        async def generate_with_client(obj_idx: int, objective: Dict[str, Any], client_idx: int) -> List[ExamProblem]:
+            """Generate problems using a specific client from the pool."""
+            # Temporarily assign the client to the problem generator for this task
+            original_client = self.problem_generator.llm_client
+            try:
+                # Use round-robin client assignment to distribute load
+                assigned_client = self.client_pool[client_idx % len(self.client_pool)]
+                self.problem_generator.llm_client = assigned_client
+                logger.debug(f"Objective {obj_idx + 1} assigned to LLM client {client_idx % len(self.client_pool) + 1}/{len(self.client_pool)}")
+                return await generate_for_objective(obj_idx, objective)
+            finally:
+                self.problem_generator.llm_client = original_client
+        
+        # Distribute objectives across clients using round-robin
+        # This ensures even distribution and maximizes parallel GPU usage
+        tasks = [
+            generate_with_client(idx, obj, idx) 
+            for idx, obj in enumerate(learning_objectives)
+        ]
+        
+        # Execute all tasks concurrently - Ollama will handle GPU distribution
+        logger.info(f"Launching {len(tasks)} parallel generation tasks...")
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         all_problems = []
@@ -1976,7 +2183,8 @@ class ExamGeneratorCompany:
             
             validation_results = await self.validation_agent.validate_all_problems(
                 problems,
-                project.input_content
+                project.input_content,
+                client_pool=self.client_pool
             )
             all_validation_results.append({
                 "iteration": iteration + 1,
@@ -2109,7 +2317,8 @@ class ExamGeneratorCompany:
             logger.info("Re-validating fixed problems...")
             revalidation_results = await self.validation_agent.validate_all_problems(
                 problems,
-                project.input_content
+                project.input_content,
+                client_pool=self.client_pool
             )
             all_validation_results.append({
                 "iteration": len(all_validation_results) + 1,
