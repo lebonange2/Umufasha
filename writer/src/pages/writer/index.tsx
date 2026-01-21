@@ -21,27 +21,53 @@ const DEFAULT_SETTINGS: WriterSettings = {
   safeMode: false,
 };
 
-// Load settings from localStorage on init
-const loadSettings = (): WriterSettings => {
+// Load settings from localStorage on init (synchronous part)
+const loadSettingsSync = (): WriterSettings => {
   try {
     const saved = localStorage.getItem('writerSettings');
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Always force provider to 'local' and ensure model is a local model
-      const settings = { ...DEFAULT_SETTINGS, ...parsed };
-      settings.provider = 'local';  // Always use local provider
-      // If model is not a local model, use default
-      // Validate model is a local model (Ollama format: name:tag)
-      const validLocalModels = ['qwen3:30b', 'llama3:latest', 'llama3.2:latest', 'mistral:latest', 'codellama:latest', 'phi3:latest'];
-      if (!validLocalModels.includes(settings.model)) {
-        settings.model = DEFAULT_SETTINGS.model;
-      }
-      return settings;
+      return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch (e) {
     console.error('Failed to load settings:', e);
   }
-  return DEFAULT_SETTINGS;
+  return { ...DEFAULT_SETTINGS };
+};
+
+// Detect provider from API and update settings
+const detectProvider = async (currentSettings: WriterSettings): Promise<WriterSettings> => {
+  try {
+    const modelsResponse = await fetch('/api/writer/models');
+    if (modelsResponse.ok) {
+      const modelsData = await modelsResponse.json();
+      const detectedProvider = modelsData.provider || 'local';
+      
+      // Update provider based on API response
+      const updatedSettings = { ...currentSettings, provider: detectedProvider };
+      
+      // Validate model based on provider
+      if (detectedProvider === 'openai') {
+        const validOpenAIModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
+        if (!validOpenAIModels.includes(updatedSettings.model)) {
+          updatedSettings.model = 'gpt-4o';
+        }
+      } else {
+        // Local provider - validate Ollama models
+        const validLocalModels = ['qwen3:30b', 'llama3:latest', 'llama3.2:latest', 'mistral:latest', 'codellama:latest', 'phi3:latest'];
+        if (!validLocalModels.includes(updatedSettings.model)) {
+          updatedSettings.model = DEFAULT_SETTINGS.model;
+        }
+      }
+      
+      return updatedSettings;
+    }
+  } catch (e) {
+    console.warn('Failed to detect provider from API, using defaults:', e);
+  }
+  
+  // Fallback to current settings
+  return currentSettings;
 };
 
 // Save settings to localStorage
@@ -65,7 +91,16 @@ export default function WriterPage() {
   const [showInlineSuggestion, setShowInlineSuggestion] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState('');
-  const [settings, setSettings] = useState<WriterSettings>(loadSettings());
+  const [settings, setSettings] = useState<WriterSettings>(loadSettingsSync());
+  
+  // Detect provider from API on mount and update settings
+  useEffect(() => {
+    detectProvider(settings).then(updatedSettings => {
+      if (updatedSettings.provider !== settings.provider || updatedSettings.model !== settings.model) {
+        setSettings(updatedSettings);
+      }
+    });
+  }, []); // Only run once on mount
   
   // Save settings when they change
   useEffect(() => {
@@ -240,7 +275,7 @@ export default function WriterPage() {
             document_context: selectedDocuments.length > 0 ? selectedDocuments : undefined,
             text_context: textContext.trim() || undefined,
             mode: 'autocomplete',
-            provider: 'local' as const,  // Always use local provider
+            provider: settings.provider as 'local' | 'openai',
             model: settings.model,
             params: {
               temperature: settings.temperature * 0.7, // Lower temp for autocomplete
@@ -323,7 +358,7 @@ export default function WriterPage() {
             document_context: selectedDocuments.length > 0 ? selectedDocuments : undefined,
             text_context: textContext.trim() || undefined,
             mode,
-            provider: 'local' as const,  // Always use local provider
+            provider: settings.provider as 'local' | 'openai',
             model: settings.model,
             params: {
               temperature: settings.temperature,
