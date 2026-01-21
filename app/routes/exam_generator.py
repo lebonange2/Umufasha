@@ -18,6 +18,7 @@ from app.book_writer.exam_generator import (
 )
 from app.database import get_db
 from app.models import ExamGeneratorProject as EGProject
+from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -92,7 +93,8 @@ class ExamGeneratorProjectCreate(BaseModel):
     output_directory: str = "exam_outputs"
     num_problems: int = 10
     validation_iterations: int = 3
-    model: Optional[str] = "qwen3:30b"
+    model: Optional[str] = None  # Will use default from config based on provider
+    provider: Optional[str] = None  # "local" or "openai" - uses config default if not provided
 
 
 class ExamGeneratorProjectResponse(BaseModel):
@@ -129,16 +131,46 @@ async def create_exam_generator_project(
         
         project_id = str(uuid.uuid4())
         
-        # Create company instance
+        # Determine provider - use project provider or config default
+        provider = project.provider or settings.LLM_PROVIDER.lower()
+        if provider not in ["local", "openai"]:
+            provider = settings.LLM_PROVIDER.lower()
+        
+        # Validate OpenAI API key if using OpenAI
+        if provider == "openai" and not settings.OPENAI_API_KEY:
+            raise HTTPException(
+                status_code=400,
+                detail="OPENAI_API_KEY is required when using OpenAI provider. "
+                       "Set it in .env file: OPENAI_API_KEY=your-key"
+            )
+        
+        # Temporarily override provider via environment variable if project specifies it
+        # This allows per-project provider selection
+        original_provider_env = os.environ.get("LLM_PROVIDER")
+        
         try:
-            model = project.model or "qwen3:30b"
-            if model not in ["llama3:latest", "qwen3:30b"]:
-                model = "qwen3:30b"
+            if project.provider:
+                # Temporarily set provider in environment (config reads from env)
+                os.environ["LLM_PROVIDER"] = provider
+            
+            # Model selection: use project model if provided, otherwise let config decide
+            model = project.model  # None means use config default
             
             company = ExamGeneratorCompany(model=model)
+            
+        except ValueError as e:
+            # Config validation error (e.g., missing API key)
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             logger.error("Failed to initialize ExamGeneratorCompany", error=str(e), exc_info=True)
             raise HTTPException(status_code=500, detail=f"Failed to initialize exam generator: {str(e)}")
+        finally:
+            # Restore original environment variable
+            if project.provider:
+                if original_provider_env is not None:
+                    os.environ["LLM_PROVIDER"] = original_provider_env
+                elif "LLM_PROVIDER" in os.environ:
+                    del os.environ["LLM_PROVIDER"]
         
         # Extract learning objectives to calculate total problems
         learning_objectives = company.content_analyst._extract_learning_objectives(project.input_content)
@@ -218,7 +250,8 @@ async def upload_input_file(
     output_directory: str = Form("exam_outputs"),
     num_problems: int = Form(10),
     validation_iterations: int = Form(3),
-    model: Optional[str] = Form("qwen3:30b"),
+    model: Optional[str] = Form(None),
+    provider: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload a text file and create an exam generator project."""
@@ -240,7 +273,8 @@ async def upload_input_file(
             output_directory=output_directory,
             num_problems=num_problems,
             validation_iterations=validation_iterations,
-            model=model
+            model=model,
+            provider=provider
         )
         
         response = await create_exam_generator_project(project_create, db)

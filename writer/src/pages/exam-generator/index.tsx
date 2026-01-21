@@ -40,6 +40,7 @@ export default function ExamGeneratorPage() {
   const [numProblems, setNumProblems] = useState(10);
   const [validationIterations, setValidationIterations] = useState(3);
   const [model, setModel] = useState('qwen3:30b');
+  const [provider, setProvider] = useState<'local' | 'openai'>('local');
   const [outputDir, setOutputDir] = useState('exam_outputs');
   const [useFileUpload, setUseFileUpload] = useState(true);
   
@@ -153,6 +154,7 @@ export default function ExamGeneratorPage() {
         formData.append('num_problems', numProblems.toString());
         formData.append('validation_iterations', validationIterations.toString());
         formData.append('model', model);
+        formData.append('provider', provider);
 
         const response = await fetch('/api/exam-generator/projects/upload', {
           method: 'POST',
@@ -186,7 +188,8 @@ export default function ExamGeneratorPage() {
             output_directory: outputDir,
             num_problems: numProblems,
             validation_iterations: validationIterations,
-            model: model
+            model: model,
+            provider: provider
           })
         });
 
@@ -391,28 +394,67 @@ export default function ExamGeneratorPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Provider
+                  </label>
+                  <select
+                    value={provider}
+                    onChange={(e) => {
+                      const newProvider = e.target.value as 'local' | 'openai';
+                      setProvider(newProvider);
+                      // Update model based on provider
+                      if (newProvider === 'openai') {
+                        setModel('gpt-4o');
+                      } else {
+                        setModel('qwen3:30b');
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="local">Local (Ollama)</option>
+                    <option value="openai">OpenAI (GPT-4o)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Model
                   </label>
                   <select
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    disabled={provider === 'openai'}
                   >
-                    <option value="qwen3:30b">qwen3:30b</option>
-                    <option value="llama3:latest">llama3:latest</option>
+                    {provider === 'openai' ? (
+                      <>
+                        <option value="gpt-4o">gpt-4o</option>
+                        <option value="gpt-4o-mini">gpt-4o-mini</option>
+                        <option value="gpt-4-turbo">gpt-4-turbo</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="qwen3:30b">qwen3:30b</option>
+                        <option value="llama3:latest">llama3:latest</option>
+                      </>
+                    )}
                   </select>
+                  {provider === 'openai' && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Note: Requires OPENAI_API_KEY in .env file
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Output Directory
-                  </label>
-                  <input
-                    type="text"
-                    value={outputDir}
-                    onChange={(e) => setOutputDir(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Output Directory
+                </label>
+                <input
+                  type="text"
+                  value={outputDir}
+                  onChange={(e) => setOutputDir(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
 
               <div className="flex gap-4">

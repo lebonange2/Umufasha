@@ -1870,53 +1870,77 @@ class ExamGeneratorCompany:
         logger = structlog.get_logger(__name__)
         
         agent_config = get_config()
+        provider = agent_config.get("provider", "local").lower()
         
-        selected_model = model or agent_config.get("model", "qwen3:30b")
-        if selected_model not in ["llama3:latest", "qwen3:30b"]:
+        # Get model - allow override via parameter, otherwise use config
+        if model:
+            selected_model = model
+        else:
             selected_model = agent_config.get("model", "qwen3:30b")
         
-        # Detect number of GPUs and create multiple LLM clients for parallel processing
-        num_gpus = self._detect_num_gpus()
-        logger.info(f"Detected {num_gpus} GPU(s) for parallel processing")
+        # For OpenAI, use the configured OpenAI model
+        if provider == "openai":
+            selected_model = agent_config.get("model", "gpt-4o")
+            logger.info(f"Using OpenAI provider with model: {selected_model}")
+        else:
+            # For local models, validate model name
+            if selected_model not in ["llama3:latest", "qwen3:30b"]:
+                selected_model = agent_config.get("model", "qwen3:30b")
+            logger.info(f"Using local (Ollama) provider with model: {selected_model}")
         
-        # Create a pool of LLM clients, one per GPU (or multiple if only one GPU)
+        # Create a pool of LLM clients
         self.llm_clients = []
         base_url_template = agent_config.get("base_url", "http://localhost:11434/v1")
+        api_key = agent_config.get("api_key")
         
-        if num_gpus > 1:
-            # Multiple GPUs detected (RunPod or local): Create one client per GPU
-            # Ollama automatically uses all available GPUs for parallel requests
-            # By creating multiple clients, we ensure concurrent requests are distributed
-            # across GPUs when Ollama processes them in parallel
-            for gpu_idx in range(num_gpus):
-                # Use same base URL but create separate client instances for load balancing
-                # All clients point to the same Ollama instance, which will distribute
-                # concurrent requests across available GPUs
-                client = LLMClient(
-                    api_key=None,
-                    base_url=base_url_template,
-                    model=selected_model,
-                    provider=agent_config.get("provider", "local")
-                )
-                self.llm_clients.append(client)
-                logger.info(f"Created LLM client {gpu_idx + 1}/{num_gpus} for multi-GPU parallel processing")
-            
-            logger.info(f"Multi-GPU setup: {num_gpus} GPUs detected, {len(self.llm_clients)} clients created")
-            logger.info("Ollama will automatically distribute concurrent requests across all GPUs")
-        else:
-            # Single GPU or no GPU detection: Create multiple clients for concurrent requests
-            # Even with one GPU, multiple clients allow better async concurrency
-            # This helps when generating many problems in parallel
-            num_clients = min(4, os.cpu_count() or 2)  # Use up to 4 clients or CPU count
+        # For OpenAI, create multiple clients for parallel requests (OpenAI handles concurrency)
+        # For local (Ollama), detect GPUs and create clients accordingly
+        if provider == "openai":
+            # OpenAI: Create multiple clients for parallel requests
+            # OpenAI API handles rate limiting and concurrency automatically
+            num_clients = min(4, os.cpu_count() or 2)  # Use up to 4 clients for parallel requests
             for i in range(num_clients):
                 client = LLMClient(
-                    api_key=None,
+                    api_key=api_key,
                     base_url=base_url_template,
                     model=selected_model,
-                    provider=agent_config.get("provider", "local")
+                    provider=provider
                 )
                 self.llm_clients.append(client)
-            logger.info(f"Single GPU setup: Created {len(self.llm_clients)} LLM clients for concurrent processing")
+            logger.info(f"OpenAI setup: Created {len(self.llm_clients)} LLM clients for parallel processing")
+            logger.info(f"Using OpenAI API with model: {selected_model}")
+        else:
+            # Local (Ollama): Detect GPUs and create clients
+            num_gpus = self._detect_num_gpus()
+            logger.info(f"Detected {num_gpus} GPU(s) for parallel processing")
+            
+            if num_gpus > 1:
+                # Multiple GPUs detected (RunPod or local): Create one client per GPU
+                # Ollama automatically uses all available GPUs for parallel requests
+                for gpu_idx in range(num_gpus):
+                    client = LLMClient(
+                        api_key=None,
+                        base_url=base_url_template,
+                        model=selected_model,
+                        provider=provider
+                    )
+                    self.llm_clients.append(client)
+                    logger.info(f"Created LLM client {gpu_idx + 1}/{num_gpus} for multi-GPU parallel processing")
+                
+                logger.info(f"Multi-GPU setup: {num_gpus} GPUs detected, {len(self.llm_clients)} clients created")
+                logger.info("Ollama will automatically distribute concurrent requests across all GPUs")
+            else:
+                # Single GPU or no GPU detection: Create multiple clients for concurrent requests
+                num_clients = min(4, os.cpu_count() or 2)  # Use up to 4 clients or CPU count
+                for i in range(num_clients):
+                    client = LLMClient(
+                        api_key=None,
+                        base_url=base_url_template,
+                        model=selected_model,
+                        provider=provider
+                    )
+                    self.llm_clients.append(client)
+                logger.info(f"Single GPU setup: Created {len(self.llm_clients)} LLM clients for concurrent processing")
         
         # Primary client (for backward compatibility)
         self.llm_client = self.llm_clients[0]

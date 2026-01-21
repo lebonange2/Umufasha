@@ -17,13 +17,15 @@ class Settings(BaseSettings):
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "neo4jpassword"
     
-    # LLM - Local models only (Ollama)
+    # LLM Configuration - Supports both local (Ollama) and OpenAI
+    LLM_PROVIDER: str = "local"  # Options: "local" (Ollama) or "openai"
     LLM_MODEL: str = "gemma2:2b"  # Default local model (small, fast, low memory)
-    LLM_PROVIDER: str = "local"  # Always local (Ollama) - no API keys needed
     LLM_LOCAL_URL: str = "http://localhost:11434/v1"  # Ollama default URL
+    # OpenAI Configuration (for local use with OpenAI API)
+    OPENAI_API_KEY: Optional[str] = None  # Required when LLM_PROVIDER=openai
+    OPENAI_MODEL: str = "gpt-4o"  # Default OpenAI model (gpt-4o, gpt-4o-mini, etc.)
     USE_MOCK_LLM: bool = False  # Set to True for testing with instant mock responses
-    # Legacy fields (deprecated, not used - kept for backwards compatibility)
-    OPENAI_API_KEY: Optional[str] = None  # Deprecated - not used
+    # Legacy fields (deprecated, kept for backwards compatibility)
     ANTHROPIC_API_KEY: Optional[str] = None  # Deprecated - not used
     LLM_BASE_URL: Optional[str] = None  # Deprecated - not used
     
