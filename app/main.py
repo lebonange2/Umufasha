@@ -112,7 +112,12 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Mount writer static files (after build)
+# Mount assets directory at /writer/assets to match vite base path
 writer_static_path = "app/static/writer"
+writer_assets_path = os.path.join(writer_static_path, "assets")
+if os.path.exists(writer_assets_path):
+    app.mount("/writer/assets", StaticFiles(directory=writer_assets_path, html=False), name="writer-assets")
+# Also keep /writer-static for backwards compatibility
 if os.path.exists(writer_static_path):
     app.mount("/writer-static", StaticFiles(directory=writer_static_path, html=False), name="writer-static")
 
