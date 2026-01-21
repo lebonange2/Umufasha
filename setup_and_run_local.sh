@@ -61,26 +61,35 @@ if [ ! -d "venv" ]; then
     print_warning "Virtual environment not found. Creating..."
     python3 -m venv venv
     print_success "Virtual environment created"
+    VENV_CREATED=true
 else
-    print_success "Virtual environment exists"
+    print_success "Virtual environment already exists - skipping creation"
+    VENV_CREATED=false
 fi
 
 # Activate virtual environment
 print_status "Activating virtual environment..."
 source venv/bin/activate
 
-# Upgrade pip
-print_status "Upgrading pip..."
-pip install --upgrade pip --quiet
-
-# Install dependencies
-print_status "Installing dependencies (this may take a few minutes)..."
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt --quiet
-    print_success "Dependencies installed"
+# Only upgrade pip and install dependencies if venv was just created
+# or if user wants to update dependencies
+if [ "$VENV_CREATED" = true ]; then
+    # Upgrade pip
+    print_status "Upgrading pip..."
+    pip install --upgrade pip --quiet
+    
+    # Install dependencies
+    print_status "Installing dependencies (this may take a few minutes)..."
+    if [ -f "requirements.txt" ]; then
+        pip install -r requirements.txt --quiet
+        print_success "Dependencies installed"
+    else
+        print_error "requirements.txt not found!"
+        exit 1
+    fi
 else
-    print_error "requirements.txt not found!"
-    exit 1
+    print_status "Virtual environment already set up - skipping dependency installation"
+    print_status "To update dependencies, run: pip install -r requirements.txt --upgrade"
 fi
 
 # Check for OpenAI API key
