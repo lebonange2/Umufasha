@@ -79,6 +79,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra fields in .env file (like OPENAI_API_KEY which is read from environment)
         # Allow reading from environment variables (takes precedence over .env file)
         # This is the default behavior of pydantic-settings
 
