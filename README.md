@@ -83,7 +83,56 @@ export OPENAI_API_KEY=sk-your-key-here
 
 📖 **See [RUN_LOCALLY.md](RUN_LOCALLY.md) for detailed local setup instructions**
 
-### Option 2: Full Setup with Docker (Production/Advanced)
+### Option 2: Coding Environment Only (CWS + MCP Server)
+
+Run only the coding environment components independently from the main FastAPI application:
+
+```bash
+# Navigate to coding environment directory
+cd coding-environment
+
+# Setup and run (first time)
+./setup_and_run.sh
+```
+
+This script will:
+- ✅ Check Python version (requires 3.10+)
+- ✅ Create isolated virtual environment in `coding-environment/venv/`
+- ✅ Install CWS and MCP Server dependencies
+- ✅ Start MCP Server on port 8080 (WebSocket)
+- ✅ Start CWS on port 9090 (WebSocket)
+- ✅ Auto-detect RunPod environment and configure for port forwarding
+
+**Access the Services:**
+- **MCP Server**: http://localhost:8080
+- **CWS**: http://localhost:9090
+
+**Stop Services:**
+```bash
+cd coding-environment
+./stop.sh
+# Or press Ctrl+C in the terminal where services are running
+```
+
+**Configuration:**
+```bash
+# Custom ports
+export MCP_PORT=8080
+export CWS_PORT=9090
+
+# Custom workspace root
+export WORKSPACE_ROOT=/path/to/workspace
+
+# Transport type (websocket or stdio)
+export TRANSPORT=websocket
+
+# RunPod: Auto-detected, or manually set bind host
+export BIND_HOST_OVERRIDE=0.0.0.0
+```
+
+📖 **See [coding-environment/README_SETUP.md](coding-environment/README_SETUP.md) for detailed setup instructions**
+
+### Option 3: Full Setup with Docker (Production/Advanced)
 
 **Prerequisites:**
 - **Python 3.8+** (required)
@@ -126,6 +175,7 @@ The application runs in **Mock Mode** by default:
 - **[How to Run](HOW_TO_RUN.md)** - Detailed setup and running instructions
 - **[RunPod GPU Setup](RUNPOD_GPU_SETUP.md)** - Run in browser with GPU acceleration
 - **[Multi-GPU Parallel Processing](MULTI_GPU_PARALLEL_PROCESSING.md)** - Multi-GPU setup for RunPod
+- **[Coding Environment Setup](coding-environment/README_SETUP.md)** - Run only CWS + MCP Server independently
 - **[API Documentation](http://localhost:8000/docs)** - Interactive API docs
 
 ### Writer Assistant
@@ -150,6 +200,12 @@ The application runs in **Mock Mode** by default:
 |--------|---------|
 | `./setup_and_run_local.sh` | **Local setup and run** - One-command setup for local development with OpenAI |
 | `./QUICK_START_LOCAL.sh` | **Quick start** - Fast startup for subsequent runs (assumes setup done) |
+
+### Coding Environment Scripts
+| Script | Purpose |
+|--------|---------|
+| `./coding-environment/setup_and_run.sh` | **Coding environment setup** - Setup and run CWS + MCP Server independently |
+| `./coding-environment/stop.sh` | **Stop coding environment** - Gracefully stop CWS and MCP Server |
 
 ### Production/Full Setup Scripts
 | Script | Purpose |
