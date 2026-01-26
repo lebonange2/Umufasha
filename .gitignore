@@ -80,3 +80,8 @@ out/
 test_bark_output.wav
 graph_data/
 graph_data/
+
+# Coding environment
+coding-environment/venv/
+coding-environment/.pids/
+coding-environment/*.log
