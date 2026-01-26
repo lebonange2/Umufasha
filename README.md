@@ -132,6 +132,8 @@ export BIND_HOST_OVERRIDE=0.0.0.0
 
 📖 **See [coding-environment/README_SETUP.md](coding-environment/README_SETUP.md) for detailed setup instructions**
 
+**Note for RunPod Users:** If you see Docker build instructions in the RunPod UI, this is informational only. You don't need to build Docker images - just run the setup script directly. The Docker files are for local development and production deployments, not required for RunPod usage.
+
 ### Option 3: Full Setup with Docker (Production/Advanced)
 
 **Prerequisites:**

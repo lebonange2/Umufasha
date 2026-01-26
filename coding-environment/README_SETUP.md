@@ -59,11 +59,12 @@ The script automatically detects RunPod environments and binds to `0.0.0.0` inst
 
 For RunPod:
 1. The script will automatically use `0.0.0.0` as the bind host
-2. Configure ports in RunPod UI:
+2. **Ignore Docker build messages**: If you see Docker build instructions in RunPod UI, you can ignore them. The setup script runs directly without Docker.
+3. Configure ports in RunPod UI:
    - Go to your pod's page
    - Find "Ports" or "Network" section
    - Add port mappings for `8080` (MCP Server) and `9090` (CWS)
-3. Access via RunPod's port forwarding URLs:
+4. Access via RunPod's port forwarding URLs:
    - `https://xxxxx-8080.proxy.runpod.net` (MCP Server)
    - `https://xxxxx-9090.proxy.runpod.net` (CWS)
 
