@@ -10,29 +10,40 @@
   border-bottom: 1px solid #3e3e42;
 }
 
-.path-breadcrumb {
+.file-browser-toolbar {
   display: flex;
   align-items: center;
-  font-size: 0.75rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.file-browser-title {
+  font-size: 0.8rem;
   color: #cccccc;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.path-button {
-  background: none;
-  border: none;
-  color: #4ec9b0;
-  cursor: pointer;
-  padding: 0;
+.file-browser-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.fb-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: #cccccc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 0.2rem 0.45rem;
   font-size: 0.75rem;
+  cursor: pointer;
 }
 
-.path-button:hover {
-  text-decoration: underline;
-}
-
-.path-separator {
-  margin: 0 0.25rem;
-  color: #808080;
+.fb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .file-list {
@@ -41,7 +52,7 @@
   padding: 0.5rem;
 }
 
-.file-item {
+.tree-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -51,12 +62,28 @@
   font-size: 0.875rem;
 }
 
-.file-item:hover {
+.tree-item:hover {
   background-color: #2a2d2e;
 }
 
-.file-item.selected {
+.tree-item.selected {
   background-color: #094771;
+}
+
+.tree-item.active-dir {
+  outline: 1px solid rgba(78, 201, 176, 0.35);
+}
+
+.tree-twisty {
+  width: 14px;
+  color: #cccccc;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.tree-loading {
+  margin-left: auto;
+  color: #808080;
 }
 
 .file-icon {

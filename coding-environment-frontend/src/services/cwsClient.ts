@@ -106,6 +106,14 @@ export class CWSClient {
     return result?.content ?? '';
   }
 
+  async createFile(path: string): Promise<void> {
+    await this.rpc('fs.create', { path, type: 'file', options: { parents: true } });
+  }
+
+  async createFolder(path: string): Promise<void> {
+    await this.rpc('fs.create', { path, type: 'dir', options: { parents: true } });
+  }
+
   async writeFile(path: string, content: string): Promise<void> {
     await this.rpc('fs.write', { path, contents: content });
   }

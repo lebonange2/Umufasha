@@ -17,6 +17,7 @@ export default function CodingEnvironmentPage() {
   const [workspacePath] = useState<string>('.');
   const [selectedModel, setSelectedModel] = useState<string>('llama3:latest');
   const [cwsAutoStartAttempted, setCwsAutoStartAttempted] = useState(false);
+  const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
 
   // Auto-start CWS on page load
   useEffect(() => {
@@ -233,6 +234,11 @@ export default function CodingEnvironmentPage() {
     setCurrentFile(path);
   };
 
+  const touchFileInExplorer = (path: string) => {
+    setExplorerRefreshToken((t) => t + 1);
+    setCurrentFile(path);
+  };
+
   const handleSaveFile = async () => {
     if (!currentFile || !cwsClient?.isConnected()) return;
     
@@ -269,6 +275,7 @@ export default function CodingEnvironmentPage() {
             workspacePath={workspacePath}
             onFileSelect={handleFileSelect}
             currentFile={currentFile}
+            refreshToken={explorerRefreshToken}
           />
         </div>
         
@@ -292,7 +299,11 @@ export default function CodingEnvironmentPage() {
         <div className="terminal-panel">
           <div className="right-pane">
             <div className="right-pane-top">
-              <ChatPanel model={selectedModel} cwsConnected={!!cwsClient?.isConnected()} />
+              <ChatPanel
+                model={selectedModel}
+                cwsConnected={!!cwsClient?.isConnected()}
+                onFileTouched={touchFileInExplorer}
+              />
             </div>
             <div className="right-pane-bottom">
               <Terminal cwsClient={cwsClient} />

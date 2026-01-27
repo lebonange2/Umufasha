@@ -15,9 +15,10 @@ type AgentStep =
 interface ChatPanelProps {
   model: string;
   cwsConnected: boolean;
+  onFileTouched?: (path: string) => void;
 }
 
-export default function ChatPanel({ model, cwsConnected }: ChatPanelProps) {
+export default function ChatPanel({ model, cwsConnected, onFileTouched }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
@@ -69,6 +70,23 @@ export default function ChatPanel({ model, cwsConnected }: ChatPanelProps) {
       const output = data.output || '';
       const agentSteps = (data.steps || []) as AgentStep[];
       setSteps(agentSteps);
+
+      // If the agent touched files (create/write), refresh/open them in the UI like Cursor.
+      try {
+        const touched: string[] = [];
+        for (const s of agentSteps) {
+          if (s.type === 'tool' && (s.tool === 'fs.write' || s.tool === 'fs.create')) {
+            const p = (s.params || {}).path;
+            if (typeof p === 'string' && p.length > 0) touched.push(p);
+          }
+        }
+        if (touched.length > 0 && onFileTouched) {
+          onFileTouched(touched[touched.length - 1]);
+        }
+      } catch {
+        // ignore
+      }
+
       if (output.trim().length > 0) {
         setMessages((prev) => [...prev, { role: 'assistant', content: output }]);
       } else {

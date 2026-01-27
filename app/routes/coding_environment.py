@@ -577,6 +577,7 @@ async def _run_cws_tool(tool: str, params: Dict[str, Any]) -> Dict[str, Any]:
     tool_map = {
         "fs.read": "fs.read",
         "fs.write": "fs.write",
+        "fs.create": "fs.create",
         "fs.list": "fs.list",
         "search.find": "search.find",
         "task.run": "task.run",
@@ -609,7 +610,7 @@ async def agent_chat(req: AgentChatRequest):
         "You can read/write/list/search files and run commands via tools. "
         "When you need to use a tool, reply with EXACTLY one JSON object and nothing else:\n"
         "  {\"tool\":\"fs.read\",\"params\":{\"path\":\"README.md\"}}\n"
-        "Supported tools: fs.read, fs.write (params: path, contents), fs.list (params: path), "
+        "Supported tools: fs.read, fs.write (params: path, contents), fs.create (params: path, type), fs.list (params: path), "
         "search.find (params: query, options), task.run (params: command, args, options).\n"
         "After receiving tool results, continue. "
         "If you are done, reply with normal text (not JSON)."

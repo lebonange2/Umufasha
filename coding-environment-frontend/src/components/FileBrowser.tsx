@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { CWSClient, FileInfo } from '../services/cwsClient';
 import './FileBrowser.css';
 
@@ -7,89 +7,169 @@ interface FileBrowserProps {
   workspacePath: string;
   onFileSelect: (path: string) => void;
   currentFile: string | null;
+  refreshToken?: number;
 }
 
-export default function FileBrowser({ cwsClient, workspacePath, onFileSelect, currentFile }: FileBrowserProps) {
-  const [files, setFiles] = useState<FileInfo[]>([]);
-  const [currentPath, setCurrentPath] = useState<string>(workspacePath);
-  const [loading, setLoading] = useState(false);
+type NodeChildren = Record<string, FileInfo[]>;
+
+export default function FileBrowser({ cwsClient, workspacePath, onFileSelect, currentFile, refreshToken = 0 }: FileBrowserProps) {
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['.']));
+  const [children, setChildren] = useState<NodeChildren>({});
+  const [loadingDirs, setLoadingDirs] = useState<Set<string>>(() => new Set());
+  const [selectedDir, setSelectedDir] = useState<string>('.');
 
   useEffect(() => {
-    if (cwsClient?.isConnected()) {
-      loadFiles(currentPath);
-    }
-  }, [cwsClient, currentPath]);
-
-  const loadFiles = async (path: string) => {
     if (!cwsClient?.isConnected()) return;
-    
-    setLoading(true);
+    // Initial load / refresh: load root and expanded dirs
+    void refreshAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cwsClient, refreshToken]);
+
+  const sorted = (list: FileInfo[]) =>
+    [...list].sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  const loadDir = async (path: string) => {
+    if (!cwsClient?.isConnected()) return;
+    setLoadingDirs((prev) => new Set(prev).add(path));
     try {
       const fileList = await cwsClient.listFiles(path);
-      setFiles(fileList);
+      setChildren((prev) => ({ ...prev, [path]: sorted(fileList) }));
     } catch (error) {
       console.error('Failed to load files:', error);
-      setFiles([]);
     } finally {
-      setLoading(false);
+      setLoadingDirs((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
     }
   };
 
-  const handleFileClick = (file: FileInfo) => {
-    if (file.type === 'directory') {
-      const newPath = file.path;
-      setCurrentPath(newPath);
-    } else {
-      onFileSelect(file.path);
+  const refreshAll = async () => {
+    // Always ensure root loaded
+    await loadDir('.');
+    // Reload expanded dirs (best-effort)
+    for (const dir of expanded) {
+      if (dir !== '.') await loadDir(dir);
     }
   };
 
-  const handlePathClick = (path: string) => {
-    setCurrentPath(path);
+  const toggleDir = async (dirPath: string) => {
+    setSelectedDir(dirPath);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(dirPath)) next.delete(dirPath);
+      else next.add(dirPath);
+      return next;
+    });
+    if (!children[dirPath]) await loadDir(dirPath);
   };
 
-  const getPathParts = () => {
-    const parts = currentPath.split('/').filter(Boolean);
-    return parts.length > 0 ? parts : ['.'];
+  const createNewFile = async () => {
+    if (!cwsClient?.isConnected()) return;
+    const name = window.prompt('New file name (relative to selected folder):');
+    if (!name) return;
+    const target = selectedDir === '.' ? name : `${selectedDir}/${name}`;
+    try {
+      await cwsClient.createFile(target);
+      await cwsClient.writeFile(target, '');
+      await refreshAll();
+      onFileSelect(target);
+    } catch (e: any) {
+      alert(`Failed to create file: ${e?.message || 'Unknown error'}`);
+    }
+  };
+
+  const createNewFolder = async () => {
+    if (!cwsClient?.isConnected()) return;
+    const name = window.prompt('New folder name (relative to selected folder):');
+    if (!name) return;
+    const target = selectedDir === '.' ? name : `${selectedDir}/${name}`;
+    try {
+      await cwsClient.createFolder(target);
+      // Expand and refresh
+      setExpanded((prev) => new Set(prev).add(target));
+      await refreshAll();
+    } catch (e: any) {
+      alert(`Failed to create folder: ${e?.message || 'Unknown error'}`);
+    }
+  };
+
+  const rootLabel = useMemo(() => workspacePath === '.' ? 'Workspace' : workspacePath, [workspacePath]);
+
+  const renderTree = (dirPath: string, depth: number) => {
+    const list = children[dirPath] || [];
+    if (!expanded.has(dirPath)) return null;
+    return list.map((entry) => {
+      const isDir = entry.type === 'directory';
+      const isOpen = expanded.has(entry.path);
+      const isLoading = loadingDirs.has(entry.path);
+      return (
+        <div key={entry.path}>
+          <div
+            className={`tree-item ${isDir ? 'directory' : 'file'} ${currentFile === entry.path ? 'selected' : ''} ${selectedDir === entry.path ? 'active-dir' : ''}`}
+            style={{ paddingLeft: `${8 + depth * 14}px` }}
+            onClick={() => {
+              if (isDir) void toggleDir(entry.path);
+              else onFileSelect(entry.path);
+            }}
+          >
+            <span className="tree-twisty">{isDir ? (isOpen ? '▾' : '▸') : ''}</span>
+            <span className="file-icon">{isDir ? '📁' : '📄'}</span>
+            <span className="file-name">{entry.name}</span>
+            {isDir && isLoading && <span className="tree-loading">…</span>}
+          </div>
+          {isDir && renderTree(entry.path, depth + 1)}
+        </div>
+      );
+    });
   };
 
   return (
     <div className="file-browser">
       <div className="file-browser-header">
-        <div className="path-breadcrumb">
-          {getPathParts().map((part, index) => {
-            const path = '/' + getPathParts().slice(0, index + 1).join('/');
-            return (
-              <span key={index}>
-                <button onClick={() => handlePathClick(path)} className="path-button">
-                  {part}
-                </button>
-                {index < getPathParts().length - 1 && <span className="path-separator">/</span>}
-              </span>
-            );
-          })}
+        <div className="file-browser-toolbar">
+          <div className="file-browser-title">{rootLabel}</div>
+          <div className="file-browser-actions">
+            <button className="fb-btn" onClick={() => void refreshAll()} disabled={!cwsClient?.isConnected()}>
+              Refresh
+            </button>
+            <button className="fb-btn" onClick={() => void createNewFile()} disabled={!cwsClient?.isConnected()}>
+              New File
+            </button>
+            <button className="fb-btn" onClick={() => void createNewFolder()} disabled={!cwsClient?.isConnected()}>
+              New Folder
+            </button>
+          </div>
         </div>
       </div>
       
       <div className="file-list">
-        {loading ? (
+        {!cwsClient?.isConnected() ? (
+          <div className="empty">CWS not connected</div>
+        ) : (children['.'] || []).length === 0 && loadingDirs.has('.') ? (
           <div className="loading">Loading...</div>
-        ) : files.length === 0 ? (
+        ) : (children['.'] || []).length === 0 ? (
           <div className="empty">No files</div>
         ) : (
-          files.map((file) => (
+          <div>
             <div
-              key={file.path}
-              className={`file-item ${file.type} ${currentFile === file.path ? 'selected' : ''}`}
-              onClick={() => handleFileClick(file)}
+              className={`tree-item directory root ${selectedDir === '.' ? 'active-dir' : ''}`}
+              style={{ paddingLeft: '8px' }}
+              onClick={() => void toggleDir('.')}
             >
-              <span className="file-icon">
-                {file.type === 'directory' ? '📁' : '📄'}
-              </span>
-              <span className="file-name">{file.name}</span>
+              <span className="tree-twisty">{expanded.has('.') ? '▾' : '▸'}</span>
+              <span className="file-icon">📁</span>
+              <span className="file-name">.</span>
+              {loadingDirs.has('.') && <span className="tree-loading">…</span>}
             </div>
-          ))
-        )}
+            {renderTree('.', 1)}
+          </div>
+        )
+        }
       </div>
     </div>
   );
