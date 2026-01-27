@@ -160,6 +160,9 @@ app.include_router(mindmaps.router, tags=["mindmaps"])
 app.include_router(graph.router, tags=["graph"])
 app.include_router(coding_environment.router, prefix="/api/coding-environment", tags=["coding-environment"])
 
+# Serve Coding Environment markdown docs under /docs/coding-environment/*
+app.include_router(coding_environment.docs_router, prefix="/docs/coding-environment", tags=["coding-environment-docs"])
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):

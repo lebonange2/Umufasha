@@ -84,4 +84,5 @@ graph_data/
 # Coding environment
 coding-environment/venv/
 coding-environment/.pids/
+coding_workspace/
 coding-environment/*.log

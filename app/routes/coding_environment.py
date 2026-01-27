@@ -5,13 +5,14 @@ import psutil
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Literal, Union
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Body
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
 import structlog
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
+docs_router = APIRouter()
 
 # Paths
 ASSISTANT_DIR = Path(__file__).parent.parent.parent
@@ -20,6 +21,95 @@ CWS_DIR = CODING_ENV_DIR / "coding-workspace-service"
 MCP_DIR = ASSISTANT_DIR / "mcp"
 VENV_DIR = CODING_ENV_DIR / "venv"
 PIDS_DIR = CODING_ENV_DIR / ".pids"
+
+# Coding workspace root:
+# We intentionally sandbox the Coding Environment to a dedicated directory so the file explorer
+# only shows files created for coding sessions (not the entire repo).
+CODING_WORKSPACE_ROOT = Path(
+    os.environ.get("CODING_WORKSPACE_ROOT", str(ASSISTANT_DIR / "coding_workspace"))
+).resolve()
+CODING_WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+
+# Documentation sources (kept in-repo, but NOT shown in the Coding Environment sandbox)
+CODING_ENV_DOCS_DIR = CODING_ENV_DIR
+CWS_DOCS_DIR = CWS_DIR / "docs"
+
+
+@docs_router.get("", response_class=HTMLResponse)
+async def coding_environment_docs():
+    """Simple docs page for Coding Environment (served under /docs via app/main.py include_router)."""
+    def _list_md(dir_path: Path) -> List[Path]:
+        if not dir_path.exists():
+            return []
+        return sorted([p for p in dir_path.glob("*.md") if p.is_file()], key=lambda p: p.name.lower())
+
+    coding_env_docs = _list_md(CODING_ENV_DOCS_DIR)
+    cws_docs = _list_md(CWS_DOCS_DIR)
+
+    def _li(p: Path, label_prefix: str) -> str:
+        name = p.name
+        href = f"/docs/coding-environment/{label_prefix}/{name}"
+        return f'<li><a href="{href}">{name}</a></li>'
+
+    html: List[str] = [
+        "<!doctype html>",
+        "<html><head>",
+        '<meta charset="utf-8"/>',
+        "<title>Coding Environment Docs</title>",
+        "<style>body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;margin:24px;max-width:980px} a{color:#2563eb;text-decoration:none} a:hover{text-decoration:underline} code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace} ul{line-height:1.6}</style>",
+        "</head><body>",
+        "<h2>Coding Environment Docs</h2>",
+        "<p>These docs describe the Coding Environment and CWS. The live Coding Environment workspace is sandboxed to <code>./coding_workspace</code> so it stays empty until you/agent create files.</p>",
+        "<h3>coding-environment/</h3>",
+        "<ul>",
+        *([_li(p, "coding-environment") for p in coding_env_docs] if coding_env_docs else []),
+        *(['<li><em>No docs found.</em></li>'] if not coding_env_docs else []),
+        "</ul>",
+        "<h3>coding-workspace-service/docs/</h3>",
+        "<ul>",
+        *([_li(p, "cws") for p in cws_docs] if cws_docs else []),
+        *(['<li><em>No docs found.</em></li>'] if not cws_docs else []),
+        "</ul>",
+        "</body></html>",
+    ]
+    return HTMLResponse(content="\n".join(html))
+
+
+@docs_router.get("/{doc_group}/{doc_name}", response_class=HTMLResponse)
+async def coding_environment_doc_view(doc_group: str, doc_name: str):
+    """Render a single markdown file as preformatted text (minimal, dependency-free)."""
+    if ".." in doc_name or "/" in doc_name or "\\" in doc_name:
+        raise HTTPException(status_code=400, detail="Invalid doc name")
+    if doc_group == "coding-environment":
+        base = CODING_ENV_DOCS_DIR
+    elif doc_group == "cws":
+        base = CWS_DOCS_DIR
+    else:
+        raise HTTPException(status_code=404, detail="Doc group not found")
+
+    path = (base / doc_name).resolve()
+    if not str(path).startswith(str(base.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid doc path")
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Doc not found")
+
+    content = path.read_text(encoding="utf-8", errors="replace")
+    html = f"""<!doctype html>
+<html><head>
+  <meta charset="utf-8"/>
+  <title>{doc_name}</title>
+  <style>
+    body{{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;margin:24px;max-width:980px}}
+    a{{color:#2563eb;text-decoration:none}} a:hover{{text-decoration:underline}}
+    pre{{white-space:pre-wrap;word-wrap:break-word;background:#0b1020;color:#e5e7eb;padding:16px;border-radius:10px;line-height:1.5}}
+  </style>
+</head>
+<body>
+  <p><a href="/docs/coding-environment">← Back to docs</a></p>
+  <h2>{doc_name}</h2>
+  <pre>{content}</pre>
+</body></html>"""
+    return HTMLResponse(content=html)
 
 # Default ports
 MCP_PORT = int(os.environ.get("MCP_PORT", "8080"))
@@ -53,7 +143,7 @@ def _get_inproc_cws():
         sys.path.insert(0, cws_pkg_root)
     from cws.internal.protocol.server import CWSServer  # type: ignore
 
-    workspace_root = os.environ.get("WORKSPACE_ROOT", str(ASSISTANT_DIR))
+    workspace_root = os.environ.get("WORKSPACE_ROOT", str(CODING_WORKSPACE_ROOT))
     return CWSServer(workspace_root)
 
 
@@ -236,7 +326,7 @@ async def start_service(service_name: str) -> Dict[str, Any]:
         elif service_name == "cws":
             # Start CWS
             log_file = PIDS_DIR / "cws.log"
-            workspace_root = os.environ.get("WORKSPACE_ROOT", str(ASSISTANT_DIR))
+            workspace_root = os.environ.get("WORKSPACE_ROOT", str(CODING_WORKSPACE_ROOT))
             
             # Ensure log file directory exists
             log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -608,6 +698,8 @@ async def agent_chat(req: AgentChatRequest):
     system = (
         "You are an AI coding agent working inside a Coding Environment. "
         "You can read/write/list/search files and run commands via tools. "
+        "Your workspace is sandboxed: only create and modify files within the workspace root. "
+        "Do NOT access parent directories or repo files outside the workspace. "
         "When you need to use a tool, reply with EXACTLY one JSON object and nothing else:\n"
         "  {\"tool\":\"fs.read\",\"params\":{\"path\":\"README.md\"}}\n"
         "Supported tools: fs.read, fs.write (params: path, contents), fs.create (params: path, type), fs.list (params: path), "
