@@ -32,7 +32,8 @@ from app.routes import (
     product_debate,
     mindmaps,
     graph,
-    exam_generator
+    exam_generator,
+    coding_environment
 )
 from app.core.config import settings
 
@@ -126,6 +127,14 @@ mindmapper_static_path = "app/static/mindmapper"
 if os.path.exists(mindmapper_static_path):
     app.mount("/mindmapper-static", StaticFiles(directory=mindmapper_static_path, html=False), name="mindmapper-static")
 
+# Mount coding environment static files (after build)
+coding_env_static_path = "app/static/coding-environment"
+coding_env_assets_path = os.path.join(coding_env_static_path, "assets")
+if os.path.exists(coding_env_assets_path):
+    app.mount("/coding_environment/assets", StaticFiles(directory=coding_env_assets_path, html=False), name="coding-environment-assets")
+if os.path.exists(coding_env_static_path):
+    app.mount("/coding_environment-static", StaticFiles(directory=coding_env_static_path, html=False), name="coding-environment-static")
+
 # Templates
 templates = Jinja2Templates(directory="app/templates")
 
@@ -149,6 +158,7 @@ app.include_router(core_devices.router, tags=["core-devices"])
 app.include_router(product_debate.router, tags=["product-debate"])
 app.include_router(mindmaps.router, tags=["mindmaps"])
 app.include_router(graph.router, tags=["graph"])
+app.include_router(coding_environment.router, prefix="/api/coding-environment", tags=["coding-environment"])
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -236,6 +246,33 @@ async def writer_page(request: Request, path: str = ""):
 <body>
     <div id="root"></div>
     <script type="module" src="http://localhost:5173/src/main.tsx"></script>
+</body>
+</html>
+        """)
+
+
+@app.get("/coding_environment", response_class=HTMLResponse)
+@app.get("/coding_environment/{path:path}", response_class=HTMLResponse)
+async def coding_environment_page(request: Request, path: str = ""):
+    """Coding Environment page - serve React app with SPA routing support."""
+    # Check if built files exist
+    coding_env_index = os.path.join("app/static/coding-environment", "index.html")
+    if os.path.exists(coding_env_index):
+        with open(coding_env_index, "r") as f:
+            return HTMLResponse(content=f.read())
+    else:
+        # Development mode - return a simple page that loads from Vite dev server
+        return HTMLResponse(content="""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Environment</title>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="http://localhost:5175/src/main.tsx"></script>
 </body>
 </html>
         """)

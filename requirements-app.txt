@@ -51,6 +51,12 @@ python-dotenv==1.0.0
 # Logging
 structlog==23.2.0
 
+# WebSocket support (for coding environment)
+websockets>=12.0
+
+# System monitoring (for coding environment service management)
+psutil>=5.9.0
+
 # PDF generation
 reportlab>=4.0.0
 

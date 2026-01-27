@@ -1,0 +1,58 @@
+.service-status-panel {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.service-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.service-name {
+  font-size: 0.875rem;
+  color: #cccccc;
+}
+
+.status-indicator {
+  font-size: 0.75rem;
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+}
+
+.status-indicator.running {
+  color: #4ec9b0;
+}
+
+.status-indicator.stopped {
+  color: #f48771;
+}
+
+.control-button {
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.control-button.start {
+  background-color: #4ec9b0;
+  color: #1e1e1e;
+}
+
+.control-button.start:hover {
+  background-color: #5dd9c4;
+}
+
+.control-button.stop {
+  background-color: #f48771;
+  color: #1e1e1e;
+}
+
+.control-button.stop:hover {
+  background-color: #ff9a85;
+}

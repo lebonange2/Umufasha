@@ -52,7 +52,7 @@ else
     
     # Install Ollama
     if curl -fsSL https://ollama.com/install.sh | sh; then
-        echo "✓ Ollama installed successfully"
+    echo "✓ Ollama installed successfully"
         
         # Add to PATH
         export PATH="$PATH:/usr/local/bin"
@@ -137,29 +137,29 @@ fi
 
 # Verify Ollama is accessible
 if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo ""
+echo ""
     echo "✓ Ollama API is accessible at http://localhost:11434"
     
     # List installed models
-    echo ""
+echo ""
     echo "Installed models:"
     ollama list || echo "  (none yet)"
-    
-    echo ""
-    echo "=== Setup Complete ==="
-    echo ""
+
+echo ""
+echo "=== Setup Complete ==="
+echo ""
     echo "Ollama is running and ready to use!"
     echo ""
     echo "To pull models:"
     echo "  ollama pull llama3:latest"
     echo "  ollama pull qwen3:30b"
-    echo ""
-    echo "Test it with:"
+echo ""
+echo "Test it with:"
     echo "  curl http://localhost:11434/api/tags"
-    echo ""
+echo ""
     echo "Or run a model:"
     echo "  ollama run llama3:latest 'Hello'"
-    echo ""
+echo ""
 else
     echo "❌ Ollama API is not accessible"
     echo "Check if server is running: pgrep -x ollama"

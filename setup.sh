@@ -1383,12 +1383,12 @@ else
         # Verify installation
         sleep 2
         if command -v ollama &> /dev/null; then
-            print_success "Ollama installed successfully"
+        print_success "Ollama installed successfully"
             OLLAMA_INSTALLED=true
         else
             # Try to find ollama in common locations
             if [ -f /usr/local/bin/ollama ]; then
-                export PATH="$PATH:/usr/local/bin"
+            export PATH="$PATH:/usr/local/bin"
                 hash -r 2>/dev/null || true
                 if command -v ollama &> /dev/null; then
                     print_success "Ollama installed at /usr/local/bin/ollama"
@@ -1396,7 +1396,7 @@ else
                 fi
             fi
         fi
-    fi
+        fi
     
     if [ "$OLLAMA_INSTALLED" = false ]; then
         print_error "Ollama installation failed!"
