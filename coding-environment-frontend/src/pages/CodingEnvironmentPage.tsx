@@ -4,6 +4,7 @@ import { CWSClient } from '../services/cwsClient';
 import FileBrowser from '../components/FileBrowser';
 import CodeEditor from '../components/CodeEditor';
 import Terminal from '../components/Terminal';
+import ChatPanel from '../components/ChatPanel';
 import ServiceStatusPanel from '../components/ServiceStatusPanel';
 import ModelSelector from '../components/ModelSelector';
 import './CodingEnvironmentPage.css';
@@ -289,7 +290,14 @@ export default function CodingEnvironmentPage() {
         </div>
         
         <div className="terminal-panel">
-          <Terminal cwsClient={cwsClient} />
+          <div className="right-pane">
+            <div className="right-pane-top">
+              <ChatPanel model={selectedModel} cwsConnected={!!cwsClient?.isConnected()} />
+            </div>
+            <div className="right-pane-bottom">
+              <Terminal cwsClient={cwsClient} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

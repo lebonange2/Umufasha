@@ -87,3 +87,21 @@
   flex-direction: column;
   overflow: hidden;
 }
+
+.right-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.right-pane-top {
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
+}
+
+.right-pane-bottom {
+  height: 260px;
+  border-top: 1px solid #3e3e42;
+  overflow: hidden;
+}

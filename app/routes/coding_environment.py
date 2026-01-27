@@ -3,7 +3,7 @@ import os
 import subprocess
 import psutil
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Literal, Union
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -69,6 +69,27 @@ class ServiceStatus(BaseModel):
 class ServiceControl(BaseModel):
     """Service control model."""
     action: str  # "start" or "stop"
+
+
+class AgentChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class AgentChatRequest(BaseModel):
+    model: str
+    messages: List[AgentChatMessage]
+    max_steps: int = 5
+
+
+class AgentToolCall(BaseModel):
+    tool: str
+    params: Dict[str, Any] = {}
+
+
+class AgentChatResponse(BaseModel):
+    output: str
+    steps: List[Dict[str, Any]] = []
 
 
 def get_pid_from_file(pid_file: Path) -> Optional[int]:
@@ -494,3 +515,144 @@ async def cws_http_rpc(payload: dict = Body(...)):
     except Exception as e:
         logger.error("HTTP CWS RPC error", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"HTTP CWS RPC error: {str(e)}")
+
+
+async def _ollama_chat(model: str, messages: List[Dict[str, str]]) -> str:
+    """Call Ollama /api/chat and return the assistant message content."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "http://localhost:11434/api/chat",
+                json={"model": model, "messages": messages, "stream": False},
+                timeout=60.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            # Ollama returns: { message: { role, content }, done: bool, ... }
+            return (data.get("message") or {}).get("content") or ""
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=502,
+            detail="Cannot connect to Ollama at http://localhost:11434. Start it with: ollama serve",
+        )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Ollama error: HTTP {e.response.status_code}")
+
+
+def _parse_tool_call(text: str) -> Optional[AgentToolCall]:
+    """Parse a tool call from model output.
+
+    Expected formats:
+    - JSON object: {\"tool\":\"fs.read\",\"params\":{...}}
+    - JSON object: {\"final\":\"...\"} (handled elsewhere)
+    """
+    import json
+
+    stripped = text.strip()
+    if not stripped.startswith("{") or not stripped.endswith("}"):
+        return None
+    try:
+        obj = json.loads(stripped)
+    except Exception:
+        return None
+    if isinstance(obj, dict) and "tool" in obj:
+        try:
+            return AgentToolCall(tool=str(obj["tool"]), params=obj.get("params") or {})
+        except Exception:
+            return None
+    return None
+
+
+async def _run_cws_tool(tool: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a limited set of CWS tools via in-process server."""
+    import sys
+    cws_pkg_root = str(CWS_DIR)
+    if cws_pkg_root not in sys.path:
+        sys.path.insert(0, cws_pkg_root)
+    from cws.internal.protocol.messages import JSONRPCRequest  # type: ignore
+
+    # Map friendly tool names to CWS JSON-RPC methods
+    tool_map = {
+        "fs.read": "fs.read",
+        "fs.write": "fs.write",
+        "fs.list": "fs.list",
+        "search.find": "search.find",
+        "task.run": "task.run",
+    }
+    method = tool_map.get(tool)
+    if not method:
+        raise HTTPException(status_code=400, detail=f"Tool not supported: {tool}")
+
+    server = _get_inproc_cws()
+    req = JSONRPCRequest(id="tool", method=method, params=params)
+    resp = await server.handle_request(req)
+    return resp.to_dict()
+
+
+@router.post("/agent/chat", response_model=AgentChatResponse)
+async def agent_chat(req: AgentChatRequest):
+    """Chat with a local Ollama model as a coding agent.
+
+    The agent can optionally use CWS tools by responding with a JSON tool call:
+      {\"tool\":\"fs.read\",\"params\":{...}}
+    Otherwise it should respond normally with plain text.
+    """
+    if not req.model:
+        raise HTTPException(status_code=400, detail="model is required")
+    if req.max_steps < 1 or req.max_steps > 8:
+        raise HTTPException(status_code=400, detail="max_steps must be between 1 and 8")
+
+    system = (
+        "You are an AI coding agent working inside a Coding Environment. "
+        "You can read/write/list/search files and run commands via tools. "
+        "When you need to use a tool, reply with EXACTLY one JSON object and nothing else:\n"
+        "  {\"tool\":\"fs.read\",\"params\":{\"path\":\"README.md\"}}\n"
+        "Supported tools: fs.read, fs.write (params: path, contents), fs.list (params: path), "
+        "search.find (params: query, options), task.run (params: command, args, options).\n"
+        "After receiving tool results, continue. "
+        "If you are done, reply with normal text (not JSON)."
+    )
+
+    # Build Ollama message list
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system}]
+    for m in req.messages[-30:]:  # cap history
+        messages.append({"role": m.role, "content": m.content})
+
+    steps: List[Dict[str, Any]] = []
+    output_text = ""
+
+    for step_idx in range(req.max_steps):
+        assistant_text = await _ollama_chat(req.model, messages)
+        if not assistant_text:
+            output_text = ""
+            break
+
+        tool_call = _parse_tool_call(assistant_text)
+        if tool_call:
+            # Execute tool and feed result back
+            tool_result = await _run_cws_tool(tool_call.tool, tool_call.params)
+            steps.append(
+                {
+                    "type": "tool",
+                    "tool": tool_call.tool,
+                    "params": tool_call.params,
+                    "result": tool_result,
+                }
+            )
+            messages.append({"role": "assistant", "content": assistant_text})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Tool result:\n{tool_result}",
+                }
+            )
+            continue
+
+        # Final answer
+        output_text = assistant_text
+        steps.append({"type": "assistant", "content": assistant_text})
+        break
+
+    return AgentChatResponse(output=output_text, steps=steps)
