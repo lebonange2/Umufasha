@@ -208,28 +208,28 @@ async def get_available_models():
         ]
     else:
         # Get local models (Ollama)
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
-            if response.status_code == 200:
-                data = response.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+                if response.status_code == 200:
+                    data = response.json()
                     models = [
-                    {"value": model["name"], "label": f"{model['name']} (Local)", "provider": "local"}
-                    for model in data.get("models", [])
-                ]
-    except:
-        pass
-    
-    # Default models if Ollama not available or empty
+                        {"value": model["name"], "label": f"{model['name']} (Local)", "provider": "local"}
+                        for model in data.get("models", [])
+                    ]
+        except:
+            pass
+        
+        # Default models if Ollama not available or empty
         if not models:
             models = [
-            {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
-            {"value": "llama3:latest", "label": "Llama 3 Latest (Local)", "provider": "local"},
-            {"value": "llama3.2:latest", "label": "Llama 3.2 (Latest)", "provider": "local"},
-            {"value": "mistral:latest", "label": "Mistral (Latest)", "provider": "local"},
-            {"value": "codellama:latest", "label": "CodeLlama (Latest)", "provider": "local"},
-            {"value": "phi3:latest", "label": "Phi-3 (Latest)", "provider": "local"},
-        ]
+                {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
+                {"value": "llama3:latest", "label": "Llama 3 Latest (Local)", "provider": "local"},
+                {"value": "llama3.2:latest", "label": "Llama 3.2 (Latest)", "provider": "local"},
+                {"value": "mistral:latest", "label": "Mistral (Latest)", "provider": "local"},
+                {"value": "codellama:latest", "label": "CodeLlama (Latest)", "provider": "local"},
+                {"value": "phi3:latest", "label": "Phi-3 (Latest)", "provider": "local"},
+            ]
     
     return {
         "models": models,
