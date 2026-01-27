@@ -68,18 +68,23 @@ export class WebSocketClient {
           reject(new Error(`WebSocket connection failed: ${wsUrl}`));
         };
 
-        this.ws.onclose = () => {
-          console.log('WebSocket closed:', this.url);
-          this.emit('close', {});
+        this.ws.onclose = (event) => {
+          console.log('WebSocket closed:', this.url, 'code:', event.code, 'reason:', event.reason);
+          if (timeout) clearTimeout(timeout);
+          this.emit('close', { code: event.code, reason: event.reason });
           this.ws = null;
           
-          // Attempt to reconnect
-          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          // Only attempt to reconnect if it wasn't a normal closure
+          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             setTimeout(() => {
               console.log(`Reconnecting... (attempt ${this.reconnectAttempts})`);
               this.connect().catch(console.error);
             }, this.reconnectDelay * this.reconnectAttempts);
+          } else if (event.code === 1000) {
+            console.log('WebSocket closed normally, not reconnecting');
+          } else {
+            console.log('Max reconnection attempts reached');
           }
         };
       } catch (error) {

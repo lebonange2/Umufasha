@@ -350,50 +350,109 @@ async def mcp_websocket_proxy(websocket: WebSocket):
 async def cws_websocket_proxy(websocket: WebSocket):
     """WebSocket proxy for CWS."""
     await websocket.accept()
+    logger.info("CWS WebSocket proxy: Client connected")
     
     try:
         import websockets
     except ImportError:
-        await websocket.send_json({
-            "error": "websockets library not available. Install with: pip install websockets"
-        })
-        await websocket.close(code=1011, reason="websockets not available")
+        error_msg = "websockets library not available. Install with: pip install websockets"
+        logger.error(error_msg)
+        try:
+            await websocket.send_json({"error": error_msg})
+            await websocket.close(code=1011, reason="websockets not available")
+        except:
+            pass
+        return
+    
+    # Check if CWS is actually running
+    status = await get_services_status()
+    if not status["cws"].running:
+        error_msg = "CWS service is not running"
+        logger.error(error_msg)
+        try:
+            await websocket.send_json({"error": error_msg})
+            await websocket.close(code=1008, reason=error_msg)
+        except:
+            pass
         return
     
     cws_url = f"ws://{BIND_HOST}:{CWS_PORT}"
+    logger.info("CWS WebSocket proxy: Connecting to CWS", url=cws_url)
     
     try:
-        async with websockets.connect(cws_url) as cws_ws:
+        # Add connection timeout
+        async with websockets.connect(cws_url, ping_interval=None, ping_timeout=None) as cws_ws:
+            logger.info("CWS WebSocket proxy: Connected to CWS successfully")
+            
+            # Send initial message to verify connection
+            try:
+                await websocket.send_text('{"jsonrpc":"2.0","method":"ping"}')
+            except:
+                pass
+            
             # Forward messages bidirectionally
             async def forward_to_cws():
                 try:
                     while True:
-                        data = await websocket.receive_text()
-                        await cws_ws.send(data)
-                except WebSocketDisconnect:
-                    pass
+                        try:
+                            data = await websocket.receive_text()
+                            logger.debug("CWS proxy: Forwarding to CWS", data_length=len(data))
+                            await cws_ws.send(data)
+                        except WebSocketDisconnect:
+                            logger.info("CWS proxy: Client disconnected")
+                            break
+                        except Exception as e:
+                            logger.error("CWS proxy: Error forwarding to CWS", error=str(e))
+                            break
                 except Exception as e:
-                    logger.error("Error forwarding to CWS", error=str(e))
+                    logger.error("CWS proxy: Forward to CWS loop error", error=str(e))
             
             async def forward_from_cws():
                 try:
                     while True:
-                        data = await cws_ws.recv()
-                        await websocket.send_text(data)
-                except websockets.exceptions.ConnectionClosed:
-                    pass
+                        try:
+                            data = await cws_ws.recv()
+                            logger.debug("CWS proxy: Forwarding from CWS", data_length=len(str(data)))
+                            await websocket.send_text(data)
+                        except websockets.exceptions.ConnectionClosed:
+                            logger.info("CWS proxy: CWS connection closed")
+                            break
+                        except Exception as e:
+                            logger.error("CWS proxy: Error forwarding from CWS", error=str(e))
+                            break
                 except Exception as e:
-                    logger.error("Error forwarding from CWS", error=str(e))
+                    logger.error("CWS proxy: Forward from CWS loop error", error=str(e))
             
             import asyncio
-            await asyncio.gather(
-                forward_to_cws(),
-                forward_from_cws(),
-                return_exceptions=True
-            )
-    except Exception as e:
-        logger.error("CWS WebSocket proxy error", error=str(e))
+            try:
+                await asyncio.gather(
+                    forward_to_cws(),
+                    forward_from_cws(),
+                    return_exceptions=True
+                )
+            except Exception as e:
+                logger.error("CWS proxy: Gather error", error=str(e))
+    except websockets.exceptions.InvalidURI as e:
+        error_msg = f"Invalid CWS URL: {cws_url}"
+        logger.error(error_msg, error=str(e))
         try:
+            await websocket.send_json({"error": error_msg})
+            await websocket.close(code=1002, reason=error_msg)
+        except:
+            pass
+    except websockets.exceptions.InvalidStatusCode as e:
+        error_msg = f"CWS connection refused: {cws_url}"
+        logger.error(error_msg, error=str(e), status_code=e.status_code)
+        try:
+            await websocket.send_json({"error": error_msg, "status_code": e.status_code})
+            await websocket.close(code=1006, reason=error_msg)
+        except:
+            pass
+    except Exception as e:
+        error_msg = f"CWS WebSocket proxy error: {str(e)}"
+        logger.error(error_msg, error=str(e), exc_info=True)
+        try:
+            await websocket.send_json({"error": error_msg})
             await websocket.close(code=1011, reason=str(e))
         except:
             pass

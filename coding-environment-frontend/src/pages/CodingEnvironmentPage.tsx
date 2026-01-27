@@ -39,25 +39,47 @@ export default function CodingEnvironmentPage() {
             
             // Connect to CWS if it started successfully - wait a bit more for service to be ready
             if (newStatus.cws.running) {
-              // Wait additional time for WebSocket server to be ready
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              // Wait additional time for WebSocket server to be ready (CWS needs time to start WebSocket server)
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              
+              // Verify service is still running after wait
+              const verifyStatus = await CodingEnvironmentAPI.getStatus();
+              if (!verifyStatus.cws.running) {
+                console.error('CWS stopped after startup');
+                return;
+              }
+              
               const client = new CWSClient();
               try {
+                console.log('Attempting to connect to CWS...');
                 await client.connect();
                 setCwsClient(client);
                 console.log('CWS connected successfully');
               } catch (error) {
                 console.error('Failed to connect to CWS:', error);
-                // Retry connection after a delay
-                setTimeout(async () => {
+                // Retry connection after a delay with exponential backoff
+                let retryCount = 0;
+                const maxRetries = 3;
+                const retryConnection = async () => {
+                  if (retryCount >= maxRetries) {
+                    console.error('Max retry attempts reached for CWS connection');
+                    return;
+                  }
+                  retryCount++;
+                  await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
                   try {
+                    console.log(`Retrying CWS connection (attempt ${retryCount})...`);
                     await client.connect();
                     setCwsClient(client);
                     console.log('CWS connected on retry');
                   } catch (retryError) {
-                    console.error('CWS connection retry failed:', retryError);
+                    console.error(`CWS connection retry ${retryCount} failed:`, retryError);
+                    if (retryCount < maxRetries) {
+                      retryConnection();
+                    }
                   }
-                }, 3000);
+                };
+                retryConnection();
               }
             }
           } catch (error) {
@@ -65,24 +87,38 @@ export default function CodingEnvironmentPage() {
           }
         } else {
           // CWS is already running, connect to it - wait a moment first
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 2000));
           const client = new CWSClient();
           try {
+            console.log('Attempting to connect to CWS (already running)...');
             await client.connect();
             setCwsClient(client);
             console.log('CWS connected successfully (already running)');
           } catch (error) {
-            console.error('Failed to connect to CWS:', error);
-            // Retry connection after a delay
-            setTimeout(async () => {
+            console.error('Failed to connect to CWS (already running):', error);
+            // Retry connection after a delay with exponential backoff
+            let retryCount = 0;
+            const maxRetries = 3;
+            const retryConnection = async () => {
+              if (retryCount >= maxRetries) {
+                console.error('Max retry attempts reached for CWS connection');
+                return;
+              }
+              retryCount++;
+              await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
               try {
+                console.log(`Retrying CWS connection (attempt ${retryCount})...`);
                 await client.connect();
                 setCwsClient(client);
                 console.log('CWS connected on retry (already running)');
               } catch (retryError) {
-                console.error('CWS connection retry failed:', retryError);
+                console.error(`CWS connection retry ${retryCount} failed:`, retryError);
+                if (retryCount < maxRetries) {
+                  retryConnection();
+                }
               }
-            }, 3000);
+            };
+            retryConnection();
           }
         }
       } catch (error) {
