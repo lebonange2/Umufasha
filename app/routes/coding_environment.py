@@ -32,6 +32,13 @@ IS_RUNPOD = bool(
 )
 BIND_HOST = "0.0.0.0" if IS_RUNPOD else "localhost"
 
+# IMPORTANT:
+# BIND_HOST is used for *binding* services (external accessibility).
+# When proxying *to* a local service from within the same host/container,
+# we must connect to localhost/127.0.0.1. Using 0.0.0.0 as a connect
+# address will fail and can make the UI show "running" but "not connected".
+PROXY_CONNECT_HOST = "127.0.0.1"
+
 
 class ServiceStatus(BaseModel):
     """Service status model."""
@@ -307,7 +314,7 @@ async def mcp_websocket_proxy(websocket: WebSocket):
         await websocket.close(code=1011, reason="websockets not available")
         return
     
-    mcp_url = f"ws://{BIND_HOST}:{MCP_PORT}"
+    mcp_url = f"ws://{PROXY_CONNECT_HOST}:{MCP_PORT}"
     
     try:
         async with websockets.connect(mcp_url) as mcp_ws:
@@ -376,7 +383,7 @@ async def cws_websocket_proxy(websocket: WebSocket):
             pass
         return
     
-    cws_url = f"ws://{BIND_HOST}:{CWS_PORT}"
+    cws_url = f"ws://{PROXY_CONNECT_HOST}:{CWS_PORT}"
     logger.info("CWS WebSocket proxy: Connecting to CWS", url=cws_url)
     
     try:
