@@ -22,7 +22,8 @@ export class CWSClient {
   private ws: WebSocketClient;
 
   constructor() {
-    this.ws = new WebSocketClient('/ws/cws');
+    // Backend mounts websocket routes under /api/coding-environment
+    this.ws = new WebSocketClient('/api/coding-environment/ws/cws');
   }
 
   async connect(): Promise<void> {

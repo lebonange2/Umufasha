@@ -15,9 +15,11 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
-      '/ws': {
+      // Proxy websocket endpoints served by FastAPI
+      '/api/coding-environment/ws': {
         target: 'ws://localhost:8000',
         ws: true,
+        changeOrigin: true,
       },
     },
   },
