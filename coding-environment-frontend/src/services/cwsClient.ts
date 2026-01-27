@@ -18,8 +18,16 @@ export interface SearchResult {
   }>;
 }
 
+type JsonRpcResponse = {
+  jsonrpc: '2.0';
+  id: string | number;
+  result?: any;
+  error?: { code: number; message: string; data?: any };
+};
+
 export class CWSClient {
   private ws: WebSocketClient;
+  private httpFallbackEnabled = false;
 
   constructor() {
     // Backend mounts websocket routes under /api/coding-environment
@@ -27,175 +35,118 @@ export class CWSClient {
   }
 
   async connect(): Promise<void> {
-    await this.ws.connect();
+    try {
+      await this.ws.connect();
+      this.httpFallbackEnabled = false;
+    } catch (e) {
+      // Browser WebSockets can be blocked by some reverse proxies (common on RunPod).
+      // Fall back to HTTP JSON-RPC which is proxied via standard HTTP.
+      console.warn('CWS websocket connect failed; falling back to HTTP JSON-RPC', e);
+      this.httpFallbackEnabled = true;
+    }
   }
 
   disconnect(): void {
     this.ws.disconnect();
+    this.httpFallbackEnabled = false;
   }
 
   isConnected(): boolean {
-    return this.ws.isConnected();
+    return this.ws.isConnected() || this.httpFallbackEnabled;
+  }
+
+  private async rpc(method: string, params?: any): Promise<any> {
+    const id = Date.now().toString();
+    const payload = { jsonrpc: '2.0', id, method, params };
+
+    // Prefer WebSocket when connected
+    if (this.ws.isConnected() && !this.httpFallbackEnabled) {
+      return new Promise((resolve, reject) => {
+        const handler = (data: any) => {
+          if (data?.id === id) {
+            this.ws.off('message', handler);
+            if (data.error) {
+              reject(new Error(data.error.message || 'JSON-RPC error'));
+            } else {
+              resolve(data.result);
+            }
+          }
+        };
+
+        this.ws.on('message', handler);
+        this.ws.send(payload);
+
+        setTimeout(() => {
+          this.ws.off('message', handler);
+          reject(new Error('Request timeout'));
+        }, 15000);
+      });
+    }
+
+    // HTTP fallback
+    const resp = await fetch('/api/coding-environment/cws/rpc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`HTTP RPC failed (${resp.status}): ${text}`);
+    }
+    const data = (await resp.json()) as JsonRpcResponse;
+    if (data.error) {
+      throw new Error(data.error.message || 'JSON-RPC error');
+    }
+    return data.result;
   }
 
   // File operations
   async readFile(path: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const requestId = Date.now().toString();
-      
-      const handler = (data: any) => {
-        if (data.id === requestId) {
-          this.ws.off('message', handler);
-          if (data.error) {
-            reject(new Error(data.error.message || 'Failed to read file'));
-          } else {
-            resolve(data.result?.content || '');
-          }
-        }
-      };
-
-      this.ws.on('message', handler);
-
-      this.ws.send({
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'fs.read',
-        params: { path }
-      });
-
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        this.ws.off('message', handler);
-        reject(new Error('Request timeout'));
-      }, 10000);
-    });
+    const result = await this.rpc('fs.read', { path });
+    return result?.content ?? '';
   }
 
   async writeFile(path: string, content: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const requestId = Date.now().toString();
-      
-      const handler = (data: any) => {
-        if (data.id === requestId) {
-          this.ws.off('message', handler);
-          if (data.error) {
-            reject(new Error(data.error.message || 'Failed to write file'));
-          } else {
-            resolve();
-          }
-        }
-      };
-
-      this.ws.on('message', handler);
-
-      this.ws.send({
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'fs.write',
-        params: { path, content }
-      });
-
-      setTimeout(() => {
-        this.ws.off('message', handler);
-        reject(new Error('Request timeout'));
-      }, 10000);
-    });
+    await this.rpc('fs.write', { path, contents: content });
   }
 
   async listFiles(path: string): Promise<FileInfo[]> {
-    return new Promise((resolve, reject) => {
-      const requestId = Date.now().toString();
-      
-      const handler = (data: any) => {
-        if (data.id === requestId) {
-          this.ws.off('message', handler);
-          if (data.error) {
-            reject(new Error(data.error.message || 'Failed to list files'));
-          } else {
-            resolve(data.result?.files || []);
-          }
-        }
-      };
-
-      this.ws.on('message', handler);
-
-      this.ws.send({
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'fs.list',
-        params: { path }
-      });
-
-      setTimeout(() => {
-        this.ws.off('message', handler);
-        reject(new Error('Request timeout'));
-      }, 10000);
-    });
+    const result = await this.rpc('fs.list', { path });
+    const entries = result?.entries || [];
+    return entries.map((e: any) => ({
+      path: e.path,
+      name: e.name,
+      type: e.type === 'dir' ? 'directory' : 'file',
+      size: e.size,
+      modified: e.mtime,
+    })) as FileInfo[];
   }
 
   async searchFiles(query: string, path?: string): Promise<SearchResult[]> {
-    return new Promise((resolve, reject) => {
-      const requestId = Date.now().toString();
-      
-      const handler = (data: any) => {
-        if (data.id === requestId) {
-          this.ws.off('message', handler);
-          if (data.error) {
-            reject(new Error(data.error.message || 'Failed to search files'));
-          } else {
-            resolve(data.result?.results || []);
-          }
-        }
-      };
+    const globs = path ? [`${path.replace(/\/$/, '')}/**/*`] : ['**/*'];
+    const result = await this.rpc('search.find', { query, options: { globs, maxResults: 1000 } });
+    const flat = result?.results || [];
 
-      this.ws.on('message', handler);
-
-      this.ws.send({
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'search.find',
-        params: { query, path: path || '.' }
+    // Group by path to fit the existing UI shape
+    const grouped = new Map<string, SearchResult>();
+    for (const r of flat) {
+      const key = r.path;
+      if (!grouped.has(key)) grouped.set(key, { path: key, matches: [] });
+      grouped.get(key)!.matches.push({
+        line: r.line,
+        column: r.column,
+        text: r.text,
       });
-
-      setTimeout(() => {
-        this.ws.off('message', handler);
-        reject(new Error('Request timeout'));
-      }, 10000);
-    });
+    }
+    return Array.from(grouped.values());
   }
 
   async runCommand(command: string, args: string[] = []): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const requestId = Date.now().toString();
-      
-      const handler = (data: any) => {
-        if (data.id === requestId) {
-          this.ws.off('message', handler);
-          if (data.error) {
-            reject(new Error(data.error.message || 'Command failed'));
-          } else {
-            resolve(data.result?.output || '');
-          }
-        }
-      };
-
-      this.ws.on('message', handler);
-
-      this.ws.send({
-        jsonrpc: '2.0',
-        id: requestId,
-        method: 'tasks.run',
-        params: {
-          command,
-          args,
-          options: { confirmed: true }
-        }
-      });
-
-      setTimeout(() => {
-        this.ws.off('message', handler);
-        reject(new Error('Request timeout'));
-      }, 30000);
-    });
+    const result = await this.rpc('task.run', { command, args, options: { confirmed: true } });
+    const stdout = result?.stdout ?? '';
+    const stderr = result?.stderr ?? '';
+    const exitCode = result?.exitCode;
+    const exitLine = typeof exitCode === 'number' ? `\n(exit ${exitCode})\n` : '\n';
+    return `${stdout}${stderr ? `\n${stderr}` : ''}${exitLine}`.trimEnd();
   }
 }

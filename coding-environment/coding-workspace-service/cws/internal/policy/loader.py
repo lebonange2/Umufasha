@@ -16,7 +16,24 @@ class Policy:
         self.denied_paths = config.get("deniedPaths", [])
         self.max_file_size = config.get("maxFileSize", 10 * 1024 * 1024)  # 10MB
         self.max_edit_size = config.get("maxEditSize", 1024 * 1024)  # 1MB
-        self.allowed_commands = config.get("allowedCommands", [])
+        # Default command allowlist: enable basic local development workflows out-of-the-box.
+        # Users can tighten this by creating `.cws-policy.json` with a narrower allowedCommands list.
+        self.allowed_commands = config.get(
+            "allowedCommands",
+            [
+                # Shell + core utils
+                "bash", "sh", "zsh",
+                "ls", "cat", "head", "tail", "sed", "awk", "grep", "rg", "find",
+                # VCS
+                "git",
+                # Python
+                "python", "python3", "pip", "pip3",
+                # Node
+                "node", "npm", "npx",
+                # Build tools
+                "make",
+            ],
+        )
         self.env_allowlist = config.get("envAllowlist", [])
         self.confirmation_required = config.get("confirmationRequired", ["delete", "applyPatch", "task.run"])
     

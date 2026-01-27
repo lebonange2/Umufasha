@@ -4,7 +4,8 @@ import subprocess
 import psutil
 from pathlib import Path
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Body
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import structlog
 
@@ -38,6 +39,22 @@ BIND_HOST = "0.0.0.0" if IS_RUNPOD else "localhost"
 # we must connect to localhost/127.0.0.1. Using 0.0.0.0 as a connect
 # address will fail and can make the UI show "running" but "not connected".
 PROXY_CONNECT_HOST = "127.0.0.1"
+
+def _get_inproc_cws():
+    """Create an in-process CWS server instance for HTTP fallback.
+
+    We intentionally create a fresh instance per call so policy changes and defaults
+    are picked up without requiring a server restart.
+    """
+    # Import CWS from the vendored coding-environment directory.
+    import sys
+    cws_pkg_root = str(CWS_DIR)
+    if cws_pkg_root not in sys.path:
+        sys.path.insert(0, cws_pkg_root)
+    from cws.internal.protocol.server import CWSServer  # type: ignore
+
+    workspace_root = os.environ.get("WORKSPACE_ROOT", str(ASSISTANT_DIR))
+    return CWSServer(workspace_root)
 
 
 class ServiceStatus(BaseModel):
@@ -318,33 +335,24 @@ async def mcp_websocket_proxy(websocket: WebSocket):
     
     try:
         async with websockets.connect(mcp_url) as mcp_ws:
-            # Forward messages bidirectionally
+            # Forward messages bidirectionally; cancel the other direction when one side closes.
             async def forward_to_mcp():
-                try:
-                    while True:
-                        data = await websocket.receive_text()
-                        await mcp_ws.send(data)
-                except WebSocketDisconnect:
-                    pass
-                except Exception as e:
-                    logger.error("Error forwarding to MCP", error=str(e))
+                while True:
+                    data = await websocket.receive_text()
+                    await mcp_ws.send(data)
             
             async def forward_from_mcp():
-                try:
-                    while True:
-                        data = await mcp_ws.recv()
-                        await websocket.send_text(data)
-                except websockets.exceptions.ConnectionClosed:
-                    pass
-                except Exception as e:
-                    logger.error("Error forwarding from MCP", error=str(e))
+                while True:
+                    data = await mcp_ws.recv()
+                    await websocket.send_text(data)
             
             import asyncio
-            await asyncio.gather(
-                forward_to_mcp(),
-                forward_from_mcp(),
-                return_exceptions=True
-            )
+            t1 = asyncio.create_task(forward_to_mcp())
+            t2 = asyncio.create_task(forward_from_mcp())
+            done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
     except Exception as e:
         logger.error("MCP WebSocket proxy error", error=str(e))
         try:
@@ -391,54 +399,26 @@ async def cws_websocket_proxy(websocket: WebSocket):
         async with websockets.connect(cws_url, ping_interval=None, ping_timeout=None) as cws_ws:
             logger.info("CWS WebSocket proxy: Connected to CWS successfully")
             
-            # Send initial message to verify connection
-            try:
-                await websocket.send_text('{"jsonrpc":"2.0","method":"ping"}')
-            except:
-                pass
-            
             # Forward messages bidirectionally
             async def forward_to_cws():
-                try:
-                    while True:
-                        try:
-                            data = await websocket.receive_text()
-                            logger.debug("CWS proxy: Forwarding to CWS", data_length=len(data))
-                            await cws_ws.send(data)
-                        except WebSocketDisconnect:
-                            logger.info("CWS proxy: Client disconnected")
-                            break
-                        except Exception as e:
-                            logger.error("CWS proxy: Error forwarding to CWS", error=str(e))
-                            break
-                except Exception as e:
-                    logger.error("CWS proxy: Forward to CWS loop error", error=str(e))
+                while True:
+                    data = await websocket.receive_text()
+                    logger.debug("CWS proxy: Forwarding to CWS", data_length=len(data))
+                    await cws_ws.send(data)
             
             async def forward_from_cws():
-                try:
-                    while True:
-                        try:
-                            data = await cws_ws.recv()
-                            logger.debug("CWS proxy: Forwarding from CWS", data_length=len(str(data)))
-                            await websocket.send_text(data)
-                        except websockets.exceptions.ConnectionClosed:
-                            logger.info("CWS proxy: CWS connection closed")
-                            break
-                        except Exception as e:
-                            logger.error("CWS proxy: Error forwarding from CWS", error=str(e))
-                            break
-                except Exception as e:
-                    logger.error("CWS proxy: Forward from CWS loop error", error=str(e))
+                while True:
+                    data = await cws_ws.recv()
+                    logger.debug("CWS proxy: Forwarding from CWS", data_length=len(str(data)))
+                    await websocket.send_text(data)
             
             import asyncio
-            try:
-                await asyncio.gather(
-                    forward_to_cws(),
-                    forward_from_cws(),
-                    return_exceptions=True
-                )
-            except Exception as e:
-                logger.error("CWS proxy: Gather error", error=str(e))
+            t1 = asyncio.create_task(forward_to_cws())
+            t2 = asyncio.create_task(forward_from_cws())
+            done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
     except websockets.exceptions.InvalidURI as e:
         error_msg = f"Invalid CWS URL: {cws_url}"
         logger.error(error_msg, error=str(e))
@@ -463,3 +443,54 @@ async def cws_websocket_proxy(websocket: WebSocket):
             await websocket.close(code=1011, reason=str(e))
         except:
             pass
+
+
+@router.get("/ws/cws")
+async def cws_ws_http_probe():
+    """HTTP probe handler for the CWS websocket endpoint.
+
+    Some proxies/health-checkers hit websocket URLs as plain HTTP GET, which would otherwise
+    show up as 404. Return a clear response instead.
+    """
+    return JSONResponse(
+        status_code=426,
+        content={
+            "detail": "Upgrade Required",
+            "message": "This endpoint is a WebSocket. Use a WebSocket client (ws:// or wss://) to connect.",
+            "websocket_path": "/api/coding-environment/ws/cws",
+            "http_fallback": "/api/coding-environment/cws/rpc",
+        },
+        headers={"Upgrade": "websocket"},
+    )
+
+
+@router.post("/cws/rpc")
+async def cws_http_rpc(payload: dict = Body(...)):
+    """HTTP JSON-RPC fallback for CWS operations (no browser WebSocket required).
+
+    Expects a JSON-RPC 2.0 request object and returns a JSON-RPC response object.
+    """
+    try:
+        # Build JSONRPCRequest object from payload
+        import sys
+        cws_pkg_root = str(CWS_DIR)
+        if cws_pkg_root not in sys.path:
+            sys.path.insert(0, cws_pkg_root)
+        from cws.internal.protocol.messages import JSONRPCRequest  # type: ignore
+
+        if payload.get("jsonrpc") != "2.0" or "id" not in payload or "method" not in payload:
+            raise HTTPException(status_code=400, detail="Invalid JSON-RPC request")
+
+        req = JSONRPCRequest(
+            id=payload["id"],
+            method=payload["method"],
+            params=payload.get("params"),
+        )
+        server = _get_inproc_cws()
+        resp = await server.handle_request(req)
+        return resp.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("HTTP CWS RPC error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"HTTP CWS RPC error: {str(e)}")
