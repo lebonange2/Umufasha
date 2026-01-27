@@ -15,7 +15,7 @@ export class WebSocketClient {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      let timeout: NodeJS.Timeout | null = null;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
       
       try {
         // Use proxy through FastAPI
