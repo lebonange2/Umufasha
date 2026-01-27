@@ -13,7 +13,6 @@ export default function FileBrowser({ cwsClient, workspacePath, onFileSelect, cu
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [currentPath, setCurrentPath] = useState<string>(workspacePath);
   const [loading, setLoading] = useState(false);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set([workspacePath]));
 
   useEffect(() => {
     if (cwsClient?.isConnected()) {
@@ -39,15 +38,6 @@ export default function FileBrowser({ cwsClient, workspacePath, onFileSelect, cu
   const handleFileClick = (file: FileInfo) => {
     if (file.type === 'directory') {
       const newPath = file.path;
-      setExpandedDirs(prev => {
-        const next = new Set(prev);
-        if (next.has(newPath)) {
-          next.delete(newPath);
-        } else {
-          next.add(newPath);
-        }
-        return next;
-      });
       setCurrentPath(newPath);
     } else {
       onFileSelect(file.path);

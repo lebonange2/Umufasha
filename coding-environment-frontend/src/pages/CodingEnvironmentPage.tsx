@@ -12,7 +12,7 @@ export default function CodingEnvironmentPage() {
   const [cwsClient, setCwsClient] = useState<CWSClient | null>(null);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
-  const [workspacePath, setWorkspacePath] = useState<string>('.');
+  const [workspacePath] = useState<string>('.');
 
   // Load service status
   useEffect(() => {
