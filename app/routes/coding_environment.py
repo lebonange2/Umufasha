@@ -676,6 +676,30 @@ async def _run_cws_tool(tool: str, params: Dict[str, Any]) -> Dict[str, Any]:
     if not method:
         raise HTTPException(status_code=400, detail=f"Tool not supported: {tool}")
 
+    # Compat layer for agent tool calls:
+    # CWS expects fs.create params: {path, type: "file"|"dir", options?}
+    # The agent may omit type or use aliases like "text"/"directory".
+    if tool == "fs.create":
+        p = dict(params or {})
+        t = p.get("type")
+        if not isinstance(t, str) or not t.strip():
+            t_norm = "file"
+        else:
+            t_l = t.strip().lower()
+            if t_l in {"file", "text", "txt"}:
+                t_norm = "file"
+            elif t_l in {"dir", "directory", "folder"}:
+                t_norm = "dir"
+            else:
+                t_norm = t_l
+        p["type"] = t_norm
+        if "options" not in p or not isinstance(p.get("options"), dict):
+            p["options"] = {"parents": True}
+        else:
+            # default parents to true for smoother UX
+            p["options"].setdefault("parents", True)
+        params = p
+
     server = _get_inproc_cws()
     req = JSONRPCRequest(id="tool", method=method, params=params)
     resp = await server.handle_request(req)
@@ -702,7 +726,7 @@ async def agent_chat(req: AgentChatRequest):
         "Do NOT access parent directories or repo files outside the workspace. "
         "When you need to use a tool, reply with EXACTLY one JSON object and nothing else:\n"
         "  {\"tool\":\"fs.read\",\"params\":{\"path\":\"README.md\"}}\n"
-        "Supported tools: fs.read, fs.write (params: path, contents), fs.create (params: path, type), fs.list (params: path), "
+        "Supported tools: fs.read, fs.write (params: path, contents), fs.create (params: path, type=\"file\"|\"dir\"), fs.list (params: path), "
         "search.find (params: query, options), task.run (params: command, args, options).\n"
         "After receiving tool results, continue. "
         "If you are done, reply with normal text (not JSON)."

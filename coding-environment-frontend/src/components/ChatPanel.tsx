@@ -76,6 +76,9 @@ export default function ChatPanel({ model, cwsConnected, onFileTouched }: ChatPa
         const touched: string[] = [];
         for (const s of agentSteps) {
           if (s.type === 'tool' && (s.tool === 'fs.write' || s.tool === 'fs.create')) {
+            // Only auto-open if the tool call succeeded (no JSON-RPC error).
+            const hasError = !!(s as any)?.result?.error;
+            if (hasError) continue;
             const p = (s.params || {}).path;
             if (typeof p === 'string' && p.length > 0) touched.push(p);
           }
