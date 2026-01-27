@@ -5,6 +5,7 @@ import FileBrowser from '../components/FileBrowser';
 import CodeEditor from '../components/CodeEditor';
 import Terminal from '../components/Terminal';
 import ServiceStatusPanel from '../components/ServiceStatusPanel';
+import ModelSelector from '../components/ModelSelector';
 import './CodingEnvironmentPage.css';
 
 export default function CodingEnvironmentPage() {
@@ -13,15 +14,70 @@ export default function CodingEnvironmentPage() {
   const [currentFile, setCurrentFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
   const [workspacePath] = useState<string>('.');
+  const [selectedModel, setSelectedModel] = useState<string>('llama3:latest');
+  const [cwsAutoStartAttempted, setCwsAutoStartAttempted] = useState(false);
 
-  // Load service status
+  // Auto-start CWS on page load
+  useEffect(() => {
+    const autoStartCWS = async () => {
+      if (cwsAutoStartAttempted) return;
+      
+      try {
+        const status = await CodingEnvironmentAPI.getStatus();
+        setServicesStatus(status);
+        
+        // Auto-start CWS if not running
+        if (!status.cws.running) {
+          console.log('Auto-starting CWS...');
+          try {
+            await CodingEnvironmentAPI.startService('cws');
+            // Wait a bit for service to start
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            // Reload status
+            const newStatus = await CodingEnvironmentAPI.getStatus();
+            setServicesStatus(newStatus);
+            
+            // Connect to CWS if it started successfully
+            if (newStatus.cws.running) {
+              const client = new CWSClient();
+              try {
+                await client.connect();
+                setCwsClient(client);
+              } catch (error) {
+                console.error('Failed to connect to CWS:', error);
+              }
+            }
+          } catch (error) {
+            console.error('Failed to auto-start CWS:', error);
+          }
+        } else {
+          // CWS is already running, connect to it
+          const client = new CWSClient();
+          try {
+            await client.connect();
+            setCwsClient(client);
+          } catch (error) {
+            console.error('Failed to connect to CWS:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load service status:', error);
+      } finally {
+        setCwsAutoStartAttempted(true);
+      }
+    };
+
+    autoStartCWS();
+  }, [cwsAutoStartAttempted]);
+
+  // Load service status periodically
   useEffect(() => {
     const loadStatus = async () => {
       try {
         const status = await CodingEnvironmentAPI.getStatus();
         setServicesStatus(status);
         
-        // Connect to CWS if it's running
+        // Connect to CWS if it's running and we're not connected
         if (status.cws.running && !cwsClient) {
           const client = new CWSClient();
           try {
@@ -36,7 +92,6 @@ export default function CodingEnvironmentPage() {
       }
     };
 
-    loadStatus();
     const interval = setInterval(loadStatus, 5000);
     return () => clearInterval(interval);
   }, [cwsClient]);
@@ -110,11 +165,17 @@ export default function CodingEnvironmentPage() {
     <div className="coding-environment">
       <div className="header">
         <h1>Coding Environment</h1>
-        <ServiceStatusPanel
-          servicesStatus={servicesStatus}
-          onStart={handleStartService}
-          onStop={handleStopService}
-        />
+        <div className="header-controls">
+          <ModelSelector
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+          />
+          <ServiceStatusPanel
+            servicesStatus={servicesStatus}
+            onStart={handleStartService}
+            onStop={handleStopService}
+          />
+        </div>
       </div>
       
       <div className="main-content">

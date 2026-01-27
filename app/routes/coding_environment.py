@@ -74,6 +74,41 @@ def check_port_in_use(port: int) -> bool:
     return False
 
 
+@router.get("/models")
+async def get_ollama_models():
+    """Get available Ollama models."""
+    import httpx
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:11434/api/tags", timeout=2.0)
+            if response.status_code == 200:
+                data = response.json()
+                models = [
+                    {
+                        "value": model["name"],
+                        "label": f"{model['name']} (Local)",
+                        "provider": "local"
+                    }
+                    for model in data.get("models", [])
+                ]
+                return {"models": models, "provider": "local"}
+            else:
+                return {"models": [], "provider": "local", "error": "Ollama not available"}
+    except Exception as e:
+        logger.warning("Failed to fetch Ollama models", error=str(e))
+        # Return default models if Ollama is not available
+        default_models = [
+            {"value": "qwen3:30b", "label": "Qwen3 30B (Local)", "provider": "local"},
+            {"value": "llama3:latest", "label": "Llama 3 Latest (Local)", "provider": "local"},
+            {"value": "llama3.2:latest", "label": "Llama 3.2 (Latest)", "provider": "local"},
+            {"value": "mistral:latest", "label": "Mistral (Latest)", "provider": "local"},
+            {"value": "codellama:latest", "label": "CodeLlama (Latest)", "provider": "local"},
+            {"value": "phi3:latest", "label": "Phi-3 (Latest)", "provider": "local"},
+        ]
+        return {"models": default_models, "provider": "local", "error": str(e)}
+
+
 @router.get("/status")
 async def get_services_status() -> Dict[str, ServiceStatus]:
     """Get status of CWS and MCP Server."""
@@ -157,23 +192,60 @@ async def start_service(service_name: str) -> Dict[str, Any]:
             # Start CWS
             log_file = PIDS_DIR / "cws.log"
             workspace_root = os.environ.get("WORKSPACE_ROOT", str(ASSISTANT_DIR))
+            
+            # Ensure log file directory exists
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Build command - use sys.executable to ensure we use the right Python
+            import sys
+            python_executable = sys.executable if VENV_DIR.exists() and str(venv_python) == python_cmd else python_cmd
+            
             cmd = [
-                python_cmd, "-m", "cws.main",
+                python_executable, "-m", "cws.main",
                 "--transport", "websocket",
                 "--host", BIND_HOST,
                 "--port", str(CWS_PORT),
                 "--workspace-root", workspace_root
             ]
-            process = subprocess.Popen(
-                cmd,
-                cwd=str(CWS_DIR),
-                stdout=open(log_file, "w"),
-                stderr=subprocess.STDOUT,
-                start_new_session=True
-            )
-            pid_file = PIDS_DIR / "cws.pid"
-            pid_file.write_text(str(process.pid))
-            logger.info("CWS started", pid=process.pid, port=CWS_PORT)
+            
+            # Set up environment with PYTHONPATH
+            env = os.environ.copy()
+            # Add CWS directory and parent to PYTHONPATH
+            pythonpath = env.get("PYTHONPATH", "")
+            pythonpath_parts = [p for p in pythonpath.split(os.pathsep) if p]
+            if str(CWS_DIR) not in pythonpath_parts:
+                pythonpath_parts.insert(0, str(CWS_DIR))
+            if str(CODING_ENV_DIR) not in pythonpath_parts:
+                pythonpath_parts.insert(0, str(CODING_ENV_DIR))
+            env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+            
+            try:
+                with open(log_file, "w") as log:
+                    process = subprocess.Popen(
+                        cmd,
+                        cwd=str(CWS_DIR),
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                        env=env
+                    )
+                
+                pid_file = PIDS_DIR / "cws.pid"
+                pid_file.write_text(str(process.pid))
+                logger.info("CWS started", pid=process.pid, port=CWS_PORT, cwd=str(CWS_DIR), cmd=" ".join(cmd))
+            except Exception as e:
+                error_msg = f"Failed to start CWS: {str(e)}"
+                logger.error(error_msg, error=str(e), cmd=" ".join(cmd), cwd=str(CWS_DIR))
+                # Read log file if it exists to get more details
+                if log_file.exists():
+                    try:
+                        with open(log_file, "r") as f:
+                            log_content = f.read()
+                            if log_content:
+                                error_msg += f"\nLog: {log_content[-500:]}"  # Last 500 chars
+                    except:
+                        pass
+                raise HTTPException(status_code=500, detail=error_msg)
         
         # Wait a moment for service to start
         import asyncio
