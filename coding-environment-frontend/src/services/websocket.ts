@@ -15,15 +15,30 @@ export class WebSocketClient {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      let timeout: NodeJS.Timeout | null = null;
+      
       try {
         // Use proxy through FastAPI
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}${this.url}`;
         
+        console.log('Attempting WebSocket connection to:', wsUrl);
         this.ws = new WebSocket(wsUrl);
+        
+        // Set a timeout for connection
+        timeout = setTimeout(() => {
+          if (this.ws?.readyState !== WebSocket.OPEN) {
+            console.error('WebSocket connection timeout');
+            if (this.ws) {
+              this.ws.close();
+            }
+            reject(new Error('WebSocket connection timeout'));
+          }
+        }, 10000); // 10 second timeout
 
         this.ws.onopen = () => {
           console.log('WebSocket connected:', this.url);
+          if (timeout) clearTimeout(timeout);
           this.reconnectAttempts = 0;
           // Send queued messages
           while (this.messageQueue.length > 0) {
@@ -47,9 +62,10 @@ export class WebSocketClient {
         };
 
         this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          console.error('WebSocket error:', error, 'URL:', wsUrl);
+          if (timeout) clearTimeout(timeout);
           this.emit('error', error);
-          reject(error);
+          reject(new Error(`WebSocket connection failed: ${wsUrl}`));
         };
 
         this.ws.onclose = () => {

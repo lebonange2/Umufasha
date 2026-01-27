@@ -37,27 +37,52 @@ export default function CodingEnvironmentPage() {
             const newStatus = await CodingEnvironmentAPI.getStatus();
             setServicesStatus(newStatus);
             
-            // Connect to CWS if it started successfully
+            // Connect to CWS if it started successfully - wait a bit more for service to be ready
             if (newStatus.cws.running) {
+              // Wait additional time for WebSocket server to be ready
+              await new Promise(resolve => setTimeout(resolve, 2000));
               const client = new CWSClient();
               try {
                 await client.connect();
                 setCwsClient(client);
+                console.log('CWS connected successfully');
               } catch (error) {
                 console.error('Failed to connect to CWS:', error);
+                // Retry connection after a delay
+                setTimeout(async () => {
+                  try {
+                    await client.connect();
+                    setCwsClient(client);
+                    console.log('CWS connected on retry');
+                  } catch (retryError) {
+                    console.error('CWS connection retry failed:', retryError);
+                  }
+                }, 3000);
               }
             }
           } catch (error) {
             console.error('Failed to auto-start CWS:', error);
           }
         } else {
-          // CWS is already running, connect to it
+          // CWS is already running, connect to it - wait a moment first
+          await new Promise(resolve => setTimeout(resolve, 1000));
           const client = new CWSClient();
           try {
             await client.connect();
             setCwsClient(client);
+            console.log('CWS connected successfully (already running)');
           } catch (error) {
             console.error('Failed to connect to CWS:', error);
+            // Retry connection after a delay
+            setTimeout(async () => {
+              try {
+                await client.connect();
+                setCwsClient(client);
+                console.log('CWS connected on retry (already running)');
+              } catch (retryError) {
+                console.error('CWS connection retry failed:', retryError);
+              }
+            }, 3000);
           }
         }
       } catch (error) {
@@ -83,8 +108,30 @@ export default function CodingEnvironmentPage() {
           try {
             await client.connect();
             setCwsClient(client);
+            console.log('CWS connected via status check');
           } catch (error) {
-            console.error('Failed to connect to CWS:', error);
+            console.error('Failed to connect to CWS via status check:', error);
+            // Don't retry here to avoid spam - let the auto-start handle retries
+          }
+        }
+        
+        // Check if we have a client but it's not connected - try to reconnect
+        if (status.cws.running && cwsClient && !cwsClient.isConnected()) {
+          console.log('CWS service is running but client disconnected, reconnecting...');
+          try {
+            await cwsClient.connect();
+            console.log('CWS reconnected successfully');
+          } catch (error) {
+            console.error('Failed to reconnect CWS:', error);
+            // Create new client if reconnect fails
+            const newClient = new CWSClient();
+            try {
+              await newClient.connect();
+              setCwsClient(newClient);
+              console.log('CWS reconnected with new client');
+            } catch (retryError) {
+              console.error('Failed to reconnect with new client:', retryError);
+            }
           }
         }
       } catch (error) {
