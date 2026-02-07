@@ -1454,38 +1454,56 @@ if [ "$OLLAMA_INSTALLED" = true ]; then
         fi
     fi
     
-    # Download both required models: llama3:latest and qwen3:30b
-    MODELS_TO_DOWNLOAD=("llama3:latest" "qwen3:30b")
-    
-    for MODEL in "${MODELS_TO_DOWNLOAD[@]}"; do
-        if ollama list 2>/dev/null | grep -q "$MODEL"; then
-            print_success "$MODEL model is already installed"
-        else
-            if [ "$MODEL" = "qwen3:30b" ]; then
-                print_status "Downloading $MODEL model (this may take 10-20 minutes, ~20GB)..."
-                TIMEOUT=1200
+    # Download required local models for the app.
+    # Defaults include qwen:32b (used by PDF Q&A). Override with:
+    #   OLLAMA_MODELS_TO_PULL="llama3:latest qwen:32b" ./setup.sh
+    # Or skip pulls entirely (not recommended) with:
+    #   OLLAMA_SKIP_PULL=true ./setup.sh
+    DEFAULT_OLLAMA_MODELS=("llama3:latest" "qwen3:30b" "qwen:32b")
+    MODELS_TO_DOWNLOAD=()
+    if [ -n "${OLLAMA_MODELS_TO_PULL:-}" ]; then
+        # shellcheck disable=SC2206
+        MODELS_TO_DOWNLOAD=(${OLLAMA_MODELS_TO_PULL})
+    else
+        MODELS_TO_DOWNLOAD=("${DEFAULT_OLLAMA_MODELS[@]}")
+    fi
+
+    if [ "${OLLAMA_SKIP_PULL:-false}" = "true" ] || [ "${OLLAMA_SKIP_PULL:-0}" = "1" ]; then
+        print_warning "Skipping Ollama model downloads (OLLAMA_SKIP_PULL=$OLLAMA_SKIP_PULL)."
+        print_warning "You can pull the required model later, e.g.: ollama pull qwen:32b"
+    else
+        for MODEL in "${MODELS_TO_DOWNLOAD[@]}"; do
+            if ollama list 2>/dev/null | grep -q "$MODEL"; then
+                print_success "$MODEL model is already installed"
             else
-                print_status "Downloading $MODEL model (this may take 5-10 minutes, ~5GB)..."
-                TIMEOUT=600
-            fi
-            
-            print_warning "You can skip this and download later with: ollama pull $MODEL"
-            print_warning "The app will work, but local AI needs the model to be downloaded"
-            
-            # Try to pull with timeout
-            if timeout $TIMEOUT ollama pull "$MODEL" 2>&1 | tee "/tmp/ollama_pull_${MODEL//:/_}.log"; then
-                print_success "$MODEL model downloaded successfully"
-            else
-                EXIT_CODE=$?
-                if [ $EXIT_CODE -eq 124 ]; then
-                    print_warning "Model download timed out. Download it later with: ollama pull $MODEL"
+                if [ "$MODEL" = "qwen:32b" ]; then
+                    print_status "Downloading $MODEL model (this may take a while, very large download)..."
+                    TIMEOUT=3600
+                elif [ "$MODEL" = "qwen3:30b" ]; then
+                    print_status "Downloading $MODEL model (this may take 10-20 minutes, ~20GB)..."
+                    TIMEOUT=1200
                 else
-                    print_warning "Model download failed. You can try again later with: ollama pull $MODEL"
+                    print_status "Downloading $MODEL model (this may take 5-10 minutes, ~5GB)..."
+                    TIMEOUT=600
                 fi
-                print_warning "The app will still work, but local AI features require the model"
+
+                print_warning "If needed, you can download later with: ollama pull $MODEL"
+
+                # Try to pull with timeout
+                if timeout $TIMEOUT ollama pull "$MODEL" 2>&1 | tee "/tmp/ollama_pull_${MODEL//:/_}.log"; then
+                    print_success "$MODEL model downloaded successfully"
+                else
+                    EXIT_CODE=$?
+                    if [ $EXIT_CODE -eq 124 ]; then
+                        print_warning "Model download timed out. Download it later with: ollama pull $MODEL"
+                    else
+                        print_warning "Model download failed. You can try again later with: ollama pull $MODEL"
+                    fi
+                    print_warning "Local AI features that depend on this model may not work until it is installed."
+                fi
             fi
-        fi
-    done
+        done
+    fi
 else
     print_warning "Ollama not installed. Local AI features will not be available."
     print_warning "Install with: curl -fsSL https://ollama.com/install.sh | sh"
