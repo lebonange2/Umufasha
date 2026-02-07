@@ -86,3 +86,6 @@ coding-environment/venv/
 coding-environment/.pids/
 coding_workspace/
 coding-environment/*.log
+
+# Local scratch/test artifacts
+tmp_pdfqa_test.pdf

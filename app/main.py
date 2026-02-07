@@ -33,7 +33,8 @@ from app.routes import (
     mindmaps,
     graph,
     exam_generator,
-    coding_environment
+    coding_environment,
+    pdf_qa
 )
 from app.core.config import settings
 
@@ -159,6 +160,7 @@ app.include_router(product_debate.router, tags=["product-debate"])
 app.include_router(mindmaps.router, tags=["mindmaps"])
 app.include_router(graph.router, tags=["graph"])
 app.include_router(coding_environment.router, prefix="/api/coding-environment", tags=["coding-environment"])
+app.include_router(pdf_qa.router, prefix="/api/pdf-qa", tags=["pdf-qa"])
 
 # Serve Coding Environment markdown docs under /docs/coding-environment/*
 app.include_router(coding_environment.docs_router, prefix="/docs/coding-environment", tags=["coding-environment-docs"])
@@ -279,6 +281,15 @@ async def coding_environment_page(request: Request, path: str = ""):
 </body>
 </html>
         """)
+
+
+@app.get("/pdf_qa", response_class=HTMLResponse)
+async def pdf_qa_page(request: Request):
+    """PDF Q&A page - upload PDF and ask questions with citations."""
+    return templates.TemplateResponse("pdf_qa.html", {
+        "request": request,
+        "title": "PDF Q&A"
+    })
 
 
 @app.get("/health")

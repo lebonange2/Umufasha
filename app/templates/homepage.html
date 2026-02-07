@@ -299,6 +299,30 @@
                 </div>
             </div>
 
+            <!-- PDF Q&A -->
+            <div class="col-lg-4 col-md-6">
+                <div class="feature-card" style="background: linear-gradient(135deg, #ff512f 0%, #dd2476 100%);">
+                    <div class="card-body p-4">
+                        <div class="text-center">
+                            <i class="bi bi-file-earmark-pdf feature-icon"></i>
+                            <h3 class="feature-title">PDF Q&amp;A</h3>
+                            <p class="feature-description">
+                                Upload a PDF and ask questions. Answers include a cited snippet and page number
+                                using local Ollama model <strong>qwen:32b</strong>.
+                            </p>
+                            <a href="/pdf_qa" class="feature-link">
+                                <i class="bi bi-arrow-right-circle"></i> Open PDF Q&amp;A
+                            </a>
+                            <div class="feature-badges">
+                                <span class="badge">Upload PDF</span>
+                                <span class="badge">Citations</span>
+                                <span class="badge">Local LLM</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Personal Assistant -->
             <div class="col-lg-4 col-md-6">
                 <div class="feature-card personal">
@@ -412,7 +436,7 @@
                         </div>
                         <div class="col-md-3 col-6">
                             <div class="stat-item">
-                                <div class="stat-number">7</div>
+                                <div class="stat-number">8</div>
                                 <div class="stat-label">Features</div>
                             </div>
                         </div>
@@ -517,6 +541,15 @@
                                 </a>
                             </div>
                             <div class="quick-link-item">
+                                <a href="/pdf_qa">
+                                    <i class="bi bi-file-earmark-pdf"></i>
+                                    <div>
+                                        <strong>PDF Q&amp;A</strong>
+                                        <div class="text-muted small">Ask questions about uploaded PDFs (with citations)</div>
+                                    </div>
+                                </a>
+                            </div>
+                            <div class="quick-link-item">
                                 <a href="/api/llm" target="_blank">
                                     <i class="bi bi-robot"></i>
                                     <div>
@@ -545,6 +578,7 @@
                     <ul class="list-unstyled">
                         <li><a href="/writer" class="text-light">Book Writer</a></li>
                         <li><a href="/brainstorm" class="text-light">Brainstorming</a></li>
+                        <li><a href="/pdf_qa" class="text-light">PDF Q&amp;A</a></li>
                         <li><a href="/admin" class="text-light">Admin Panel</a></li>
                         <li><a href="/docs" class="text-light">API Docs</a></li>
                     </ul>

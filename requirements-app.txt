@@ -60,6 +60,9 @@ psutil>=5.9.0
 # PDF generation
 reportlab>=4.0.0
 
+# PDF reading / extraction (for PDF Q&A and writer document uploads)
+PyPDF2>=3.0.0
+
 # Audio processing (required for TTS features)
 soundfile>=0.12.1
 
