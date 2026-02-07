@@ -26,6 +26,11 @@ PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 MAX_FILE_SIZE = 75 * 1024 * 1024  # 75MB
 DEFAULT_MODEL = "qwen:32b"
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
+OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
+
+
+class ModelsResponse(BaseModel):
+    models: List[str]
 
 
 class UploadResponse(BaseModel):
@@ -150,6 +155,25 @@ async def _ollama_chat(model: str, messages: List[Dict[str, str]]) -> str:
         async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(OLLAMA_CHAT_URL, json=payload)
         if resp.status_code != 200:
+            # Make "model not found" actionable (common when the user hasn't pulled it yet).
+            if resp.status_code == 404:
+                try:
+                    err = resp.json().get("error")  # {"error":"model 'x' not found"}
+                except Exception:
+                    err = resp.text
+                suggestions = await _get_ollama_model_suggestions(model)
+                hint = ""
+                if suggestions:
+                    hint = f"\n\nAvailable models include:\n- " + "\n- ".join(suggestions[:12])
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Ollama model not found: {model}\n\n"
+                        f"Fix:\n- Pull the model: ollama pull {model}\n"
+                        f"Or select an installed model on the PDF Q&A page."
+                        f"{hint}"
+                    ),
+                )
             raise HTTPException(status_code=502, detail=f"Ollama error ({resp.status_code}): {resp.text}")
         data = resp.json()
         return (data.get("message") or {}).get("content") or ""
@@ -158,6 +182,40 @@ async def _ollama_chat(model: str, messages: List[Dict[str, str]]) -> str:
             status_code=503,
             detail="Cannot connect to Ollama at http://localhost:11434. Start it with: ollama serve",
         )
+
+
+async def _get_ollama_models() -> List[str]:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(OLLAMA_TAGS_URL)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        models = [m.get("name") for m in data.get("models", []) if isinstance(m, dict) and m.get("name")]
+        return [str(x) for x in models]
+    except Exception:
+        return []
+
+
+async def _get_ollama_model_suggestions(requested: str) -> List[str]:
+    models = await _get_ollama_models()
+    if not models:
+        return []
+    r = (requested or "").lower()
+    # Prefer qwen 32b-ish models if requested is qwen:32b.
+    if "qwen" in r and "32" in r:
+        preferred = [m for m in models if "qwen" in m.lower() and "32" in m.lower()]
+        if preferred:
+            return preferred
+    # Otherwise return all models (sorted) so the UI can show them.
+    return sorted(models)
+
+
+@router.get("/models", response_model=ModelsResponse)
+async def get_models():
+    """List locally available Ollama models."""
+    models = await _get_ollama_models()
+    return ModelsResponse(models=models)
 
 
 def _load_pages(doc_id: str) -> Tuple[List[str], Dict[str, Any]]:

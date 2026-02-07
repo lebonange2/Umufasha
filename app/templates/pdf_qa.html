@@ -61,8 +61,12 @@
             <hr class="my-4" />
 
             <h2 class="h5 mb-2">2) Ask a question</h2>
-            <div class="mb-2 muted small">
-              Model: <code>qwen:32b</code> (Ollama local)
+            <div class="mb-2">
+              <label class="form-label small muted mb-1">Model (Ollama local)</label>
+              <select class="form-select" id="model" disabled>
+                <option value="qwen:32b" selected>qwen:32b</option>
+              </select>
+              <div class="form-text" id="model-hint"></div>
             </div>
             <div class="mb-3">
               <textarea class="form-control" id="question" rows="4" placeholder="Ask something about the PDF…" disabled></textarea>
@@ -99,6 +103,8 @@
     const elUploadBtn = document.getElementById('upload-btn');
     const elQuestion = document.getElementById('question');
     const elAskBtn = document.getElementById('ask-btn');
+    const elModel = document.getElementById('model');
+    const elModelHint = document.getElementById('model-hint');
     const elStatus = document.getElementById('status');
     const elError = document.getElementById('error');
     const elAnswer = document.getElementById('answer');
@@ -122,6 +128,40 @@
       elUploadBtn.disabled = busy;
       elAskBtn.disabled = busy || !docId || !elQuestion.value.trim();
       elQuestion.disabled = busy || !docId;
+      elModel.disabled = busy || !docId;
+    }
+
+    async function loadModels() {
+      try {
+        const resp = await fetch('/api/pdf-qa/models');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const models = (data.models || []).filter(Boolean);
+        if (!models.length) return;
+
+        const preferred = 'qwen:32b';
+        const hasPreferred = models.includes(preferred);
+        const pick = hasPreferred
+          ? preferred
+          : (models.find(m => m.toLowerCase().includes('qwen') && m.includes('32')) || models[0]);
+
+        elModel.innerHTML = '';
+        for (const m of models) {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          if (m === pick) opt.selected = true;
+          elModel.appendChild(opt);
+        }
+
+        if (!hasPreferred) {
+          elModelHint.textContent = `Note: qwen:32b is not installed. Using "${pick}". To install qwen:32b run: ollama pull qwen:32b`;
+        } else {
+          elModelHint.textContent = '';
+        }
+      } catch {
+        // ignore
+      }
     }
 
     function renderCitations(citations) {
@@ -165,6 +205,7 @@
         setStatus(`Uploaded: ${data.filename} • ${data.pages} pages`);
         elAnswer.textContent = 'PDF ready. Ask a question on the left.';
         elQuestion.disabled = false;
+        await loadModels();
         elQuestion.focus();
       } catch (err) {
         setError(err && err.message ? err.message : 'Upload error');
@@ -192,7 +233,7 @@
         const startResp = await fetch('/api/pdf-qa/ask_async', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ doc_id: docId, question: q, model: 'qwen:32b', top_k_pages: 3 })
+          body: JSON.stringify({ doc_id: docId, question: q, model: (elModel.value || 'qwen:32b'), top_k_pages: 3 })
         });
         if (!startResp.ok) {
           const text = await startResp.text();
