@@ -1,5 +1,6 @@
 """PDF Q&A routes: upload a PDF, ask questions, and get cited answers (page + snippet)."""
 
+import asyncio
 import json
 import re
 import uuid
@@ -49,6 +50,16 @@ class AskResponse(BaseModel):
     answer: str
     citations: List[Citation]
     used_pages: List[int]
+
+class AskAsyncResponse(BaseModel):
+    job_id: str
+    status: str = "processing"
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str  # processing|completed|failed
+    result: Optional[AskResponse] = None
+    error: Optional[str] = None
 
 
 def _extract_pages_from_pdf(file_path: Path) -> List[str]:
@@ -135,7 +146,8 @@ async def _ollama_chat(model: str, messages: List[Dict[str, str]]) -> str:
     """Call Ollama /api/chat and return assistant content."""
     payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": False}
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        # Large local models can be slow (especially on first token). Use a generous timeout.
+        async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(OLLAMA_CHAT_URL, json=payload)
         if resp.status_code != 200:
             raise HTTPException(status_code=502, detail=f"Ollama error ({resp.status_code}): {resp.text}")
@@ -160,6 +172,22 @@ def _load_pages(doc_id: str) -> Tuple[List[str], Dict[str, Any]]:
     if not isinstance(pages, list):
         pages = []
     return [str(p or "") for p in pages], meta
+
+
+# In-memory job store (good enough for a single-process deployment).
+# Format:
+#   {job_id: {"status": "...", "result": AskResponse|None, "error": str|None}}
+qa_jobs: Dict[str, Dict[str, Any]] = {}
+
+
+async def _run_qa_job(job_id: str, req: AskRequest) -> None:
+    try:
+        result = await _answer_question(req)
+        qa_jobs[job_id] = {"status": "completed", "result": result, "error": None}
+    except Exception as e:
+        # Ensure we don't leak internal traces to the UI; stringify as best-effort.
+        msg = getattr(e, "detail", None) if isinstance(e, HTTPException) else str(e)
+        qa_jobs[job_id] = {"status": "failed", "result": None, "error": msg or "Unknown error"}
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -194,8 +222,7 @@ async def upload_pdf(file: UploadFile = File(...)):
     return UploadResponse(doc_id=doc_id, filename=file.filename or "document.pdf", pages=len(pages))
 
 
-@router.post("/ask", response_model=AskResponse)
-async def ask_pdf(req: AskRequest):
+async def _answer_question(req: AskRequest) -> AskResponse:
     pages, meta = _load_pages(req.doc_id)
     if not pages:
         raise HTTPException(status_code=400, detail="PDF has no extractable text.")
@@ -233,4 +260,30 @@ async def ask_pdf(req: AskRequest):
         citations = [Citation(page=top_pages[0] + 1, snippet=_make_snippet(pages[top_pages[0]], req.question) or "")]
 
     return AskResponse(answer=answer, citations=citations, used_pages=used_pages_1based)
+
+
+@router.post("/ask", response_model=AskResponse)
+async def ask_pdf(req: AskRequest):
+    """Synchronous ask (may time out behind some proxies)."""
+    return await _answer_question(req)
+
+
+@router.post("/ask_async", response_model=AskAsyncResponse)
+async def ask_pdf_async(req: AskRequest):
+    """Async ask that avoids long-held HTTP connections (better for RunPod/Cloudflare)."""
+    job_id = str(uuid.uuid4())
+    qa_jobs[job_id] = {"status": "processing", "result": None, "error": None}
+    asyncio.create_task(_run_qa_job(job_id, req))
+    return AskAsyncResponse(job_id=job_id)
+
+
+@router.get("/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(job_id: str):
+    job = qa_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    status = job.get("status", "processing")
+    result = job.get("result")
+    error = job.get("error")
+    return JobStatusResponse(job_id=job_id, status=status, result=result, error=error)
 

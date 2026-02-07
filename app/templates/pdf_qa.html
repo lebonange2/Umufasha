@@ -188,19 +188,45 @@
       elAnswer.textContent = '…';
       renderCitations([]);
       try {
-        const resp = await fetch('/api/pdf-qa/ask', {
+        // Use async job + polling to avoid proxy timeouts (common on RunPod/Cloudflare).
+        const startResp = await fetch('/api/pdf-qa/ask_async', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ doc_id: docId, question: q, model: 'qwen:32b', top_k_pages: 3 })
         });
-        if (!resp.ok) {
-          const text = await resp.text();
-          throw new Error(text || `Ask failed (${resp.status})`);
+        if (!startResp.ok) {
+          const text = await startResp.text();
+          throw new Error(text || `Ask failed (${startResp.status})`);
         }
-        const data = await resp.json();
-        elAnswer.textContent = data.answer || '';
-        renderCitations(data.citations || []);
-        setStatus(`Used pages: ${(data.used_pages || []).join(', ')}`);
+        const startData = await startResp.json();
+        const jobId = startData.job_id;
+        if (!jobId) throw new Error('No job_id returned.');
+
+        // Poll for completion
+        const t0 = Date.now();
+        const maxMs = 10 * 60 * 1000; // 10 minutes
+        while (true) {
+          if (Date.now() - t0 > maxMs) throw new Error('Timed out waiting for the answer.');
+
+          const pollResp = await fetch(`/api/pdf-qa/jobs/${jobId}`);
+          if (!pollResp.ok) {
+            const text = await pollResp.text();
+            throw new Error(text || `Polling failed (${pollResp.status})`);
+          }
+          const pollData = await pollResp.json();
+          if (pollData.status === 'failed') {
+            throw new Error(pollData.error || 'Job failed.');
+          }
+          if (pollData.status === 'completed') {
+            const data = pollData.result || {};
+            elAnswer.textContent = data.answer || '';
+            renderCitations(data.citations || []);
+            setStatus(`Used pages: ${(data.used_pages || []).join(', ')}`);
+            break;
+          }
+          setStatus('Thinking… (still working)');
+          await new Promise(r => setTimeout(r, 1000));
+        }
       } catch (err) {
         setError(err && err.message ? err.message : 'Ask error');
         elAnswer.textContent = 'Failed to answer.';
