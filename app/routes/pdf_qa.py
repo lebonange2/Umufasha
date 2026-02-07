@@ -131,7 +131,15 @@ def _extract_pages_from_pdf(file_path: Path) -> Tuple[List[str], str]:
 
 
 def _tokenize(s: str) -> List[str]:
-    return re.findall(r"[a-zA-Z0-9]{2,}", s.lower())
+    toks = re.findall(r"[a-zA-Z0-9]{2,}", (s or "").lower())
+    # Light stopword filtering to reduce "same page every time" bias.
+    stop = {
+        "the","and","for","with","that","this","from","into","your","you","are","was","were","what","when","where",
+        "how","why","can","could","should","would","will","their","there","then","than","have","has","had","not",
+        "but","about","also","use","used","using","more","most","some","any","each","such","make","makes","made",
+        "page","chapter","section","example","examples",
+    }
+    return [t for t in toks if t not in stop]
 
 
 def _score_page(query_tokens: List[str], page_text: str) -> int:
@@ -144,19 +152,78 @@ def _score_page(query_tokens: List[str], page_text: str) -> int:
     return score
 
 
-def _pick_top_pages(question: str, pages: List[str], k: int) -> List[int]:
-    k = max(1, min(int(k or 3), 8))
+def _chunk_text(text: str, chunk_chars: int = 1400, overlap: int = 250) -> List[str]:
+    t = (text or "").strip()
+    if not t:
+        return []
+    if len(t) <= chunk_chars:
+        return [t]
+    chunks: List[str] = []
+    step = max(200, chunk_chars - overlap)
+    i = 0
+    while i < len(t):
+        c = t[i : i + chunk_chars].strip()
+        if c:
+            chunks.append(c)
+        if i + chunk_chars >= len(t):
+            break
+        i += step
+    return chunks
+
+
+def _bm25_rank(question: str, pages: List[str], top_k: int = 6) -> List[Dict[str, Any]]:
+    """Return ranked chunks: [{page (1-based), text, score}]"""
     q_tokens = _tokenize(question)
-    scored = [(idx, _score_page(q_tokens, txt)) for idx, txt in enumerate(pages)]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    top = [idx for idx, score in scored[:k] if score > 0]
-    if not top:
-        # fallback: first page with content, otherwise page 1
-        for i, txt in enumerate(pages):
-            if (txt or "").strip():
-                return [i]
-        return [0] if pages else []
-    return top
+    if not q_tokens:
+        return []
+
+    docs: List[Dict[str, Any]] = []
+    for pi, page_text in enumerate(pages):
+        for chunk in _chunk_text(page_text):
+            toks = _tokenize(chunk)
+            if not toks:
+                continue
+            tf: Dict[str, int] = {}
+            for t in toks:
+                tf[t] = tf.get(t, 0) + 1
+            docs.append({"page": pi + 1, "text": chunk, "tf": tf, "len": len(toks)})
+
+    if not docs:
+        return []
+
+    # document frequencies
+    df: Dict[str, int] = {}
+    for d in docs:
+        for t in d["tf"].keys():
+            df[t] = df.get(t, 0) + 1
+
+    N = len(docs)
+    avgdl = sum(d["len"] for d in docs) / max(1, N)
+    k1 = 1.2
+    b = 0.75
+
+    import math
+    def idf_math(t: str) -> float:
+        n = df.get(t, 0)
+        if n <= 0:
+            return 0.0
+        return math.log(1 + (N - n + 0.5) / (n + 0.5))
+
+    ranked: List[Dict[str, Any]] = []
+    for d in docs:
+        score = 0.0
+        dl = d["len"]
+        denom_base = k1 * (1 - b + b * (dl / (avgdl or 1.0)))
+        for t in q_tokens:
+            f = d["tf"].get(t, 0)
+            if f <= 0:
+                continue
+            score += idf_math(t) * (f * (k1 + 1)) / (f + denom_base)
+        if score > 0:
+            ranked.append({"page": d["page"], "text": d["text"], "score": score})
+
+    ranked.sort(key=lambda x: x["score"], reverse=True)
+    return ranked[: max(1, min(int(top_k or 6), 12))]
 
 
 def _make_snippet(page_text: str, question: str, max_len: int = 480) -> str:
@@ -365,15 +432,25 @@ async def _answer_question(req: AskRequest) -> AskResponse:
     if not pages:
         raise HTTPException(status_code=400, detail="PDF has no extractable text.")
 
-    top_pages = _pick_top_pages(req.question, pages, req.top_k_pages)
-    used_pages_1based = [p + 1 for p in top_pages]
+    ranked = _bm25_rank(req.question, pages, top_k=max(4, int(req.top_k_pages or 3) * 2))
+    # If retrieval is weak, do not guess.
+    if not ranked or ranked[0].get("score", 0) < 0.6:
+        return AskResponse(
+            answer="I don't know based on the document.",
+            explanation="I couldn't find relevant text in the PDF to support an answer." if req.explain else None,
+            citations=[],
+            used_pages=[],
+        )
+
+    used_pages_1based = sorted({int(r["page"]) for r in ranked if r.get("page")})
 
     # Build context for the model. Keep it compact to fit in-context limits.
     context_blocks: List[str] = []
-    for p in top_pages:
-        raw = re.sub(r"\s+", " ", pages[p]).strip()
-        raw = raw[:4500]
-        context_blocks.append(f"[PAGE {p+1}]\n{raw}")
+    # Use the top chunks as context (more precise than whole pages).
+    for r in ranked[:6]:
+        raw = re.sub(r"\s+", " ", (r.get("text") or "")).strip()
+        raw = raw[:3000]
+        context_blocks.append(f"[PAGE {r['page']}]\n{raw}")
     context = "\n\n---\n\n".join(context_blocks)
 
     if req.explain:
@@ -395,16 +472,24 @@ async def _answer_question(req: AskRequest) -> AskResponse:
     answer = (answer or "").strip()
     if not answer:
         answer = "I couldn't produce an answer based on the document context."
+    # Hard guardrail: if model admits it's not in context, normalize wording and drop citations.
+    if answer.lower().strip() in {"i don't know", "i do not know", "not sure"} or "don't know based on the document" in answer.lower():
+        return AskResponse(
+            answer="I don't know based on the document.",
+            explanation=explanation if req.explain else None,
+            citations=[],
+            used_pages=used_pages_1based[:],
+        )
 
     # Provide citations from retrieval (deterministic): page + snippet.
     citations: List[Citation] = []
-    for p in top_pages[:2]:
-        snippet = _make_snippet(pages[p], req.question)
+    for r in ranked[:3]:
+        snippet = _make_snippet(r.get("text") or "", req.question)
         if snippet:
-            citations.append(Citation(page=p + 1, snippet=snippet))
+            citations.append(Citation(page=int(r["page"]), snippet=snippet))
 
-    if not citations and top_pages:
-        citations = [Citation(page=top_pages[0] + 1, snippet=_make_snippet(pages[top_pages[0]], req.question) or "")]
+    if not citations and ranked:
+        citations = [Citation(page=int(ranked[0]["page"]), snippet=_make_snippet(ranked[0].get("text") or "", req.question) or "")]
 
     return AskResponse(answer=answer, explanation=explanation if req.explain else None, citations=citations, used_pages=used_pages_1based)
 
