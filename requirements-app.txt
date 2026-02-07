@@ -63,6 +63,9 @@ reportlab>=4.0.0
 # PDF reading / extraction (for PDF Q&A and writer document uploads)
 PyPDF2>=3.0.0
 
+# Better PDF text extraction (improves word chunking/spacing issues)
+pymupdf>=1.24.0
+
 # Audio processing (required for TTS features)
 soundfile>=0.12.1
 

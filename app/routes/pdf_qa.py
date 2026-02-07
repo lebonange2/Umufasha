@@ -44,6 +44,7 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1)
     model: str = DEFAULT_MODEL
     top_k_pages: int = 3
+    explain: bool = False
 
 
 class Citation(BaseModel):
@@ -53,6 +54,7 @@ class Citation(BaseModel):
 
 class AskResponse(BaseModel):
     answer: str
+    explanation: Optional[str] = None
     citations: List[Citation]
     used_pages: List[int]
 
@@ -67,14 +69,52 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-def _extract_pages_from_pdf(file_path: Path) -> List[str]:
-    """Extract text per page from PDF."""
+def _clean_pdf_text(text: str) -> str:
+    """Post-process extracted PDF text to improve readability."""
+    if not text:
+        return ""
+    # Remove soft-hyphen and zero-width chars that often appear mid-word.
+    text = text.replace("\u00ad", "")  # soft hyphen
+    text = text.replace("\u200b", "").replace("\u200c", "").replace("\u200d", "")
+    # Normalize non-breaking spaces
+    text = text.replace("\u00a0", " ")
+    # De-hyphenate at line breaks: "com-\nputer" -> "computer"
+    text = re.sub(r"([A-Za-z0-9])-\s*\n\s*([A-Za-z0-9])", r"\1\2", text)
+    # Normalize newlines and whitespace
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _extract_pages_from_pdf(file_path: Path) -> Tuple[List[str], str]:
+    """Extract text per page from PDF. Returns (pages, extractor_name)."""
+    # Prefer PyMuPDF (fitz) which generally preserves word boundaries better than PyPDF2.
+    try:
+        import fitz  # type: ignore
+
+        pages: List[str] = []
+        doc = fitz.open(str(file_path))
+        try:
+            for page in doc:
+                # sort=True improves reading order in many PDFs
+                txt = page.get_text("text", sort=True) or ""
+                pages.append(_clean_pdf_text(txt))
+        finally:
+            doc.close()
+        return pages, "pymupdf"
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.warning("PyMuPDF extraction failed; falling back to PyPDF2", error=str(e))
+
+    # Fallback: PyPDF2
     try:
         import PyPDF2  # type: ignore
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail="PyPDF2 is not installed. Install it with: pip install PyPDF2",
+            detail="PDF extraction requires PyMuPDF or PyPDF2. Install with: pip install pymupdf PyPDF2",
         )
 
     try:
@@ -82,11 +122,9 @@ def _extract_pages_from_pdf(file_path: Path) -> List[str]:
         with open(file_path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
             for page in reader.pages:
-                text = page.extract_text() or ""
-                pages.append(text)
-        return pages
-    except HTTPException:
-        raise
+                txt = page.extract_text() or ""
+                pages.append(_clean_pdf_text(txt))
+        return pages, "pypdf2"
     except Exception as e:
         logger.error("PDF extraction failed", error=str(e))
         raise HTTPException(status_code=400, detail=f"Failed to extract text from PDF: {str(e)}")
@@ -229,6 +267,24 @@ def _load_pages(doc_id: str) -> Tuple[List[str], Dict[str, Any]]:
         meta = json.load(f)
     if not isinstance(pages, list):
         pages = []
+
+    # Auto-upgrade older extractions (e.g., from previous versions) if the original PDF is available.
+    extractor = (meta or {}).get("extractor")
+    pdf_path = UPLOADS_DIR / f"{doc_id}.pdf"
+    if extractor != "pymupdf" and pdf_path.exists():
+        try:
+            new_pages, used = _extract_pages_from_pdf(pdf_path)
+            if new_pages and sum(len(p.strip()) for p in new_pages) > sum(len(str(p or "").strip()) for p in pages):
+                pages = new_pages
+                meta["extractor"] = used
+                with open(pages_path, "w", encoding="utf-8") as f:
+                    json.dump({"pages": pages}, f)
+                with open(meta_path, "w", encoding="utf-8") as f:
+                    json.dump(meta, f)
+        except Exception:
+            # Best-effort; keep original pages if upgrade fails.
+            pass
+
     return [str(p or "") for p in pages], meta
 
 
@@ -262,7 +318,7 @@ async def upload_pdf(file: UploadFile = File(...)):
     with open(pdf_path, "wb") as f:
         f.write(content)
 
-    pages = _extract_pages_from_pdf(pdf_path)
+    pages, extractor = _extract_pages_from_pdf(pdf_path)
 
     meta = {
         "doc_id": doc_id,
@@ -270,6 +326,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         "uploaded_at": datetime.utcnow().isoformat() + "Z",
         "bytes": len(content),
         "pages": len(pages),
+        "extractor": extractor,
     }
     with open(PROCESSED_DIR / f"{doc_id}.meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f)
@@ -278,6 +335,29 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     logger.info("PDF uploaded", doc_id=doc_id, pages=len(pages), filename=file.filename)
     return UploadResponse(doc_id=doc_id, filename=file.filename or "document.pdf", pages=len(pages))
+
+
+def _extract_answer_and_explanation(model_text: str) -> Tuple[str, Optional[str]]:
+    """Try to parse model output into answer + explanation."""
+    t = (model_text or "").strip()
+    if not t:
+        return "", None
+    # Try JSON first
+    try:
+        obj = json.loads(t)
+        if isinstance(obj, dict) and ("answer" in obj or "explanation" in obj):
+            ans = str(obj.get("answer") or "").strip()
+            expl = obj.get("explanation")
+            expl_s = str(expl).strip() if expl is not None else None
+            return ans, expl_s
+    except Exception:
+        pass
+
+    # Fallback: split on common marker
+    m = re.split(r"\n\s*Explanation\s*:\s*\n|\n\s*Explanation\s*:\s*", t, maxsplit=1, flags=re.IGNORECASE)
+    if len(m) == 2:
+        return m[0].strip(), m[1].strip()
+    return t, None
 
 
 async def _answer_question(req: AskRequest) -> AskResponse:
@@ -296,16 +376,25 @@ async def _answer_question(req: AskRequest) -> AskResponse:
         context_blocks.append(f"[PAGE {p+1}]\n{raw}")
     context = "\n\n---\n\n".join(context_blocks)
 
-    system = (
-        "You answer questions about a PDF using ONLY the provided context. "
-        "If the answer isn't in the context, say you don't know based on the document. "
-        "Be concise."
-    )
+    if req.explain:
+        system = (
+            "You answer questions about a PDF using ONLY the provided context. "
+            "If the answer isn't in the context, say you don't know based on the document. "
+            "Return JSON with keys: answer, explanation. "
+            "explanation should briefly justify using the cited context."
+        )
+    else:
+        system = (
+            "You answer questions about a PDF using ONLY the provided context. "
+            "If the answer isn't in the context, say you don't know based on the document. "
+            "Be concise."
+        )
     user = f"Question: {req.question}\n\nContext:\n{context}"
-    answer = await _ollama_chat(req.model or DEFAULT_MODEL, [{"role": "system", "content": system}, {"role": "user", "content": user}])
+    model_text = await _ollama_chat(req.model or DEFAULT_MODEL, [{"role": "system", "content": system}, {"role": "user", "content": user}])
+    answer, explanation = _extract_answer_and_explanation(model_text)
     answer = (answer or "").strip()
     if not answer:
-        answer = "I couldn't produce an answer."
+        answer = "I couldn't produce an answer based on the document context."
 
     # Provide citations from retrieval (deterministic): page + snippet.
     citations: List[Citation] = []
@@ -317,7 +406,7 @@ async def _answer_question(req: AskRequest) -> AskResponse:
     if not citations and top_pages:
         citations = [Citation(page=top_pages[0] + 1, snippet=_make_snippet(pages[top_pages[0]], req.question) or "")]
 
-    return AskResponse(answer=answer, citations=citations, used_pages=used_pages_1based)
+    return AskResponse(answer=answer, explanation=explanation if req.explain else None, citations=citations, used_pages=used_pages_1based)
 
 
 @router.post("/ask", response_model=AskResponse)

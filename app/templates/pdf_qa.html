@@ -71,6 +71,13 @@
             <div class="mb-3">
               <textarea class="form-control" id="question" rows="4" placeholder="Ask something about the PDF…" disabled></textarea>
             </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" value="" id="explain" disabled>
+              <label class="form-check-label" for="explain">
+                Explain the answer
+              </label>
+              <div class="form-text">Adds a short justification of how the answer follows from the cited pages.</div>
+            </div>
             <button class="btn btn-success w-100" id="ask-btn" disabled>
               <i class="bi bi-chat-dots"></i> Ask
             </button>
@@ -88,6 +95,10 @@
           <div class="card-body p-4">
             <h2 class="h5 mb-3">Answer</h2>
             <div id="answer" class="mb-3 muted">Upload a PDF to begin.</div>
+            <div id="explanation-wrap" class="d-none mb-3">
+              <div class="fw-semibold mb-2">Explanation</div>
+              <div id="explanation" class="muted"></div>
+            </div>
             <div id="citations"></div>
           </div>
         </div>
@@ -105,9 +116,12 @@
     const elAskBtn = document.getElementById('ask-btn');
     const elModel = document.getElementById('model');
     const elModelHint = document.getElementById('model-hint');
+    const elExplain = document.getElementById('explain');
     const elStatus = document.getElementById('status');
     const elError = document.getElementById('error');
     const elAnswer = document.getElementById('answer');
+    const elExplanationWrap = document.getElementById('explanation-wrap');
+    const elExplanation = document.getElementById('explanation');
     const elCitations = document.getElementById('citations');
 
     function setError(msg) {
@@ -129,6 +143,7 @@
       elAskBtn.disabled = busy || !docId || !elQuestion.value.trim();
       elQuestion.disabled = busy || !docId;
       elModel.disabled = busy || !docId;
+      elExplain.disabled = busy || !docId;
     }
 
     async function loadModels() {
@@ -204,6 +219,8 @@
         docId = data.doc_id;
         setStatus(`Uploaded: ${data.filename} • ${data.pages} pages`);
         elAnswer.textContent = 'PDF ready. Ask a question on the left.';
+        elExplanationWrap.classList.add('d-none');
+        elExplanation.textContent = '';
         elQuestion.disabled = false;
         await loadModels();
         elQuestion.focus();
@@ -227,13 +244,21 @@
       setBusy(true);
       setStatus('Thinking… (Ollama qwen:32b)');
       elAnswer.textContent = '…';
+      elExplanationWrap.classList.add('d-none');
+      elExplanation.textContent = '';
       renderCitations([]);
       try {
         // Use async job + polling to avoid proxy timeouts (common on RunPod/Cloudflare).
         const startResp = await fetch('/api/pdf-qa/ask_async', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ doc_id: docId, question: q, model: (elModel.value || 'qwen:32b'), top_k_pages: 3 })
+          body: JSON.stringify({
+            doc_id: docId,
+            question: q,
+            model: (elModel.value || 'qwen:32b'),
+            top_k_pages: 3,
+            explain: !!elExplain.checked
+          })
         });
         if (!startResp.ok) {
           const text = await startResp.text();
@@ -261,6 +286,10 @@
           if (pollData.status === 'completed') {
             const data = pollData.result || {};
             elAnswer.textContent = data.answer || '';
+            if (data.explanation) {
+              elExplanation.textContent = data.explanation;
+              elExplanationWrap.classList.remove('d-none');
+            }
             renderCitations(data.citations || []);
             setStatus(`Used pages: ${(data.used_pages || []).join(', ')}`);
             break;
