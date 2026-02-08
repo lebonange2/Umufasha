@@ -1472,37 +1472,37 @@ if [ "$OLLAMA_INSTALLED" = true ]; then
         print_warning "Skipping Ollama model downloads (OLLAMA_SKIP_PULL=$OLLAMA_SKIP_PULL)."
         print_warning "You can pull the required model later, e.g.: ollama pull qwen:32b"
     else
-        for MODEL in "${MODELS_TO_DOWNLOAD[@]}"; do
-            if ollama list 2>/dev/null | grep -q "$MODEL"; then
-                print_success "$MODEL model is already installed"
-            else
+    for MODEL in "${MODELS_TO_DOWNLOAD[@]}"; do
+        if ollama list 2>/dev/null | grep -q "$MODEL"; then
+            print_success "$MODEL model is already installed"
+        else
                 if [ "$MODEL" = "qwen:32b" ]; then
                     print_status "Downloading $MODEL model (this may take a while, very large download)..."
                     TIMEOUT=3600
                 elif [ "$MODEL" = "qwen3:30b" ]; then
-                    print_status "Downloading $MODEL model (this may take 10-20 minutes, ~20GB)..."
-                    TIMEOUT=1200
-                else
-                    print_status "Downloading $MODEL model (this may take 5-10 minutes, ~5GB)..."
-                    TIMEOUT=600
-                fi
-
-                print_warning "If needed, you can download later with: ollama pull $MODEL"
-
-                # Try to pull with timeout
-                if timeout $TIMEOUT ollama pull "$MODEL" 2>&1 | tee "/tmp/ollama_pull_${MODEL//:/_}.log"; then
-                    print_success "$MODEL model downloaded successfully"
-                else
-                    EXIT_CODE=$?
-                    if [ $EXIT_CODE -eq 124 ]; then
-                        print_warning "Model download timed out. Download it later with: ollama pull $MODEL"
-                    else
-                        print_warning "Model download failed. You can try again later with: ollama pull $MODEL"
-                    fi
-                    print_warning "Local AI features that depend on this model may not work until it is installed."
-                fi
+                print_status "Downloading $MODEL model (this may take 10-20 minutes, ~20GB)..."
+                TIMEOUT=1200
+            else
+                print_status "Downloading $MODEL model (this may take 5-10 minutes, ~5GB)..."
+                TIMEOUT=600
             fi
-        done
+            
+                print_warning "If needed, you can download later with: ollama pull $MODEL"
+            
+            # Try to pull with timeout
+            if timeout $TIMEOUT ollama pull "$MODEL" 2>&1 | tee "/tmp/ollama_pull_${MODEL//:/_}.log"; then
+                print_success "$MODEL model downloaded successfully"
+            else
+                EXIT_CODE=$?
+                if [ $EXIT_CODE -eq 124 ]; then
+                    print_warning "Model download timed out. Download it later with: ollama pull $MODEL"
+                else
+                    print_warning "Model download failed. You can try again later with: ollama pull $MODEL"
+                fi
+                    print_warning "Local AI features that depend on this model may not work until it is installed."
+            fi
+        fi
+    done
     fi
 else
     print_warning "Ollama not installed. Local AI features will not be available."

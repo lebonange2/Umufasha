@@ -18,6 +18,15 @@ export interface SearchResult {
   }>;
 }
 
+export interface ReadFileResult {
+  path: string;
+  size?: number;
+  mtime?: string;
+  hash?: string;
+  isBinary?: boolean;
+  content?: string;
+}
+
 type JsonRpcResponse = {
   jsonrpc: '2.0';
   id: string | number;
@@ -101,8 +110,13 @@ export class CWSClient {
   }
 
   // File operations
-  async readFile(path: string): Promise<string> {
+  async readFileFull(path: string): Promise<ReadFileResult> {
     const result = await this.rpc('fs.read', { path });
+    return (result || {}) as ReadFileResult;
+  }
+
+  async readFile(path: string): Promise<string> {
+    const result = await this.readFileFull(path);
     return result?.content ?? '';
   }
 

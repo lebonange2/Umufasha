@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { CodingEnvironmentAPI, ServiceStatus } from '../services/api';
 import { CWSClient } from '../services/cwsClient';
 import FileBrowser from '../components/FileBrowser';
@@ -14,10 +14,12 @@ export default function CodingEnvironmentPage() {
   const [cwsClient, setCwsClient] = useState<CWSClient | null>(null);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
+  const [currentFileIsBinary, setCurrentFileIsBinary] = useState(false);
   const [workspacePath] = useState<string>('.');
   const [selectedModel, setSelectedModel] = useState<string>('llama3:latest');
   const [cwsAutoStartAttempted, setCwsAutoStartAttempted] = useState(false);
   const [explorerRefreshToken, setExplorerRefreshToken] = useState(0);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   // Auto-start CWS on page load
   useEffect(() => {
@@ -184,10 +186,20 @@ export default function CodingEnvironmentPage() {
   // Load file content when file is selected
   useEffect(() => {
     if (currentFile && cwsClient?.isConnected()) {
-      cwsClient.readFile(currentFile)
-        .then(content => setFileContent(content))
-        .catch(error => {
+      cwsClient
+        .readFileFull(currentFile)
+        .then((res) => {
+          const isBin = !!res?.isBinary;
+          setCurrentFileIsBinary(isBin);
+          if (isBin) {
+            setFileContent('Binary file cannot be displayed in the editor.');
+          } else {
+            setFileContent(res?.content ?? '');
+          }
+        })
+        .catch((error) => {
           console.error('Failed to read file:', error);
+          setCurrentFileIsBinary(false);
           setFileContent(`Error: ${error.message}`);
         });
     }
@@ -240,7 +252,7 @@ export default function CodingEnvironmentPage() {
   };
 
   const handleSaveFile = async () => {
-    if (!currentFile || !cwsClient?.isConnected()) return;
+    if (!currentFile || !cwsClient?.isConnected() || currentFileIsBinary) return;
     
     try {
       await cwsClient.writeFile(currentFile, fileContent);
@@ -248,6 +260,69 @@ export default function CodingEnvironmentPage() {
     } catch (error) {
       console.error('Failed to save file:', error);
       alert(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleDownloadFile = async () => {
+    if (!currentFile || !cwsClient?.isConnected()) return;
+    try {
+      const res = await cwsClient.readFileFull(currentFile);
+      if (res?.isBinary) {
+        alert('Download for binary files is not supported yet (text-only).');
+        return;
+      }
+      const text = res?.content ?? '';
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentFile.split('/').pop() || 'download.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download file:', error);
+      alert(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleUploadClick = () => {
+    if (!cwsClient?.isConnected()) return;
+    uploadInputRef.current?.click();
+  };
+
+  const handleUploadSelected = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    if (!cwsClient?.isConnected()) return;
+    const f = ev.target.files?.[0];
+    // Reset value so picking the same file again re-triggers onchange
+    ev.target.value = '';
+    if (!f) return;
+
+    // Text-only for now
+    const contents = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(f);
+    });
+
+    const baseDir =
+      currentFile && currentFile.includes('/') ? currentFile.split('/').slice(0, -1).join('/') : '.';
+    const defaultTarget = baseDir === '.' ? f.name : `${baseDir}/${f.name}`;
+    const target = window.prompt('Save uploaded file as (workspace path):', defaultTarget);
+    if (!target) return;
+
+    try {
+      try {
+        await cwsClient.createFile(target);
+      } catch {
+        // If it exists already, we'll overwrite via writeFile below.
+      }
+      await cwsClient.writeFile(target, contents);
+      touchFileInExplorer(target);
+    } catch (e: any) {
+      alert(`Failed to upload file: ${e?.message || 'Unknown error'}`);
     }
   };
 
@@ -281,18 +356,42 @@ export default function CodingEnvironmentPage() {
         
         <div className="editor-panel">
           <div className="editor-header">
-            <span className="file-name">{currentFile || 'No file selected'}</span>
-            {currentFile && cwsClient?.isConnected() && (
-              <button onClick={handleSaveFile} className="save-button">
-                Save
+            <div className="file-name">
+              <span className="file-name-text">{currentFile || 'No file selected'}</span>
+              {currentFileIsBinary && <span className="binary-badge">Binary</span>}
+            </div>
+            <div className="editor-actions">
+              <input
+                ref={uploadInputRef}
+                type="file"
+                style={{ display: 'none' }}
+                onChange={handleUploadSelected}
+              />
+              <button onClick={handleUploadClick} className="save-button" disabled={!cwsClient?.isConnected()}>
+                Upload
               </button>
-            )}
+              {currentFile && (
+                <button
+                  onClick={handleDownloadFile}
+                  className="save-button"
+                  disabled={!cwsClient?.isConnected() || currentFileIsBinary}
+                  title={currentFileIsBinary ? 'Binary downloads not supported yet' : 'Download file'}
+                >
+                  Download
+                </button>
+              )}
+              {currentFile && cwsClient?.isConnected() && (
+                <button onClick={handleSaveFile} className="save-button" disabled={currentFileIsBinary}>
+                  Save
+                </button>
+              )}
+            </div>
           </div>
           <CodeEditor
             value={fileContent}
             onChange={setFileContent}
             language={currentFile ? getLanguageFromFile(currentFile) : 'plaintext'}
-            readOnly={!cwsClient?.isConnected()}
+            readOnly={!cwsClient?.isConnected() || currentFileIsBinary}
           />
         </div>
         
